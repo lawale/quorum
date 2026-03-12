@@ -64,6 +64,11 @@ func main() {
 	// Wire webhook dispatch to request resolution
 	requestService.SetOnResolve(dispatcher.Dispatch)
 
+	// Expiry worker
+	expiryWorker := service.NewExpiryWorker(requestStore, auditStore, cfg.Expiry.CheckInterval)
+	expiryWorker.SetOnExpire(dispatcher.Dispatch)
+	expiryWorker.Start(appCtx)
+
 	// Auth provider
 	var authProvider auth.Provider
 	switch cfg.Auth.Mode {
