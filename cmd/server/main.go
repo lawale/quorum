@@ -15,6 +15,7 @@ import (
 	"github.com/wale/maker-checker/internal/server"
 	"github.com/wale/maker-checker/internal/service"
 	"github.com/wale/maker-checker/internal/store/postgres"
+	"github.com/wale/maker-checker/internal/webhook"
 )
 
 func main() {
@@ -53,6 +54,15 @@ func main() {
 	policyService := service.NewPolicyService(policyStore)
 	requestService := service.NewRequestService(requestStore, approvalStore, policyStore, auditStore)
 	webhookService := service.NewWebhookService(webhookStore)
+
+	// Webhook dispatcher
+	dispatcher := webhook.NewDispatcher(webhookStore, auditStore, cfg.Webhook.Timeout, cfg.Webhook.MaxRetries, cfg.Webhook.RetryInterval)
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+	dispatcher.Start(appCtx)
+
+	// Wire webhook dispatch to request resolution
+	requestService.SetOnResolve(dispatcher.Dispatch)
 
 	// Auth provider
 	var authProvider auth.Provider
