@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func (s *RequestStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Reques
 		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 	)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("querying request: %w", err)
@@ -80,7 +81,7 @@ func (s *RequestStore) GetByIdempotencyKey(ctx context.Context, key string) (*mo
 		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 	)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("querying request by idempotency key: %w", err)
@@ -102,7 +103,7 @@ func (s *RequestStore) FindPendingByFingerprint(ctx context.Context, reqType str
 		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 	)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("querying request by fingerprint: %w", err)

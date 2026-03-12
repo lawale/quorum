@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -126,7 +127,7 @@ func (s *PolicyStore) scanPolicy(ctx context.Context, query string, args ...any)
 	row := s.db.Pool.QueryRow(ctx, query, args...)
 	p, err := s.scanSingleRow(row)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("querying policy: %w", err)

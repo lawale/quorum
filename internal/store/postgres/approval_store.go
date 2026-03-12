@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -68,7 +69,7 @@ func (s *ApprovalStore) CountByDecision(ctx context.Context, requestID uuid.UUID
 	var count int
 	err := s.db.Pool.QueryRow(ctx, query, requestID, decision).Scan(&count)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, nil
 		}
 		return 0, fmt.Errorf("counting approvals: %w", err)
