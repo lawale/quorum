@@ -1,0 +1,355 @@
+package service
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sort"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/wale/maker-checker/internal/model"
+	"github.com/wale/maker-checker/internal/store"
+)
+
+var (
+	ErrRequestNotFound       = errors.New("request not found")
+	ErrRequestNotPending     = errors.New("request is not in pending status")
+	ErrDuplicateRequest      = errors.New("a pending request with the same identity already exists")
+	ErrIdempotencyConflict   = errors.New("request with this idempotency key already exists")
+	ErrSelfApproval          = errors.New("maker cannot approve their own request")
+	ErrAlreadyActioned       = errors.New("checker has already acted on this request")
+	ErrInvalidCheckerRole    = errors.New("checker does not have a required role")
+	ErrMissingIdentityFields = errors.New("payload is missing required identity fields")
+)
+
+type RequestService struct {
+	requests  store.RequestStore
+	approvals store.ApprovalStore
+	policies  store.PolicyStore
+	audits    store.AuditStore
+	onResolve func(ctx context.Context, req *model.Request, approvals []model.Approval)
+}
+
+func NewRequestService(
+	requests store.RequestStore,
+	approvals store.ApprovalStore,
+	policies store.PolicyStore,
+	audits store.AuditStore,
+) *RequestService {
+	return &RequestService{
+		requests:  requests,
+		approvals: approvals,
+		policies:  policies,
+		audits:    audits,
+	}
+}
+
+// SetOnResolve sets a callback that fires when a request transitions to a terminal state.
+func (s *RequestService) SetOnResolve(fn func(ctx context.Context, req *model.Request, approvals []model.Approval)) {
+	s.onResolve = fn
+}
+
+func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model.Request, error) {
+	// Check idempotency key first
+	if req.IdempotencyKey != nil {
+		existing, err := s.requests.GetByIdempotencyKey(ctx, *req.IdempotencyKey)
+		if err != nil {
+			return nil, fmt.Errorf("checking idempotency key: %w", err)
+		}
+		if existing != nil {
+			return existing, nil
+		}
+	}
+
+	// Look up the policy
+	policy, err := s.policies.GetByRequestType(ctx, req.Type)
+	if err != nil {
+		return nil, fmt.Errorf("looking up policy: %w", err)
+	}
+	if policy == nil {
+		return nil, ErrPolicyNotFound
+	}
+
+	// Compute fingerprint if policy has identity fields
+	if len(policy.IdentityFields) > 0 {
+		fingerprint, err := computeFingerprint(req.Payload, policy.IdentityFields)
+		if err != nil {
+			return nil, fmt.Errorf("computing fingerprint: %w", err)
+		}
+		req.Fingerprint = &fingerprint
+
+		// Check for duplicate pending request
+		existing, err := s.requests.FindPendingByFingerprint(ctx, req.Type, fingerprint)
+		if err != nil {
+			return nil, fmt.Errorf("checking duplicate: %w", err)
+		}
+		if existing != nil {
+			return nil, ErrDuplicateRequest
+		}
+	}
+
+	// Set expiry from policy
+	if policy.AutoExpireDuration != nil {
+		expiresAt := time.Now().UTC().Add(*policy.AutoExpireDuration)
+		req.ExpiresAt = &expiresAt
+	}
+
+	if err := s.requests.Create(ctx, req); err != nil {
+		return nil, err
+	}
+
+	// Audit log
+	s.audit(ctx, req.ID, "created", req.MakerID, nil)
+
+	return req, nil
+}
+
+func (s *RequestService) GetByID(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+	req, err := s.requests.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if req == nil {
+		return nil, ErrRequestNotFound
+	}
+
+	// Attach approvals
+	approvals, err := s.approvals.ListByRequestID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	req.Approvals = approvals
+
+	return req, nil
+}
+
+func (s *RequestService) List(ctx context.Context, filter store.RequestFilter) ([]model.Request, int, error) {
+	return s.requests.List(ctx, filter)
+}
+
+func (s *RequestService) Approve(ctx context.Context, requestID uuid.UUID, checkerID string, roles []string, comment *string) (*model.Request, error) {
+	return s.processDecision(ctx, requestID, checkerID, roles, model.DecisionApproved, comment)
+}
+
+func (s *RequestService) Reject(ctx context.Context, requestID uuid.UUID, checkerID string, roles []string, comment *string) (*model.Request, error) {
+	return s.processDecision(ctx, requestID, checkerID, roles, model.DecisionRejected, comment)
+}
+
+func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerID string) (*model.Request, error) {
+	req, err := s.requests.GetByID(ctx, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if req == nil {
+		return nil, ErrRequestNotFound
+	}
+	if req.Status != model.StatusPending {
+		return nil, ErrRequestNotPending
+	}
+	if req.MakerID != makerID {
+		return nil, errors.New("only the maker can cancel their own request")
+	}
+
+	if err := s.requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
+		return nil, err
+	}
+	req.Status = model.StatusCancelled
+
+	s.audit(ctx, requestID, "cancelled", makerID, nil)
+
+	if s.onResolve != nil {
+		approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
+		s.onResolve(ctx, req, approvals)
+	}
+
+	return req, nil
+}
+
+func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUID, checkerID string, roles []string, decision model.Decision, comment *string) (*model.Request, error) {
+	req, err := s.requests.GetByID(ctx, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if req == nil {
+		return nil, ErrRequestNotFound
+	}
+	if req.Status != model.StatusPending {
+		return nil, ErrRequestNotPending
+	}
+
+	// Maker cannot approve their own request
+	if req.MakerID == checkerID {
+		return nil, ErrSelfApproval
+	}
+
+	// Check if checker already acted
+	already, err := s.approvals.ExistsByChecker(ctx, requestID, checkerID)
+	if err != nil {
+		return nil, err
+	}
+	if already {
+		return nil, ErrAlreadyActioned
+	}
+
+	// Look up policy for role validation and threshold logic
+	policy, err := s.policies.GetByRequestType(ctx, req.Type)
+	if err != nil {
+		return nil, err
+	}
+	if policy == nil {
+		return nil, ErrPolicyNotFound
+	}
+
+	// Validate checker roles
+	if err := validateCheckerRoles(policy, roles); err != nil {
+		return nil, err
+	}
+
+	// Record the approval/rejection
+	approval := &model.Approval{
+		RequestID: requestID,
+		CheckerID: checkerID,
+		Decision:  decision,
+		Comment:   comment,
+	}
+	if err := s.approvals.Create(ctx, approval); err != nil {
+		return nil, fmt.Errorf("recording decision: %w", err)
+	}
+
+	s.audit(ctx, requestID, string(decision), checkerID, nil)
+
+	// Evaluate state transition
+	newStatus, err := s.evaluateStatus(ctx, requestID, policy)
+	if err != nil {
+		return nil, err
+	}
+
+	if newStatus != nil && *newStatus != req.Status {
+		if err := s.requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
+			return nil, err
+		}
+		req.Status = *newStatus
+
+		if newStatus.IsTerminal() && s.onResolve != nil {
+			approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
+			req.Approvals = approvals
+			s.onResolve(ctx, req, approvals)
+		}
+	}
+
+	// Refresh approvals
+	allApprovals, err := s.approvals.ListByRequestID(ctx, requestID)
+	if err != nil {
+		return nil, err
+	}
+	req.Approvals = allApprovals
+
+	return req, nil
+}
+
+func (s *RequestService) evaluateStatus(ctx context.Context, requestID uuid.UUID, policy *model.Policy) (*model.RequestStatus, error) {
+	approvalCount, err := s.approvals.CountByDecision(ctx, requestID, model.DecisionApproved)
+	if err != nil {
+		return nil, err
+	}
+	rejectionCount, err := s.approvals.CountByDecision(ctx, requestID, model.DecisionRejected)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if we have enough approvals
+	if approvalCount >= policy.RequiredApprovals {
+		status := model.StatusApproved
+		return &status, nil
+	}
+
+	// Check rejection policy
+	switch policy.RejectionPolicy {
+	case model.RejectionPolicyAny:
+		if rejectionCount > 0 {
+			status := model.StatusRejected
+			return &status, nil
+		}
+	case model.RejectionPolicyThreshold:
+		if policy.MaxCheckers != nil {
+			remaining := *policy.MaxCheckers - approvalCount - rejectionCount
+			if approvalCount+remaining < policy.RequiredApprovals {
+				status := model.StatusRejected
+				return &status, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *RequestService) audit(ctx context.Context, requestID uuid.UUID, action string, actorID string, details json.RawMessage) {
+	log := &model.AuditLog{
+		RequestID: requestID,
+		Action:    action,
+		ActorID:   actorID,
+		Details:   details,
+	}
+	if err := s.audits.Create(ctx, log); err != nil {
+		slog.Error("failed to create audit log", "error", err, "request_id", requestID, "action", action)
+	}
+}
+
+func computeFingerprint(payload json.RawMessage, identityFields []string) (string, error) {
+	var data map[string]any
+	if err := json.Unmarshal(payload, &data); err != nil {
+		return "", fmt.Errorf("unmarshaling payload: %w", err)
+	}
+
+	// Extract identity field values in deterministic order
+	sort.Strings(identityFields)
+	values := make(map[string]any)
+	for _, field := range identityFields {
+		val, ok := data[field]
+		if !ok {
+			return "", fmt.Errorf("%w: %s", ErrMissingIdentityFields, field)
+		}
+		values[field] = val
+	}
+
+	// Serialize and hash
+	canonical, err := json.Marshal(values)
+	if err != nil {
+		return "", fmt.Errorf("marshaling identity values: %w", err)
+	}
+
+	hash := sha256.Sum256(canonical)
+	return fmt.Sprintf("%x", hash), nil
+}
+
+func validateCheckerRoles(policy *model.Policy, checkerRoles []string) error {
+	if policy.AllowedCheckerRoles == nil {
+		return nil
+	}
+
+	var allowedRoles []string
+	if err := json.Unmarshal(policy.AllowedCheckerRoles, &allowedRoles); err != nil {
+		return nil // If we can't parse, skip validation
+	}
+
+	if len(allowedRoles) == 0 {
+		return nil
+	}
+
+	roleSet := make(map[string]bool)
+	for _, r := range checkerRoles {
+		roleSet[r] = true
+	}
+
+	for _, allowed := range allowedRoles {
+		if roleSet[allowed] {
+			return nil
+		}
+	}
+
+	return ErrInvalidCheckerRole
+}
