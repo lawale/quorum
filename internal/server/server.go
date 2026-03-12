@@ -6,9 +6,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
-	"github.com/wale/quorum/internal/auth"
-	"github.com/wale/quorum/internal/service"
-	"github.com/wale/quorum/internal/store"
+	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type Server struct {

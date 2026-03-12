@@ -7,10 +7,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/wale/quorum/internal/auth"
-	"github.com/wale/quorum/internal/model"
-	"github.com/wale/quorum/internal/service"
-	"github.com/wale/quorum/internal/store"
+	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type RequestHandler struct {

@@ -1,4 +1,4 @@
-module github.com/wale/quorum
+module github.com/lawale/quorum
 
 go 1.24.0
 

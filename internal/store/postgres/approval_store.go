@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/wale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/model"
 )
 
 type ApprovalStore struct {

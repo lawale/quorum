@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wale/quorum/internal/auth"
-	"github.com/wale/quorum/internal/config"
-	"github.com/wale/quorum/internal/server"
-	"github.com/wale/quorum/internal/service"
-	"github.com/wale/quorum/internal/store/postgres"
-	"github.com/wale/quorum/internal/webhook"
+	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/config"
+	"github.com/lawale/quorum/internal/server"
+	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store/postgres"
+	"github.com/lawale/quorum/internal/webhook"
 )
 
 func main() {
