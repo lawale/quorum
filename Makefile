@@ -1,6 +1,6 @@
 .PHONY: build run test lint migrate-up migrate-down docker-up docker-down clean
 
-BINARY_NAME=maker-checker
+BINARY_NAME=quorum
 BUILD_DIR=bin
 
 build:
@@ -16,10 +16,10 @@ lint:
 	golangci-lint run ./...
 
 migrate-up:
-	migrate -path migrations -database "postgres://makerchecker:makerchecker@localhost:5432/makerchecker?sslmode=disable" up
+	migrate -path migrations -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" up
 
 migrate-down:
-	migrate -path migrations -database "postgres://makerchecker:makerchecker@localhost:5432/makerchecker?sslmode=disable" down 1
+	migrate -path migrations -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" down 1
 
 docker-up:
 	docker-compose up -d

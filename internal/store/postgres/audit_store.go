@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/wale/maker-checker/internal/model"
+	"github.com/wale/quorum/internal/model"
 )
 
 type AuditStore struct {

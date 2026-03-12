@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/wale/maker-checker/internal/model"
+	"github.com/wale/quorum/internal/model"
 )
 
 type RequestFilter struct {

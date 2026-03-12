@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: makerchecker
-      POSTGRES_PASSWORD: makerchecker
-      POSTGRES_DB: makerchecker
+      POSTGRES_USER: quorum
+      POSTGRES_PASSWORD: quorum
+      POSTGRES_DB: quorum
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U makerchecker"]
+      test: ["CMD-SHELL", "pg_isready -U quorum"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -20,7 +20,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./config.example.yaml:/etc/maker-checker/config.yaml:ro
+      - ./config.example.yaml:/etc/quorum/config.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy

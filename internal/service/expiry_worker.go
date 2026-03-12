@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/wale/maker-checker/internal/model"
-	"github.com/wale/maker-checker/internal/store"
+	"github.com/wale/quorum/internal/model"
+	"github.com/wale/quorum/internal/store"
 )
 
 type ExpiryWorker struct {

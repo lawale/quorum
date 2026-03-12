@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/wale/maker-checker/internal/model"
+	"github.com/wale/quorum/internal/model"
 )
 
 type WebhookStore struct {

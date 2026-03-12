@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/wale/maker-checker/internal/model"
-	"github.com/wale/maker-checker/internal/store"
+	"github.com/wale/quorum/internal/model"
+	"github.com/wale/quorum/internal/store"
 )
 
 type Dispatcher struct {
@@ -109,7 +109,7 @@ func (d *Dispatcher) deliver(ctx context.Context, job deliveryJob) {
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("User-Agent", "MakerChecker/1.0")
+		req.Header.Set("User-Agent", "Quorum/1.0")
 
 		// HMAC signature
 		if job.webhook.Secret != "" {

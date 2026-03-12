@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/wale/maker-checker/internal/model"
-	"github.com/wale/maker-checker/internal/service"
+	"github.com/wale/quorum/internal/model"
+	"github.com/wale/quorum/internal/service"
 )
 
 type PolicyHandler struct {

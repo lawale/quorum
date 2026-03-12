@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/wale/maker-checker/internal/auth"
+	"github.com/wale/quorum/internal/auth"
 )
 
 func authMiddleware(provider auth.Provider) func(http.Handler) http.Handler {

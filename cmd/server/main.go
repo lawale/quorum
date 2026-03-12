@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wale/maker-checker/internal/auth"
-	"github.com/wale/maker-checker/internal/config"
-	"github.com/wale/maker-checker/internal/server"
-	"github.com/wale/maker-checker/internal/service"
-	"github.com/wale/maker-checker/internal/store/postgres"
-	"github.com/wale/maker-checker/internal/webhook"
+	"github.com/wale/quorum/internal/auth"
+	"github.com/wale/quorum/internal/config"
+	"github.com/wale/quorum/internal/server"
+	"github.com/wale/quorum/internal/service"
+	"github.com/wale/quorum/internal/store/postgres"
+	"github.com/wale/quorum/internal/webhook"
 )
 
 func main() {

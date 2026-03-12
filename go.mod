@@ -1,4 +1,4 @@
-module github.com/wale/maker-checker
+module github.com/wale/quorum
 
 go 1.24.0
 
