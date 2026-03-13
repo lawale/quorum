@@ -43,3 +43,7 @@ webhook:
 
 expiry:
   check_interval: "1m"
+
+metrics:
+  enabled: false
+  path: "/metrics"

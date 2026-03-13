@@ -13,12 +13,14 @@ import (
 
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/config"
+	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/server"
 	"github.com/lawale/quorum/internal/service"
 	"github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/store/mssql"
 	"github.com/lawale/quorum/internal/store/postgres"
 	"github.com/lawale/quorum/internal/webhook"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func main() {
@@ -69,16 +71,30 @@ func main() {
 
 	// Webhook dispatcher
 	dispatcher := webhook.NewDispatcher(stores.Webhooks, stores.Audits, cfg.Webhook.Timeout, cfg.Webhook.MaxRetries, cfg.Webhook.RetryInterval)
-	appCtx, appCancel := context.WithCancel(context.Background())
-	defer appCancel()
-	dispatcher.Start(appCtx)
-
-	// Wire webhook dispatch to request resolution
 	requestService.SetOnResolve(dispatcher.Dispatch)
 
 	// Expiry worker
 	expiryWorker := service.NewExpiryWorker(stores.Requests, stores.Audits, cfg.Expiry.CheckInterval)
 	expiryWorker.SetOnExpire(dispatcher.Dispatch)
+
+	// Metrics (optional)
+	var (
+		metricsInstance *metrics.Metrics
+		metricsRegistry *prometheus.Registry
+	)
+	if cfg.Metrics.Enabled {
+		metricsRegistry = prometheus.NewRegistry()
+		metricsInstance = metrics.New(metricsRegistry)
+		requestService.SetMetrics(metricsInstance)
+		expiryWorker.SetMetrics(metricsInstance)
+		dispatcher.SetMetrics(metricsInstance)
+		slog.Info("metrics enabled", "path", cfg.Metrics.Path)
+	}
+
+	// Start background workers
+	appCtx, appCancel := context.WithCancel(context.Background())
+	defer appCancel()
+	dispatcher.Start(appCtx)
 	expiryWorker.Start(appCtx)
 
 	// Auth provider
@@ -98,6 +114,9 @@ func main() {
 		WebhookService: webhookService,
 		AuditStore:     stores.Audits,
 		AuthProvider:   authProvider,
+		Metrics:        metricsInstance,
+		MetricsPath:    cfg.Metrics.Path,
+		Registry:       metricsRegistry,
 	})
 
 	httpServer := &http.Server{

@@ -7,8 +7,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/service"
 	"github.com/lawale/quorum/internal/store"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Server struct {
@@ -18,6 +21,9 @@ type Server struct {
 	webhookHandler *WebhookHandler
 	auditStore     store.AuditStore
 	authProvider   auth.Provider
+	metrics        *metrics.Metrics
+	metricsPath    string
+	registry       *prometheus.Registry
 }
 
 type Config struct {
@@ -26,6 +32,9 @@ type Config struct {
 	WebhookService *service.WebhookService
 	AuditStore     store.AuditStore
 	AuthProvider   auth.Provider
+	Metrics        *metrics.Metrics
+	MetricsPath    string
+	Registry       *prometheus.Registry
 }
 
 func New(cfg Config) *Server {
@@ -36,6 +45,9 @@ func New(cfg Config) *Server {
 		webhookHandler: NewWebhookHandler(cfg.WebhookService),
 		auditStore:     cfg.AuditStore,
 		authProvider:   cfg.AuthProvider,
+		metrics:        cfg.Metrics,
+		metricsPath:    cfg.MetricsPath,
+		registry:       cfg.Registry,
 	}
 
 	s.setupRoutes()
@@ -48,11 +60,19 @@ func (s *Server) setupRoutes() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(loggingMiddleware)
+	if s.metrics != nil {
+		r.Use(metrics.HTTPMiddleware(s.metrics))
+	}
 
 	// Health check — no auth
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+
+	// Metrics endpoint — no auth
+	if s.registry != nil {
+		r.Handle(s.metricsPath, promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}))
+	}
 
 	// API v1 — requires auth
 	r.Route("/api/v1", func(r chi.Router) {

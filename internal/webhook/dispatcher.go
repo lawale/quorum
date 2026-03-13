@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -24,6 +25,12 @@ type Dispatcher struct {
 	maxRetries int
 	retryDelay time.Duration
 	queue      chan deliveryJob
+	metrics    *metrics.Metrics
+}
+
+// SetMetrics sets the optional Prometheus metrics collector.
+func (d *Dispatcher) SetMetrics(m *metrics.Metrics) {
+	d.metrics = m
 }
 
 type deliveryJob struct {
@@ -90,6 +97,8 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.Request, approvals
 }
 
 func (d *Dispatcher) deliver(ctx context.Context, job deliveryJob) {
+	start := time.Now()
+
 	body, err := json.Marshal(job.payload)
 	if err != nil {
 		slog.Error("failed to marshal webhook payload", "error", err)
@@ -128,6 +137,10 @@ func (d *Dispatcher) deliver(ctx context.Context, job deliveryJob) {
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			slog.Info("webhook delivered", "url", job.webhook.URL, "status", resp.StatusCode, "request_id", job.request.ID)
 			d.auditWebhook(ctx, job.request.ID, "webhook_sent", job.webhook.URL)
+			if d.metrics != nil {
+				d.metrics.WebhookDeliveriesTotal.WithLabelValues("success").Inc()
+				d.metrics.WebhookDeliveryDuration.Observe(time.Since(start).Seconds())
+			}
 			return
 		}
 
@@ -137,6 +150,10 @@ func (d *Dispatcher) deliver(ctx context.Context, job deliveryJob) {
 
 	slog.Error("webhook delivery exhausted retries", "url", job.webhook.URL, "request_id", job.request.ID, "error", lastErr)
 	d.auditWebhook(ctx, job.request.ID, "webhook_failed", job.webhook.URL)
+	if d.metrics != nil {
+		d.metrics.WebhookDeliveriesTotal.WithLabelValues("failure").Inc()
+		d.metrics.WebhookDeliveryDuration.Observe(time.Since(start).Seconds())
+	}
 }
 
 func (d *Dispatcher) auditWebhook(ctx context.Context, requestID uuid.UUID, action string, url string) {

@@ -114,6 +114,12 @@ func TestConfig_SetDefaults(t *testing.T) {
 	if cfg.Expiry.CheckInterval != time.Minute {
 		t.Errorf("default CheckInterval = %v, want %v", cfg.Expiry.CheckInterval, time.Minute)
 	}
+	if cfg.Metrics.Enabled {
+		t.Error("default Metrics.Enabled should be false")
+	}
+	if cfg.Metrics.Path != "/metrics" {
+		t.Errorf("default Metrics.Path = %q, want %q", cfg.Metrics.Path, "/metrics")
+	}
 }
 
 func TestServerConfig_Addr(t *testing.T) {

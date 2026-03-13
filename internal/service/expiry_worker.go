@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -14,6 +15,12 @@ type ExpiryWorker struct {
 	audits        store.AuditStore
 	checkInterval time.Duration
 	onExpire      func(ctx context.Context, req *model.Request, approvals []model.Approval)
+	metrics       *metrics.Metrics
+}
+
+// SetMetrics sets the optional Prometheus metrics collector.
+func (w *ExpiryWorker) SetMetrics(m *metrics.Metrics) {
+	w.metrics = m
 }
 
 func NewExpiryWorker(requests store.RequestStore, audits store.AuditStore, checkInterval time.Duration) *ExpiryWorker {
@@ -65,6 +72,12 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 		}
 		if err := w.audits.Create(ctx, log); err != nil {
 			slog.Error("failed to audit expiry", "error", err, "request_id", req.ID)
+		}
+
+		if w.metrics != nil {
+			w.metrics.RequestsTotal.WithLabelValues("expired").Inc()
+			w.metrics.PendingRequestsGauge.Dec()
+			w.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
 		}
 
 		slog.Info("request expired", "request_id", req.ID)

@@ -15,6 +15,12 @@ type Config struct {
 	Auth     AuthConfig     `yaml:"auth"`
 	Webhook  WebhookConfig  `yaml:"webhook"`
 	Expiry   ExpiryConfig   `yaml:"expiry"`
+	Metrics  MetricsConfig  `yaml:"metrics"`
+}
+
+type MetricsConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Path    string `yaml:"path"`
 }
 
 type ServerConfig struct {
@@ -163,5 +169,8 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Expiry.CheckInterval == 0 {
 		cfg.Expiry.CheckInterval = time.Minute
+	}
+	if cfg.Metrics.Path == "" {
+		cfg.Metrics.Path = "/metrics"
 	}
 }

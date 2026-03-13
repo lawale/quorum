@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -35,6 +36,12 @@ type RequestService struct {
 	audits            store.AuditStore
 	permissionChecker *auth.PermissionChecker
 	onResolve         func(ctx context.Context, req *model.Request, approvals []model.Approval)
+	metrics           *metrics.Metrics
+}
+
+// SetMetrics sets the optional Prometheus metrics collector.
+func (s *RequestService) SetMetrics(m *metrics.Metrics) {
+	s.metrics = m
 }
 
 func NewRequestService(
@@ -110,6 +117,11 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 	// Audit log
 	s.audit(ctx, req.ID, "created", req.MakerID, nil)
 
+	if s.metrics != nil {
+		s.metrics.RequestsTotal.WithLabelValues("created").Inc()
+		s.metrics.PendingRequestsGauge.Inc()
+	}
+
 	return req, nil
 }
 
@@ -165,6 +177,12 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 	req.Status = model.StatusCancelled
 
 	s.audit(ctx, requestID, "cancelled", makerID, nil)
+
+	if s.metrics != nil {
+		s.metrics.RequestsTotal.WithLabelValues("cancelled").Inc()
+		s.metrics.PendingRequestsGauge.Dec()
+		s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
+	}
 
 	if s.onResolve != nil {
 		approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
@@ -268,10 +286,18 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		}
 		req.Status = *newStatus
 
-		if newStatus.IsTerminal() && s.onResolve != nil {
-			approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
-			req.Approvals = approvals
-			s.onResolve(ctx, req, approvals)
+		if newStatus.IsTerminal() {
+			if s.metrics != nil {
+				s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
+				s.metrics.PendingRequestsGauge.Dec()
+				s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
+			}
+
+			if s.onResolve != nil {
+				approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
+				req.Approvals = approvals
+				s.onResolve(ctx, req, approvals)
+			}
 		}
 	}
 
