@@ -1,7 +1,173 @@
 <script lang="ts">
+  import { requests as requestsApi } from '../lib/api';
+  import { addToast } from '../lib/stores';
+  import { formatDate } from '../lib/utils';
+  import StatusBadge from '../components/StatusBadge.svelte';
+  import LoadingSpinner from '../components/LoadingSpinner.svelte';
+  import EmptyState from '../components/EmptyState.svelte';
+  import type { Request } from '../lib/types';
+
+  let items: Request[] = $state([]);
+  let isLoading = $state(true);
+  let total = $state(0);
+  let page = $state(1);
+  let perPage = $state(20);
+  let statusFilter = $state('');
+  let typeFilter = $state('');
+
+  let totalPages = $derived(Math.ceil(total / perPage));
+
+  $effect(() => {
+    loadRequests();
+  });
+
+  async function loadRequests() {
+    isLoading = true;
+    try {
+      const res = await requestsApi.list({
+        page,
+        per_page: perPage,
+        status: statusFilter || undefined,
+        type: typeFilter || undefined,
+      });
+      items = res.data || [];
+      total = res.total ?? 0;
+    } catch {
+      addToast('Failed to load requests', 'error');
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function applyFilters() {
+    page = 1;
+    loadRequests();
+  }
+
+  function clearFilters() {
+    statusFilter = '';
+    typeFilter = '';
+    page = 1;
+    loadRequests();
+  }
+
+  function goToPage(p: number) {
+    page = p;
+    loadRequests();
+  }
+
+  function truncateId(id: string): string {
+    return id.length > 8 ? id.slice(0, 8) + '…' : id;
+  }
 </script>
 
 <div>
-  <h1 class="text-2xl font-bold text-gray-900 mb-6">Requests</h1>
-  <p class="text-gray-500">Request list coming soon.</p>
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">Requests</h1>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-4 mb-4">
+    <div class="flex items-end gap-4">
+      <div>
+        <label for="statusFilter" class="block text-xs font-medium text-gray-500 mb-1">Status</label>
+        <select id="statusFilter" bind:value={statusFilter} class="px-3 py-1.5 text-sm border border-gray-300 rounded-md">
+          <option value="">All</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="expired">Expired</option>
+        </select>
+      </div>
+      <div>
+        <label for="typeFilter" class="block text-xs font-medium text-gray-500 mb-1">Type</label>
+        <input id="typeFilter" type="text" bind:value={typeFilter} placeholder="e.g. transfer" class="px-3 py-1.5 text-sm border border-gray-300 rounded-md" />
+      </div>
+      <button onclick={applyFilters} class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors">
+        Filter
+      </button>
+      {#if statusFilter || typeFilter}
+        <button onclick={clearFilters} class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800">
+          Clear
+        </button>
+      {/if}
+    </div>
+  </div>
+
+  {#if isLoading}
+    <LoadingSpinner />
+  {:else if items.length === 0}
+    <EmptyState message="No requests found." />
+  {:else}
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Maker</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {#each items as req}
+            <tr class="hover:bg-gray-50">
+              <td class="px-6 py-4 text-sm font-mono text-xs text-gray-900">
+                <a href="#/requests/{req.id}" class="text-indigo-600 hover:text-indigo-800" title={req.id}>{truncateId(req.id)}</a>
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-900">{req.type}</td>
+              <td class="px-6 py-4 text-sm"><StatusBadge status={req.status} /></td>
+              <td class="px-6 py-4 text-sm text-gray-500">{req.maker_id}</td>
+              <td class="px-6 py-4 text-sm text-gray-500">{req.current_stage}</td>
+              <td class="px-6 py-4 text-sm text-gray-500">{formatDate(req.created_at)}</td>
+              <td class="px-6 py-4 text-right text-sm">
+                <a href="#/requests/{req.id}" class="text-indigo-600 hover:text-indigo-800">View</a>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {#if totalPages > 1}
+      <div class="flex items-center justify-between mt-4">
+        <p class="text-sm text-gray-500">
+          Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, total)} of {total}
+        </p>
+        <div class="flex gap-1">
+          <button
+            onclick={() => goToPage(page - 1)}
+            disabled={page <= 1}
+            class="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          {#each Array.from({ length: totalPages }, (_, i) => i + 1) as p}
+            {#if totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - page) <= 1}
+              <button
+                onclick={() => goToPage(p)}
+                class="px-3 py-1.5 text-sm border rounded-md {p === page ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 hover:bg-gray-50'}"
+              >
+                {p}
+              </button>
+            {:else if p === 2 || p === totalPages - 1}
+              <span class="px-2 py-1.5 text-sm text-gray-400">…</span>
+            {/if}
+          {/each}
+          <button
+            onclick={() => goToPage(page + 1)}
+            disabled={page >= totalPages}
+            class="px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    {/if}
+  {/if}
 </div>

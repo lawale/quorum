@@ -1,8 +1,178 @@
 <script lang="ts">
+  import { requests as requestsApi } from '../lib/api';
+  import { addToast } from '../lib/stores';
+  import { formatDate } from '../lib/utils';
+  import StatusBadge from '../components/StatusBadge.svelte';
+  import LoadingSpinner from '../components/LoadingSpinner.svelte';
+  import type { Request, AuditLog } from '../lib/types';
+
   let { id }: { id: string } = $props();
+
+  let req: Request | null = $state(null);
+  let auditLogs: AuditLog[] = $state([]);
+  let isLoading = $state(true);
+  let activeTab: 'details' | 'payload' | 'audit' = $state('details');
+
+  $effect(() => {
+    loadRequest(id);
+  });
+
+  async function loadRequest(requestId: string) {
+    isLoading = true;
+    try {
+      const [requestData, auditData] = await Promise.all([
+        requestsApi.get(requestId),
+        requestsApi.audit(requestId),
+      ]);
+      req = requestData;
+      auditLogs = auditData.data || [];
+    } catch {
+      addToast('Failed to load request', 'error');
+      window.location.hash = '#/requests';
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function formatJson(obj: unknown): string {
+    return JSON.stringify(obj, null, 2);
+  }
+
+  function actionColor(action: string): string {
+    switch (action) {
+      case 'created': return 'bg-blue-100 text-blue-800';
+      case 'approved': return 'bg-green-100 text-green-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
+      case 'cancelled': return 'bg-gray-100 text-gray-800';
+      case 'expired': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  }
 </script>
 
 <div>
-  <h1 class="text-2xl font-bold text-gray-900 mb-6">Request Detail</h1>
-  <p class="text-gray-500">Request {id} detail coming soon.</p>
+  <div class="mb-6">
+    <a href="#/requests" class="text-sm text-gray-500 hover:text-gray-700">&larr; Back to requests</a>
+    <h1 class="text-2xl font-bold text-gray-900 mt-2">Request Detail</h1>
+  </div>
+
+  {#if isLoading}
+    <LoadingSpinner />
+  {:else if req}
+    <!-- Header card -->
+    <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-6 mb-6">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-3 mb-2">
+            <StatusBadge status={req.status} />
+            <span class="text-sm text-gray-500">Stage {req.current_stage}</span>
+          </div>
+          <p class="font-mono text-sm text-gray-600 mb-1">{req.id}</p>
+          <p class="text-sm text-gray-500">Type: <span class="font-medium text-gray-900">{req.type}</span></p>
+        </div>
+        <div class="text-right text-sm text-gray-500">
+          <p>Created: {formatDate(req.created_at)}</p>
+          <p>Updated: {formatDate(req.updated_at)}</p>
+          {#if req.expires_at}
+            <p>Expires: {formatDate(req.expires_at)}</p>
+          {/if}
+        </div>
+      </div>
+
+      <div class="mt-4 pt-4 border-t border-gray-200 grid grid-cols-3 gap-4 text-sm">
+        <div>
+          <span class="text-gray-500">Maker</span>
+          <p class="font-medium text-gray-900">{req.maker_id}</p>
+        </div>
+        {#if req.idempotency_key}
+          <div>
+            <span class="text-gray-500">Idempotency Key</span>
+            <p class="font-mono text-gray-900 text-xs">{req.idempotency_key}</p>
+          </div>
+        {/if}
+        {#if req.fingerprint}
+          <div>
+            <span class="text-gray-500">Fingerprint</span>
+            <p class="font-mono text-gray-900 text-xs">{req.fingerprint}</p>
+          </div>
+        {/if}
+      </div>
+
+      {#if req.eligible_reviewers && req.eligible_reviewers.length > 0}
+        <div class="mt-4 pt-4 border-t border-gray-200">
+          <span class="text-sm text-gray-500">Eligible Reviewers</span>
+          <div class="flex flex-wrap gap-1 mt-1">
+            {#each req.eligible_reviewers as reviewer}
+              <span class="inline-flex px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs">{reviewer}</span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-gray-200 mb-4">
+      <nav class="flex gap-6">
+        <button
+          onclick={() => activeTab = 'details'}
+          class="pb-2 text-sm font-medium border-b-2 transition-colors {activeTab === 'details' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+        >
+          Details
+        </button>
+        <button
+          onclick={() => activeTab = 'payload'}
+          class="pb-2 text-sm font-medium border-b-2 transition-colors {activeTab === 'payload' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+        >
+          Payload
+        </button>
+        <button
+          onclick={() => activeTab = 'audit'}
+          class="pb-2 text-sm font-medium border-b-2 transition-colors {activeTab === 'audit' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+        >
+          Audit Trail ({auditLogs.length})
+        </button>
+      </nav>
+    </div>
+
+    <!-- Tab content -->
+    {#if activeTab === 'details'}
+      <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
+        {#if req.metadata && Object.keys(req.metadata).length > 0}
+          <h3 class="text-sm font-medium text-gray-700 mb-2">Metadata</h3>
+          <pre class="bg-gray-50 rounded-md p-4 text-sm font-mono text-gray-800 overflow-x-auto">{formatJson(req.metadata)}</pre>
+        {:else}
+          <p class="text-sm text-gray-500">No additional metadata.</p>
+        {/if}
+      </div>
+    {:else if activeTab === 'payload'}
+      <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
+        <pre class="bg-gray-50 rounded-md p-4 text-sm font-mono text-gray-800 overflow-x-auto">{formatJson(req.payload)}</pre>
+      </div>
+    {:else if activeTab === 'audit'}
+      {#if auditLogs.length === 0}
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">No audit entries yet.</p>
+        </div>
+      {:else}
+        <div class="space-y-3">
+          {#each auditLogs as log}
+            <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-4">
+              <div class="flex items-start justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {actionColor(log.action)}">
+                    {log.action}
+                  </span>
+                  <span class="text-sm text-gray-700">by <span class="font-medium">{log.actor_id}</span></span>
+                </div>
+                <span class="text-xs text-gray-500">{formatDate(log.created_at)}</span>
+              </div>
+              {#if log.details && Object.keys(log.details).length > 0}
+                <pre class="mt-2 bg-gray-50 rounded p-3 text-xs font-mono text-gray-700 overflow-x-auto">{formatJson(log.details)}</pre>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {/if}
+  {/if}
 </div>
