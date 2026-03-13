@@ -51,6 +51,9 @@ func TestRequestStore(t *testing.T, s store.RequestStore) {
 		if got.Status != model.StatusPending {
 			t.Errorf("Status = %q, want %q", got.Status, model.StatusPending)
 		}
+		if got.CurrentStage != 0 {
+			t.Errorf("CurrentStage = %d, want 0", got.CurrentStage)
+		}
 	})
 
 	t.Run("GetByID not found", func(t *testing.T) {
@@ -181,6 +184,31 @@ func TestRequestStore(t *testing.T, s store.RequestStore) {
 		}
 	})
 
+	t.Run("UpdateStageAndStatus", func(t *testing.T) {
+		req := &model.Request{
+			Type:    "transfer",
+			Payload: json.RawMessage(`{}`),
+			MakerID: "user-1",
+		}
+		if err := s.Create(ctx, req); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if err := s.UpdateStageAndStatus(ctx, req.ID, 2, model.StatusPending); err != nil {
+			t.Fatalf("UpdateStageAndStatus: %v", err)
+		}
+
+		got, err := s.GetByID(ctx, req.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if got.CurrentStage != 2 {
+			t.Errorf("CurrentStage = %d, want 2", got.CurrentStage)
+		}
+		if got.Status != model.StatusPending {
+			t.Errorf("Status = %q, want %q", got.Status, model.StatusPending)
+		}
+	})
+
 	t.Run("List with filters", func(t *testing.T) {
 		// Create requests with distinct type
 		listType := "list-test-" + uuid.NewString()
@@ -280,51 +308,130 @@ func TestApprovalStore(t *testing.T, as store.ApprovalStore, rs store.RequestSto
 		if list[0].CheckerID != "checker-1" {
 			t.Errorf("CheckerID = %q, want %q", list[0].CheckerID, "checker-1")
 		}
+		if list[0].StageIndex != 0 {
+			t.Errorf("StageIndex = %d, want 0", list[0].StageIndex)
+		}
 	})
 
-	t.Run("CountByDecision", func(t *testing.T) {
+	t.Run("StageIndex roundtrip", func(t *testing.T) {
 		reqID := createRequest(t)
 
-		for _, cid := range []string{"c1", "c2", "c3"} {
-			as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: cid, Decision: model.DecisionApproved})
+		approval := &model.Approval{
+			RequestID:  reqID,
+			CheckerID:  "checker-stage-2",
+			Decision:   model.DecisionApproved,
+			StageIndex: 2,
 		}
-		as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: "c4", Decision: model.DecisionRejected})
+		if err := as.Create(ctx, approval); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
 
-		approved, err := as.CountByDecision(ctx, reqID, model.DecisionApproved)
+		list, err := as.ListByRequestID(ctx, reqID)
 		if err != nil {
-			t.Fatalf("CountByDecision approved: %v", err)
+			t.Fatalf("ListByRequestID: %v", err)
+		}
+		found := false
+		for _, a := range list {
+			if a.CheckerID == "checker-stage-2" && a.StageIndex == 2 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected to find approval with StageIndex=2")
+		}
+	})
+
+	t.Run("CountByDecisionAndStage", func(t *testing.T) {
+		reqID := createRequest(t)
+
+		// Stage 0: 3 approvals, 1 rejection
+		for _, cid := range []string{"c1", "c2", "c3"} {
+			as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: cid, Decision: model.DecisionApproved, StageIndex: 0})
+		}
+		as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: "c4", Decision: model.DecisionRejected, StageIndex: 0})
+
+		// Stage 1: 1 approval
+		as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: "c5", Decision: model.DecisionApproved, StageIndex: 1})
+
+		approved, err := as.CountByDecisionAndStage(ctx, reqID, model.DecisionApproved, 0)
+		if err != nil {
+			t.Fatalf("CountByDecisionAndStage approved stage 0: %v", err)
 		}
 		if approved != 3 {
-			t.Errorf("approved = %d, want 3", approved)
+			t.Errorf("approved stage 0 = %d, want 3", approved)
 		}
 
-		rejected, err := as.CountByDecision(ctx, reqID, model.DecisionRejected)
+		rejected, err := as.CountByDecisionAndStage(ctx, reqID, model.DecisionRejected, 0)
 		if err != nil {
-			t.Fatalf("CountByDecision rejected: %v", err)
+			t.Fatalf("CountByDecisionAndStage rejected stage 0: %v", err)
 		}
 		if rejected != 1 {
-			t.Errorf("rejected = %d, want 1", rejected)
+			t.Errorf("rejected stage 0 = %d, want 1", rejected)
+		}
+
+		approvedS1, err := as.CountByDecisionAndStage(ctx, reqID, model.DecisionApproved, 1)
+		if err != nil {
+			t.Fatalf("CountByDecisionAndStage approved stage 1: %v", err)
+		}
+		if approvedS1 != 1 {
+			t.Errorf("approved stage 1 = %d, want 1", approvedS1)
 		}
 	})
 
-	t.Run("ExistsByChecker", func(t *testing.T) {
+	t.Run("ExistsByCheckerAndStage", func(t *testing.T) {
 		reqID := createRequest(t)
-		as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: "checker-x", Decision: model.DecisionApproved})
+		as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: "checker-x", Decision: model.DecisionApproved, StageIndex: 0})
 
-		exists, err := as.ExistsByChecker(ctx, reqID, "checker-x")
+		exists, err := as.ExistsByCheckerAndStage(ctx, reqID, "checker-x", 0)
 		if err != nil {
-			t.Fatalf("ExistsByChecker: %v", err)
+			t.Fatalf("ExistsByCheckerAndStage: %v", err)
 		}
 		if !exists {
-			t.Error("expected true")
+			t.Error("expected true for checker-x at stage 0")
 		}
 
-		exists, err = as.ExistsByChecker(ctx, reqID, "checker-y")
+		// Same checker, different stage — should not exist
+		exists, err = as.ExistsByCheckerAndStage(ctx, reqID, "checker-x", 1)
 		if err != nil {
-			t.Fatalf("ExistsByChecker: %v", err)
+			t.Fatalf("ExistsByCheckerAndStage: %v", err)
 		}
 		if exists {
-			t.Error("expected false")
+			t.Error("expected false for checker-x at stage 1")
+		}
+
+		exists, err = as.ExistsByCheckerAndStage(ctx, reqID, "checker-y", 0)
+		if err != nil {
+			t.Fatalf("ExistsByCheckerAndStage: %v", err)
+		}
+		if exists {
+			t.Error("expected false for checker-y")
+		}
+	})
+
+	t.Run("Same checker different stages", func(t *testing.T) {
+		reqID := createRequest(t)
+
+		// A checker can act in multiple stages
+		if err := as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: "multi-checker", Decision: model.DecisionApproved, StageIndex: 0}); err != nil {
+			t.Fatalf("Create stage 0: %v", err)
+		}
+		if err := as.Create(ctx, &model.Approval{RequestID: reqID, CheckerID: "multi-checker", Decision: model.DecisionApproved, StageIndex: 1}); err != nil {
+			t.Fatalf("Create stage 1: %v", err)
+		}
+
+		list, err := as.ListByRequestID(ctx, reqID)
+		if err != nil {
+			t.Fatalf("ListByRequestID: %v", err)
+		}
+		count := 0
+		for _, a := range list {
+			if a.CheckerID == "multi-checker" {
+				count++
+			}
+		}
+		if count != 2 {
+			t.Errorf("expected 2 approvals from multi-checker, got %d", count)
 		}
 	})
 }
@@ -336,13 +443,19 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 	t.Run("Create and GetByID", func(t *testing.T) {
 		dur := 2 * time.Hour
 		policy := &model.Policy{
-			Name:                "Test Policy",
-			RequestType:         "pol-test-" + uuid.NewString(),
-			RequiredApprovals:   2,
-			RejectionPolicy:     model.RejectionPolicyThreshold,
-			AllowedCheckerRoles: json.RawMessage(`["admin","manager"]`),
-			IdentityFields:      []string{"account_id"},
-			AutoExpireDuration:  &dur,
+			Name:        "Test Policy",
+			RequestType: "pol-test-" + uuid.NewString(),
+			Stages: []model.ApprovalStage{
+				{
+					Index:               0,
+					Name:                "Finance Review",
+					RequiredApprovals:   2,
+					RejectionPolicy:     model.RejectionPolicyThreshold,
+					AllowedCheckerRoles: json.RawMessage(`["admin","manager"]`),
+				},
+			},
+			IdentityFields:     []string{"account_id"},
+			AutoExpireDuration: &dur,
 		}
 		if err := s.Create(ctx, policy); err != nil {
 			t.Fatalf("Create: %v", err)
@@ -358,20 +471,58 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 		if got.Name != "Test Policy" {
 			t.Errorf("Name = %q, want %q", got.Name, "Test Policy")
 		}
-		if got.RequiredApprovals != 2 {
-			t.Errorf("RequiredApprovals = %d, want 2", got.RequiredApprovals)
+		if len(got.Stages) != 1 {
+			t.Fatalf("Stages length = %d, want 1", len(got.Stages))
 		}
-		if got.RejectionPolicy != model.RejectionPolicyThreshold {
-			t.Errorf("RejectionPolicy = %q, want %q", got.RejectionPolicy, model.RejectionPolicyThreshold)
+		if got.Stages[0].RequiredApprovals != 2 {
+			t.Errorf("Stages[0].RequiredApprovals = %d, want 2", got.Stages[0].RequiredApprovals)
 		}
-		if string(got.AllowedCheckerRoles) != `["admin","manager"]` {
-			t.Errorf("AllowedCheckerRoles = %s", got.AllowedCheckerRoles)
+		if got.Stages[0].RejectionPolicy != model.RejectionPolicyThreshold {
+			t.Errorf("Stages[0].RejectionPolicy = %q, want %q", got.Stages[0].RejectionPolicy, model.RejectionPolicyThreshold)
+		}
+		if string(got.Stages[0].AllowedCheckerRoles) != `["admin","manager"]` {
+			t.Errorf("Stages[0].AllowedCheckerRoles = %s", got.Stages[0].AllowedCheckerRoles)
+		}
+		if got.Stages[0].Name != "Finance Review" {
+			t.Errorf("Stages[0].Name = %q, want %q", got.Stages[0].Name, "Finance Review")
 		}
 		if len(got.IdentityFields) != 1 || got.IdentityFields[0] != "account_id" {
 			t.Errorf("IdentityFields = %v", got.IdentityFields)
 		}
 		if got.AutoExpireDuration == nil || *got.AutoExpireDuration != 2*time.Hour {
 			t.Errorf("AutoExpireDuration = %v, want 2h", got.AutoExpireDuration)
+		}
+	})
+
+	t.Run("Multi-stage roundtrip", func(t *testing.T) {
+		maxCheckers := 5
+		policy := &model.Policy{
+			Name:        "Multi-Stage Policy",
+			RequestType: "multi-stage-" + uuid.NewString(),
+			Stages: []model.ApprovalStage{
+				{Index: 0, Name: "Stage 1", RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+				{Index: 1, Name: "Stage 2", RequiredApprovals: 2, RejectionPolicy: model.RejectionPolicyThreshold, MaxCheckers: &maxCheckers},
+			},
+		}
+		if err := s.Create(ctx, policy); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		got, err := s.GetByID(ctx, policy.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if len(got.Stages) != 2 {
+			t.Fatalf("Stages length = %d, want 2", len(got.Stages))
+		}
+		if got.Stages[1].Name != "Stage 2" {
+			t.Errorf("Stages[1].Name = %q, want %q", got.Stages[1].Name, "Stage 2")
+		}
+		if got.Stages[1].RequiredApprovals != 2 {
+			t.Errorf("Stages[1].RequiredApprovals = %d, want 2", got.Stages[1].RequiredApprovals)
+		}
+		if got.Stages[1].MaxCheckers == nil || *got.Stages[1].MaxCheckers != 5 {
+			t.Errorf("Stages[1].MaxCheckers = %v, want 5", got.Stages[1].MaxCheckers)
 		}
 	})
 
@@ -387,7 +538,13 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 
 	t.Run("GetByRequestType", func(t *testing.T) {
 		rt := "rt-" + uuid.NewString()
-		s.Create(ctx, &model.Policy{Name: "P", RequestType: rt, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny})
+		s.Create(ctx, &model.Policy{
+			Name:        "P",
+			RequestType: rt,
+			Stages: []model.ApprovalStage{
+				{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			},
+		})
 
 		got, err := s.GetByRequestType(ctx, rt)
 		if err != nil {
@@ -410,11 +567,17 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 
 	t.Run("Update", func(t *testing.T) {
 		rt := "upd-" + uuid.NewString()
-		policy := &model.Policy{Name: "Original", RequestType: rt, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny}
+		policy := &model.Policy{
+			Name:        "Original",
+			RequestType: rt,
+			Stages: []model.ApprovalStage{
+				{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			},
+		}
 		s.Create(ctx, policy)
 
 		policy.Name = "Updated"
-		policy.RequiredApprovals = 5
+		policy.Stages[0].RequiredApprovals = 5
 		if err := s.Update(ctx, policy); err != nil {
 			t.Fatalf("Update: %v", err)
 		}
@@ -423,14 +586,20 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 		if got.Name != "Updated" {
 			t.Errorf("Name = %q, want %q", got.Name, "Updated")
 		}
-		if got.RequiredApprovals != 5 {
-			t.Errorf("RequiredApprovals = %d, want 5", got.RequiredApprovals)
+		if got.Stages[0].RequiredApprovals != 5 {
+			t.Errorf("Stages[0].RequiredApprovals = %d, want 5", got.Stages[0].RequiredApprovals)
 		}
 	})
 
 	t.Run("Delete", func(t *testing.T) {
 		rt := "del-" + uuid.NewString()
-		policy := &model.Policy{Name: "ToDelete", RequestType: rt, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny}
+		policy := &model.Policy{
+			Name:        "ToDelete",
+			RequestType: rt,
+			Stages: []model.ApprovalStage{
+				{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			},
+		}
 		s.Create(ctx, policy)
 
 		if err := s.Delete(ctx, policy.ID); err != nil {

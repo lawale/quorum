@@ -34,6 +34,16 @@ func (db *DB) Close() {
 	db.Pool.Close()
 }
 
+// nullableString converts a byte slice to a *string, returning nil if empty.
+// Used for nullable NVARCHAR(MAX) columns in MSSQL that store JSON data.
+func nullableString(data []byte) *string {
+	if len(data) == 0 {
+		return nil
+	}
+	s := string(data)
+	return &s
+}
+
 func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.Stores, error) {
 	db, err := New(ctx, dsn, maxOpen, maxIdle)
 	if err != nil {

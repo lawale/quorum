@@ -44,7 +44,7 @@ func TestPolicyCreate_TypeConflict(t *testing.T) {
 	}
 }
 
-func TestPolicyCreate_DefaultsRequiredApprovals(t *testing.T) {
+func TestPolicyCreate_DefaultsStageRequiredApprovals(t *testing.T) {
 	policies := &testutil.MockPolicyStore{
 		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
 			return nil, nil
@@ -56,18 +56,18 @@ func TestPolicyCreate_DefaultsRequiredApprovals(t *testing.T) {
 	svc := NewPolicyService(policies)
 
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.RequiredApprovals = 0
+		p.Stages[0].RequiredApprovals = 0
 	})
 	err := svc.Create(context.Background(), policy)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if policy.RequiredApprovals != 1 {
-		t.Errorf("RequiredApprovals = %d, want 1 (default)", policy.RequiredApprovals)
+	if policy.Stages[0].RequiredApprovals != 1 {
+		t.Errorf("Stages[0].RequiredApprovals = %d, want 1 (default)", policy.Stages[0].RequiredApprovals)
 	}
 }
 
-func TestPolicyCreate_DefaultsRejectionPolicy(t *testing.T) {
+func TestPolicyCreate_DefaultsStageRejectionPolicy(t *testing.T) {
 	policies := &testutil.MockPolicyStore{
 		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
 			return nil, nil
@@ -79,14 +79,74 @@ func TestPolicyCreate_DefaultsRejectionPolicy(t *testing.T) {
 	svc := NewPolicyService(policies)
 
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.RejectionPolicy = ""
+		p.Stages[0].RejectionPolicy = ""
 	})
 	err := svc.Create(context.Background(), policy)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if policy.RejectionPolicy != model.RejectionPolicyAny {
-		t.Errorf("RejectionPolicy = %q, want %q", policy.RejectionPolicy, model.RejectionPolicyAny)
+	if policy.Stages[0].RejectionPolicy != model.RejectionPolicyAny {
+		t.Errorf("Stages[0].RejectionPolicy = %q, want %q", policy.Stages[0].RejectionPolicy, model.RejectionPolicyAny)
+	}
+}
+
+func TestPolicyCreate_NoStages_Error(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = nil
+	})
+	err := svc.Create(context.Background(), policy)
+	if !errors.Is(err, ErrNoStages) {
+		t.Fatalf("expected ErrNoStages, got: %v", err)
+	}
+}
+
+func TestPolicyCreate_InvalidStageIndex_Error(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			{Index: 5, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny}, // Wrong index
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if !errors.Is(err, ErrInvalidStageIndex) {
+		t.Fatalf("expected ErrInvalidStageIndex, got: %v", err)
+	}
+}
+
+func TestPolicyCreate_MultiStage_Success(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+		CreateFunc: func(ctx context.Context, policy *model.Policy) error {
+			return nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, Name: "Finance Review", RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			{Index: 1, Name: "Manager Approval", RequiredApprovals: 2, RejectionPolicy: model.RejectionPolicyThreshold, MaxCheckers: testutil.IntPtr(3)},
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

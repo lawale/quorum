@@ -328,16 +328,18 @@ func TestRequestHandler_List_WithFilters(t *testing.T) {
 func TestRequestHandler_Approve_Success(t *testing.T) {
 	reqID := uuid.New()
 	req := testutil.NewRequest(func(r *model.Request) { r.ID = reqID })
-	policy := testutil.NewPolicy(func(p *model.Policy) { p.RequiredApprovals = 1 })
+	policy := testutil.NewPolicy(func(p *model.Policy) { p.Stages[0].RequiredApprovals = 1 })
 
 	requests := &testutil.MockRequestStore{
-		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Request, error) { return req, nil },
+		GetByIDFunc:      func(ctx context.Context, id uuid.UUID) (*model.Request, error) { return req, nil },
 		UpdateStatusFunc: func(ctx context.Context, id uuid.UUID, status model.RequestStatus) error { return nil },
 	}
 	approvalsStore := &testutil.MockApprovalStore{
-		ExistsByCheckerFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string) (bool, error) { return false, nil },
-		CreateFunc:          func(ctx context.Context, approval *model.Approval) error { return nil },
-		CountByDecisionFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision) (int, error) {
+		ExistsByCheckerAndStageFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
+			return false, nil
+		},
+		CreateFunc: func(ctx context.Context, approval *model.Approval) error { return nil },
+		CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 			if decision == model.DecisionApproved {
 				return 1, nil
 			}
@@ -443,7 +445,7 @@ func TestRequestHandler_Reject_Success(t *testing.T) {
 	reqID := uuid.New()
 	req := testutil.NewRequest(func(r *model.Request) { r.ID = reqID })
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.RejectionPolicy = model.RejectionPolicyAny
+		p.Stages[0].RejectionPolicy = model.RejectionPolicyAny
 	})
 
 	requests := &testutil.MockRequestStore{
@@ -451,9 +453,11 @@ func TestRequestHandler_Reject_Success(t *testing.T) {
 		UpdateStatusFunc: func(ctx context.Context, id uuid.UUID, status model.RequestStatus) error { return nil },
 	}
 	approvalsStore := &testutil.MockApprovalStore{
-		ExistsByCheckerFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string) (bool, error) { return false, nil },
-		CreateFunc:          func(ctx context.Context, approval *model.Approval) error { return nil },
-		CountByDecisionFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision) (int, error) {
+		ExistsByCheckerAndStageFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
+			return false, nil
+		},
+		CreateFunc: func(ctx context.Context, approval *model.Approval) error { return nil },
+		CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 			if decision == model.DecisionRejected {
 				return 1, nil
 			}

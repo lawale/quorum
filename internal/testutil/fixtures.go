@@ -32,13 +32,18 @@ func NewRequest(overrides ...func(*model.Request)) *model.Request {
 func NewPolicy(overrides ...func(*model.Policy)) *model.Policy {
 	now := time.Now().UTC()
 	policy := &model.Policy{
-		ID:                uuid.New(),
-		Name:              "Transfer Policy",
-		RequestType:       "transfer",
-		RequiredApprovals: 1,
-		RejectionPolicy:   model.RejectionPolicyAny,
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		ID:          uuid.New(),
+		Name:        "Transfer Policy",
+		RequestType: "transfer",
+		Stages: []model.ApprovalStage{
+			{
+				Index:             0,
+				RequiredApprovals: 1,
+				RejectionPolicy:   model.RejectionPolicyAny,
+			},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	for _, o := range overrides {
 		o(policy)

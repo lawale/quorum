@@ -13,6 +13,8 @@ import (
 var (
 	ErrPolicyNotFound     = errors.New("policy not found")
 	ErrPolicyTypeConflict = errors.New("a policy for this request type already exists")
+	ErrNoStages           = errors.New("policy must have at least one approval stage")
+	ErrInvalidStageIndex  = errors.New("stage indices must be sequential starting from 0")
 )
 
 type PolicyService struct {
@@ -32,11 +34,20 @@ func (s *PolicyService) Create(ctx context.Context, policy *model.Policy) error 
 		return ErrPolicyTypeConflict
 	}
 
-	if policy.RequiredApprovals < 1 {
-		policy.RequiredApprovals = 1
+	// Validate and default stages
+	if len(policy.Stages) == 0 {
+		return ErrNoStages
 	}
-	if policy.RejectionPolicy == "" {
-		policy.RejectionPolicy = model.RejectionPolicyAny
+	for i := range policy.Stages {
+		if policy.Stages[i].Index != i {
+			return fmt.Errorf("%w: expected %d, got %d", ErrInvalidStageIndex, i, policy.Stages[i].Index)
+		}
+		if policy.Stages[i].RequiredApprovals < 1 {
+			policy.Stages[i].RequiredApprovals = 1
+		}
+		if policy.Stages[i].RejectionPolicy == "" {
+			policy.Stages[i].RejectionPolicy = model.RejectionPolicyAny
+		}
 	}
 
 	return s.policies.Create(ctx, policy)

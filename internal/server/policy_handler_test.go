@@ -26,7 +26,7 @@ func TestPolicyHandler_Create_Success(t *testing.T) {
 	}
 	handler := newTestPolicyHandler(policies)
 
-	body := `{"name":"Test Policy","request_type":"transfer","required_approvals":2}`
+	body := `{"name":"Test Policy","request_type":"transfer","stages":[{"index":0,"required_approvals":2,"rejection_policy":"any"}]}`
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
@@ -53,7 +53,7 @@ func TestPolicyHandler_Create_InvalidBody(t *testing.T) {
 func TestPolicyHandler_Create_MissingName(t *testing.T) {
 	handler := newTestPolicyHandler(&testutil.MockPolicyStore{})
 
-	body := `{"request_type":"transfer","required_approvals":2}`
+	body := `{"request_type":"transfer","stages":[{"index":0,"required_approvals":2}]}`
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
@@ -67,7 +67,21 @@ func TestPolicyHandler_Create_MissingName(t *testing.T) {
 func TestPolicyHandler_Create_MissingRequestType(t *testing.T) {
 	handler := newTestPolicyHandler(&testutil.MockPolicyStore{})
 
-	body := `{"name":"Test Policy","required_approvals":2}`
+	body := `{"name":"Test Policy","stages":[{"index":0,"required_approvals":2}]}`
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestPolicyHandler_Create_MissingStages(t *testing.T) {
+	handler := newTestPolicyHandler(&testutil.MockPolicyStore{})
+
+	body := `{"name":"Test Policy","request_type":"transfer"}`
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
@@ -85,7 +99,7 @@ func TestPolicyHandler_Create_TypeConflict(t *testing.T) {
 	}
 	handler := newTestPolicyHandler(policies)
 
-	body := `{"name":"Test Policy","request_type":"transfer","required_approvals":2}`
+	body := `{"name":"Test Policy","request_type":"transfer","stages":[{"index":0,"required_approvals":2}]}`
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
@@ -102,7 +116,7 @@ func TestPolicyHandler_Create_InvalidAutoExpire(t *testing.T) {
 	}
 	handler := newTestPolicyHandler(policies)
 
-	body := `{"name":"Test","request_type":"transfer","auto_expire_duration":"invalid"}`
+	body := `{"name":"Test","request_type":"transfer","stages":[{"index":0,"required_approvals":1}],"auto_expire_duration":"invalid"}`
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
@@ -124,7 +138,7 @@ func TestPolicyHandler_Create_WithPermissionCheckURL(t *testing.T) {
 	}
 	handler := newTestPolicyHandler(policies)
 
-	body := `{"name":"Test","request_type":"transfer","permission_check_url":"https://example.com/check"}`
+	body := `{"name":"Test","request_type":"transfer","stages":[{"index":0,"required_approvals":1}],"permission_check_url":"https://example.com/check"}`
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 

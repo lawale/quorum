@@ -22,14 +22,15 @@ type RequestStore interface {
 	FindPendingByFingerprint(ctx context.Context, reqType string, fingerprint string) (*model.Request, error)
 	List(ctx context.Context, filter RequestFilter) ([]model.Request, int, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status model.RequestStatus) error
+	UpdateStageAndStatus(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error
 	ListExpired(ctx context.Context) ([]model.Request, error)
 }
 
 type ApprovalStore interface {
 	Create(ctx context.Context, approval *model.Approval) error
 	ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error)
-	CountByDecision(ctx context.Context, requestID uuid.UUID, decision model.Decision) (int, error)
-	ExistsByChecker(ctx context.Context, requestID uuid.UUID, checkerID string) (bool, error)
+	CountByDecisionAndStage(ctx context.Context, requestID uuid.UUID, decision model.Decision, stageIndex int) (int, error)
+	ExistsByCheckerAndStage(ctx context.Context, requestID uuid.UUID, checkerID string, stageIndex int) (bool, error)
 }
 
 type PolicyStore interface {

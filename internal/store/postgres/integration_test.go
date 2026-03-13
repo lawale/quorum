@@ -33,6 +33,7 @@ func setupPostgres(t *testing.T) *postgres.DB {
 			filepath.Join(migrationsDir(), "004_create_webhooks.up.sql"),
 			filepath.Join(migrationsDir(), "005_create_audit_logs.up.sql"),
 			filepath.Join(migrationsDir(), "006_add_permission_check_url.up.sql"),
+			filepath.Join(migrationsDir(), "007_add_approval_stages.up.sql"),
 		),
 		tcpostgres.BasicWaitStrategies(),
 		tcpostgres.WithSQLDriver("pgx"),

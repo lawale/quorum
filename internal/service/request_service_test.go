@@ -397,15 +397,18 @@ func setupApproveTest(req *model.Request, policy *model.Policy) (*testutil.MockR
 		UpdateStatusFunc: func(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {
 			return nil
 		},
+		UpdateStageAndStatusFunc: func(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
+			return nil
+		},
 	}
 	approvals := &testutil.MockApprovalStore{
-		ExistsByCheckerFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string) (bool, error) {
+		ExistsByCheckerAndStageFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
 			return false, nil
 		},
 		CreateFunc: func(ctx context.Context, approval *model.Approval) error {
 			return nil
 		},
-		CountByDecisionFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision) (int, error) {
+		CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 			if decision == model.DecisionApproved {
 				return 1, nil // This approval is the first
 			}
@@ -428,7 +431,7 @@ func setupApproveTest(req *model.Request, policy *model.Policy) (*testutil.MockR
 
 func TestApprove_Success_MeetsThreshold(t *testing.T) {
 	req := testutil.NewRequest()
-	policy := testutil.NewPolicy(func(p *model.Policy) { p.RequiredApprovals = 1 })
+	policy := testutil.NewPolicy() // Default: 1 stage, 1 required approval
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
@@ -444,11 +447,13 @@ func TestApprove_Success_MeetsThreshold(t *testing.T) {
 
 func TestApprove_Success_BelowThreshold(t *testing.T) {
 	req := testutil.NewRequest()
-	policy := testutil.NewPolicy(func(p *model.Policy) { p.RequiredApprovals = 3 })
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages[0].RequiredApprovals = 3
+	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	// Override: only 1 approval so far, need 3
-	approvalStore.CountByDecisionFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision) (int, error) {
+	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 		if decision == model.DecisionApproved {
 			return 1, nil
 		}
@@ -512,17 +517,23 @@ func TestApprove_SelfApproval(t *testing.T) {
 
 func TestApprove_AlreadyActioned(t *testing.T) {
 	req := testutil.NewRequest()
+	policy := testutil.NewPolicy()
 	requests := &testutil.MockRequestStore{
 		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Request, error) {
 			return req, nil
 		},
 	}
 	approvals := &testutil.MockApprovalStore{
-		ExistsByCheckerFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string) (bool, error) {
+		ExistsByCheckerAndStageFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
 			return true, nil // Already acted
 		},
 	}
-	svc := newTestRequestService(requests, approvals, &testutil.MockPolicyStore{}, &testutil.MockAuditStore{}, nil)
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	svc := newTestRequestService(requests, approvals, policies, &testutil.MockAuditStore{}, nil)
 
 	_, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
 	if !errors.Is(err, ErrAlreadyActioned) {
@@ -533,7 +544,7 @@ func TestApprove_AlreadyActioned(t *testing.T) {
 func TestApprove_InvalidCheckerRole(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.AllowedCheckerRoles = json.RawMessage(`["admin","manager"]`)
+		p.Stages[0].AllowedCheckerRoles = json.RawMessage(`["admin","manager"]`)
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
@@ -548,7 +559,7 @@ func TestApprove_InvalidCheckerRole(t *testing.T) {
 func TestApprove_ValidCheckerRole(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.AllowedCheckerRoles = json.RawMessage(`["admin","manager"]`)
+		p.Stages[0].AllowedCheckerRoles = json.RawMessage(`["admin","manager"]`)
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
@@ -562,7 +573,7 @@ func TestApprove_ValidCheckerRole(t *testing.T) {
 
 func TestApprove_NoAllowedRoles_SkipsRoleCheck(t *testing.T) {
 	req := testutil.NewRequest()
-	policy := testutil.NewPolicy() // No AllowedCheckerRoles
+	policy := testutil.NewPolicy() // No AllowedCheckerRoles on stage
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
@@ -674,7 +685,7 @@ func TestApprove_PermissionCheck_NoURL_Skips(t *testing.T) {
 
 func TestApprove_OnResolve_CalledOnTerminal(t *testing.T) {
 	req := testutil.NewRequest()
-	policy := testutil.NewPolicy(func(p *model.Policy) { p.RequiredApprovals = 1 })
+	policy := testutil.NewPolicy() // 1 stage, 1 required
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
@@ -695,11 +706,13 @@ func TestApprove_OnResolve_CalledOnTerminal(t *testing.T) {
 
 func TestApprove_OnResolve_NotCalledWhenPending(t *testing.T) {
 	req := testutil.NewRequest()
-	policy := testutil.NewPolicy(func(p *model.Policy) { p.RequiredApprovals = 3 })
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages[0].RequiredApprovals = 3
+	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	// Override: 1 approval, need 3
-	approvalStore.CountByDecisionFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision) (int, error) {
+	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 		if decision == model.DecisionApproved {
 			return 1, nil
 		}
@@ -727,13 +740,13 @@ func TestApprove_OnResolve_NotCalledWhenPending(t *testing.T) {
 func TestReject_RejectionPolicyAny_ImmediateReject(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.RequiredApprovals = 2
-		p.RejectionPolicy = model.RejectionPolicyAny
+		p.Stages[0].RequiredApprovals = 2
+		p.Stages[0].RejectionPolicy = model.RejectionPolicyAny
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	// Override counts for rejection: 0 approvals, 1 rejection
-	approvalStore.CountByDecisionFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision) (int, error) {
+	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 		if decision == model.DecisionRejected {
 			return 1, nil
 		}
@@ -754,14 +767,14 @@ func TestReject_RejectionPolicyAny_ImmediateReject(t *testing.T) {
 func TestReject_RejectionPolicyThreshold_StillPossible(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.RequiredApprovals = 2
-		p.RejectionPolicy = model.RejectionPolicyThreshold
-		p.MaxCheckers = testutil.IntPtr(3)
+		p.Stages[0].RequiredApprovals = 2
+		p.Stages[0].RejectionPolicy = model.RejectionPolicyThreshold
+		p.Stages[0].MaxCheckers = testutil.IntPtr(3)
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	// 0 approvals, 1 rejection. Remaining = 3 - 0 - 1 = 2. 0 + 2 >= 2 → still possible
-	approvalStore.CountByDecisionFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision) (int, error) {
+	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 		if decision == model.DecisionRejected {
 			return 1, nil
 		}
@@ -782,14 +795,14 @@ func TestReject_RejectionPolicyThreshold_StillPossible(t *testing.T) {
 func TestReject_RejectionPolicyThreshold_Impossible(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.RequiredApprovals = 3
-		p.RejectionPolicy = model.RejectionPolicyThreshold
-		p.MaxCheckers = testutil.IntPtr(3)
+		p.Stages[0].RequiredApprovals = 3
+		p.Stages[0].RejectionPolicy = model.RejectionPolicyThreshold
+		p.Stages[0].MaxCheckers = testutil.IntPtr(3)
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	// 0 approvals, 1 rejection. Remaining = 3 - 0 - 1 = 2. 0 + 2 < 3 → impossible
-	approvalStore.CountByDecisionFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision) (int, error) {
+	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 		if decision == model.DecisionRejected {
 			return 1, nil
 		}
@@ -937,39 +950,158 @@ func TestCancel_OnResolve_Called(t *testing.T) {
 // --- validateCheckerRoles Tests ---
 
 func TestValidateCheckerRoles_NilRoles(t *testing.T) {
-	policy := testutil.NewPolicy() // AllowedCheckerRoles is nil
-	err := validateCheckerRoles(policy, []string{"anything"})
+	stage := &model.ApprovalStage{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny}
+	err := validateCheckerRoles(stage, []string{"anything"})
 	if err != nil {
 		t.Fatalf("expected nil error for nil AllowedCheckerRoles, got: %v", err)
 	}
 }
 
 func TestValidateCheckerRoles_EmptyArray(t *testing.T) {
-	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.AllowedCheckerRoles = json.RawMessage(`[]`)
-	})
-	err := validateCheckerRoles(policy, []string{"anything"})
+	stage := &model.ApprovalStage{
+		Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny,
+		AllowedCheckerRoles: json.RawMessage(`[]`),
+	}
+	err := validateCheckerRoles(stage, []string{"anything"})
 	if err != nil {
 		t.Fatalf("expected nil error for empty allowed roles, got: %v", err)
 	}
 }
 
 func TestValidateCheckerRoles_Match(t *testing.T) {
-	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.AllowedCheckerRoles = json.RawMessage(`["admin","manager"]`)
-	})
-	err := validateCheckerRoles(policy, []string{"manager"})
+	stage := &model.ApprovalStage{
+		Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny,
+		AllowedCheckerRoles: json.RawMessage(`["admin","manager"]`),
+	}
+	err := validateCheckerRoles(stage, []string{"manager"})
 	if err != nil {
 		t.Fatalf("expected nil error for matching role, got: %v", err)
 	}
 }
 
 func TestValidateCheckerRoles_NoMatch(t *testing.T) {
-	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.AllowedCheckerRoles = json.RawMessage(`["admin","manager"]`)
-	})
-	err := validateCheckerRoles(policy, []string{"viewer"})
+	stage := &model.ApprovalStage{
+		Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny,
+		AllowedCheckerRoles: json.RawMessage(`["admin","manager"]`),
+	}
+	err := validateCheckerRoles(stage, []string{"viewer"})
 	if !errors.Is(err, ErrInvalidCheckerRole) {
 		t.Fatalf("expected ErrInvalidCheckerRole, got: %v", err)
+	}
+}
+
+// --- Multi-Stage Tests ---
+
+func TestApprove_MultiStage_AdvancesToNextStage(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.CurrentStage = 0
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			{Index: 1, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+		}
+	})
+	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
+
+	var advancedStage int
+	requestStore.UpdateStageAndStatusFunc = func(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
+		advancedStage = stage
+		return nil
+	}
+
+	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
+
+	result, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should still be pending but at stage 1
+	if result.Status != model.StatusPending {
+		t.Errorf("status = %v, want pending (advanced to stage 1)", result.Status)
+	}
+	if advancedStage != 1 {
+		t.Errorf("advanced stage = %d, want 1", advancedStage)
+	}
+}
+
+func TestApprove_MultiStage_FinalStageApproved(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.CurrentStage = 1 // Already at last stage
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			{Index: 1, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+		}
+	})
+	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
+
+	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
+
+	result, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != model.StatusApproved {
+		t.Errorf("status = %v, want approved (final stage completed)", result.Status)
+	}
+}
+
+func TestReject_MultiStage_StageRejection_RejectsEntireRequest(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.CurrentStage = 1
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			{Index: 1, RequiredApprovals: 2, RejectionPolicy: model.RejectionPolicyAny},
+		}
+	})
+	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
+
+	// 0 approvals, 1 rejection at stage 1
+	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
+		if decision == model.DecisionRejected {
+			return 1, nil
+		}
+		return 0, nil
+	}
+
+	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
+
+	result, err := svc.Reject(context.Background(), req.ID, "checker-1", nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != model.StatusRejected {
+		t.Errorf("status = %v, want rejected", result.Status)
+	}
+}
+
+func TestApprove_MultiStage_PerStageRoleValidation(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.CurrentStage = 1
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny, AllowedCheckerRoles: json.RawMessage(`["finance"]`)},
+			{Index: 1, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny, AllowedCheckerRoles: json.RawMessage(`["manager"]`)},
+		}
+	})
+	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
+
+	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
+
+	// Stage 1 requires "manager" role, but checker has "finance"
+	_, err := svc.Approve(context.Background(), req.ID, "checker-1", []string{"finance"}, nil)
+	if !errors.Is(err, ErrInvalidCheckerRole) {
+		t.Fatalf("expected ErrInvalidCheckerRole for stage 1, got: %v", err)
+	}
+
+	// Now with correct role
+	_, err = svc.Approve(context.Background(), req.ID, "checker-1", []string{"manager"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error with correct role: %v", err)
 	}
 }

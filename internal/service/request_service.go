@@ -26,7 +26,8 @@ var (
 	ErrAlreadyActioned       = errors.New("checker has already acted on this request")
 	ErrInvalidCheckerRole    = errors.New("checker does not have a required role")
 	ErrNotEligibleReviewer   = errors.New("checker is not in the eligible reviewers list")
-	ErrMissingIdentityFields = errors.New("payload is missing required identity fields")
+	ErrInvalidStage          = errors.New("request is at an invalid stage for this policy")
+	ErrMissingIdentityFields = errors.New("missing identity field in payload")
 )
 
 type RequestService struct {
@@ -109,6 +110,9 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 		expiresAt := time.Now().UTC().Add(*policy.AutoExpireDuration)
 		req.ExpiresAt = &expiresAt
 	}
+
+	// Start at stage 0
+	req.CurrentStage = 0
 
 	if err := s.requests.Create(ctx, req); err != nil {
 		return nil, err
@@ -209,15 +213,6 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		return nil, ErrSelfApproval
 	}
 
-	// Check if checker already acted
-	already, err := s.approvals.ExistsByChecker(ctx, requestID, checkerID)
-	if err != nil {
-		return nil, err
-	}
-	if already {
-		return nil, ErrAlreadyActioned
-	}
-
 	// Look up policy for role validation and threshold logic
 	policy, err := s.policies.GetByRequestType(ctx, req.Type)
 	if err != nil {
@@ -227,8 +222,23 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		return nil, ErrPolicyNotFound
 	}
 
-	// Validate checker roles (static policy check)
-	if err := validateCheckerRoles(policy, roles); err != nil {
+	// Get the current stage definition
+	stage := policy.StageAt(req.CurrentStage)
+	if stage == nil {
+		return nil, ErrInvalidStage
+	}
+
+	// Check if checker already acted on this stage
+	already, err := s.approvals.ExistsByCheckerAndStage(ctx, requestID, checkerID, req.CurrentStage)
+	if err != nil {
+		return nil, err
+	}
+	if already {
+		return nil, ErrAlreadyActioned
+	}
+
+	// Validate checker roles against the current stage's allowed roles
+	if err := validateCheckerRoles(stage, roles); err != nil {
 		return nil, err
 	}
 
@@ -261,12 +271,13 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		}
 	}
 
-	// Record the approval/rejection
+	// Record the approval/rejection with the current stage index
 	approval := &model.Approval{
-		RequestID: requestID,
-		CheckerID: checkerID,
-		Decision:  decision,
-		Comment:   comment,
+		RequestID:  requestID,
+		CheckerID:  checkerID,
+		Decision:   decision,
+		StageIndex: req.CurrentStage,
+		Comment:    comment,
 	}
 	if err := s.approvals.Create(ctx, approval); err != nil {
 		return nil, fmt.Errorf("recording decision: %w", err)
@@ -275,12 +286,13 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 	s.audit(ctx, requestID, string(decision), checkerID, nil)
 
 	// Evaluate state transition
-	newStatus, err := s.evaluateStatus(ctx, requestID, policy)
+	newStatus, newStage, err := s.evaluateStatus(ctx, requestID, req.CurrentStage, policy)
 	if err != nil {
 		return nil, err
 	}
 
 	if newStatus != nil && *newStatus != req.Status {
+		// Terminal status change (approved or rejected)
 		if err := s.requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
 			return nil, err
 		}
@@ -299,6 +311,15 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 				s.onResolve(ctx, req, approvals)
 			}
 		}
+	} else if newStage != nil && *newStage != req.CurrentStage {
+		// Stage advance — still pending but move to next stage
+		if err := s.requests.UpdateStageAndStatus(ctx, requestID, *newStage, model.StatusPending); err != nil {
+			return nil, err
+		}
+		req.CurrentStage = *newStage
+
+		stageDetails, _ := json.Marshal(map[string]int{"from_stage": req.CurrentStage - 1, "to_stage": *newStage})
+		s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
 	}
 
 	// Refresh approvals
@@ -311,40 +332,57 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 	return req, nil
 }
 
-func (s *RequestService) evaluateStatus(ctx context.Context, requestID uuid.UUID, policy *model.Policy) (*model.RequestStatus, error) {
-	approvalCount, err := s.approvals.CountByDecision(ctx, requestID, model.DecisionApproved)
-	if err != nil {
-		return nil, err
-	}
-	rejectionCount, err := s.approvals.CountByDecision(ctx, requestID, model.DecisionRejected)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if we have enough approvals
-	if approvalCount >= policy.RequiredApprovals {
-		status := model.StatusApproved
-		return &status, nil
+// evaluateStatus evaluates the current stage's approval/rejection state.
+// Returns:
+//   - (*RequestStatus, nil, nil) — terminal status change (approved/rejected)
+//   - (nil, *int, nil) — stage advance (next stage index)
+//   - (nil, nil, nil) — no change yet
+func (s *RequestService) evaluateStatus(ctx context.Context, requestID uuid.UUID, currentStage int, policy *model.Policy) (*model.RequestStatus, *int, error) {
+	stage := policy.StageAt(currentStage)
+	if stage == nil {
+		return nil, nil, ErrInvalidStage
 	}
 
-	// Check rejection policy
-	switch policy.RejectionPolicy {
+	approvalCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, currentStage)
+	if err != nil {
+		return nil, nil, err
+	}
+	rejectionCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, currentStage)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Check rejection policy for the current stage
+	switch stage.RejectionPolicy {
 	case model.RejectionPolicyAny:
 		if rejectionCount > 0 {
 			status := model.StatusRejected
-			return &status, nil
+			return &status, nil, nil
 		}
 	case model.RejectionPolicyThreshold:
-		if policy.MaxCheckers != nil {
-			remaining := *policy.MaxCheckers - approvalCount - rejectionCount
-			if approvalCount+remaining < policy.RequiredApprovals {
+		if stage.MaxCheckers != nil {
+			remaining := *stage.MaxCheckers - approvalCount - rejectionCount
+			if approvalCount+remaining < stage.RequiredApprovals {
 				status := model.StatusRejected
-				return &status, nil
+				return &status, nil, nil
 			}
 		}
 	}
 
-	return nil, nil
+	// Check if we have enough approvals for this stage
+	if approvalCount >= stage.RequiredApprovals {
+		nextStage := currentStage + 1
+		if nextStage >= policy.TotalStages() {
+			// All stages complete — request approved
+			status := model.StatusApproved
+			return &status, nil, nil
+		}
+		// Advance to next stage
+		return nil, &nextStage, nil
+	}
+
+	// Not enough votes either way yet
+	return nil, nil, nil
 }
 
 func (s *RequestService) audit(ctx context.Context, requestID uuid.UUID, action string, actorID string, details json.RawMessage) {
@@ -386,13 +424,13 @@ func computeFingerprint(payload json.RawMessage, identityFields []string) (strin
 	return fmt.Sprintf("%x", hash), nil
 }
 
-func validateCheckerRoles(policy *model.Policy, checkerRoles []string) error {
-	if policy.AllowedCheckerRoles == nil {
+func validateCheckerRoles(stage *model.ApprovalStage, checkerRoles []string) error {
+	if stage.AllowedCheckerRoles == nil {
 		return nil
 	}
 
 	var allowedRoles []string
-	if err := json.Unmarshal(policy.AllowedCheckerRoles, &allowedRoles); err != nil {
+	if err := json.Unmarshal(stage.AllowedCheckerRoles, &allowedRoles); err != nil {
 		return nil // If we can't parse, skip validation
 	}
 

@@ -14,7 +14,7 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-const requestColumns = `id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, expires_at, created_at, updated_at`
+const requestColumns = `id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
 
 type RequestStore struct {
 	db *DB
@@ -27,7 +27,7 @@ func NewRequestStore(db *DB) *RequestStore {
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
 		INSERT INTO requests (` + requestColumns + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 
 	now := time.Now().UTC()
 	if req.ID == uuid.Nil {
@@ -47,7 +47,7 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	_, err := s.db.Pool.Exec(ctx, query,
 		req.ID, req.IdempotencyKey, req.Type, req.Payload, req.Status,
 		req.MakerID, req.CallbackURL, eligibleJSON, req.Metadata, req.Fingerprint,
-		req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
+		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting request: %w", err)
@@ -128,6 +128,15 @@ func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status mo
 	return nil
 }
 
+func (s *RequestStore) UpdateStageAndStatus(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
+	query := `UPDATE requests SET current_stage = $1, status = $2, updated_at = $3 WHERE id = $4`
+	_, err := s.db.Pool.Exec(ctx, query, stage, status, time.Now().UTC(), id)
+	if err != nil {
+		return fmt.Errorf("updating request stage and status: %w", err)
+	}
+	return nil
+}
+
 func (s *RequestStore) ListExpired(ctx context.Context) ([]model.Request, error) {
 	query := `SELECT ` + requestColumns + ` FROM requests WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= NOW()`
 	requests, _, err := s.scanMany(ctx, query)
@@ -142,7 +151,7 @@ func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (
 	err := s.db.Pool.QueryRow(ctx, query, args...).Scan(
 		&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
 		&req.MakerID, &req.CallbackURL, &eligibleJSON, &req.Metadata, &req.Fingerprint,
-		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -176,7 +185,7 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 		if err := rows.Scan(
 			&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
 			&req.MakerID, &req.CallbackURL, &eligibleJSON, &req.Metadata, &req.Fingerprint,
-			&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning request: %w", err)
 		}

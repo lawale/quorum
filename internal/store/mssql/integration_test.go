@@ -48,6 +48,7 @@ func setupMSSQL(t *testing.T) *mssql.DB {
 		"004_create_webhooks.up.sql",
 		"005_create_audit_logs.up.sql",
 		"006_add_permission_check_url.up.sql",
+		"007_add_approval_stages.up.sql",
 	}
 
 	migDB, err := sql.Open("sqlserver", connStr)

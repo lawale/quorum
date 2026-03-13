@@ -21,8 +21,8 @@ func NewApprovalStore(db *DB) *ApprovalStore {
 
 func (s *ApprovalStore) Create(ctx context.Context, approval *model.Approval) error {
 	query := `
-		INSERT INTO approvals (id, request_id, checker_id, decision, comment, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`
+		INSERT INTO approvals (id, request_id, checker_id, decision, stage_index, comment, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
 	if approval.ID == uuid.Nil {
 		approval.ID = uuid.New()
@@ -31,7 +31,7 @@ func (s *ApprovalStore) Create(ctx context.Context, approval *model.Approval) er
 
 	_, err := s.db.Pool.Exec(ctx, query,
 		approval.ID, approval.RequestID, approval.CheckerID,
-		approval.Decision, approval.Comment, approval.CreatedAt,
+		approval.Decision, approval.StageIndex, approval.Comment, approval.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting approval: %w", err)
@@ -42,7 +42,7 @@ func (s *ApprovalStore) Create(ctx context.Context, approval *model.Approval) er
 
 func (s *ApprovalStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error) {
 	query := `
-		SELECT id, request_id, checker_id, decision, comment, created_at
+		SELECT id, request_id, checker_id, decision, stage_index, comment, created_at
 		FROM approvals WHERE request_id = $1 ORDER BY created_at ASC`
 
 	rows, err := s.db.Pool.Query(ctx, query, requestID)
@@ -54,7 +54,7 @@ func (s *ApprovalStore) ListByRequestID(ctx context.Context, requestID uuid.UUID
 	var approvals []model.Approval
 	for rows.Next() {
 		var a model.Approval
-		if err := rows.Scan(&a.ID, &a.RequestID, &a.CheckerID, &a.Decision, &a.Comment, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.RequestID, &a.CheckerID, &a.Decision, &a.StageIndex, &a.Comment, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning approval: %w", err)
 		}
 		approvals = append(approvals, a)
@@ -63,11 +63,11 @@ func (s *ApprovalStore) ListByRequestID(ctx context.Context, requestID uuid.UUID
 	return approvals, nil
 }
 
-func (s *ApprovalStore) CountByDecision(ctx context.Context, requestID uuid.UUID, decision model.Decision) (int, error) {
-	query := `SELECT COUNT(*) FROM approvals WHERE request_id = $1 AND decision = $2`
+func (s *ApprovalStore) CountByDecisionAndStage(ctx context.Context, requestID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
+	query := `SELECT COUNT(*) FROM approvals WHERE request_id = $1 AND decision = $2 AND stage_index = $3`
 
 	var count int
-	err := s.db.Pool.QueryRow(ctx, query, requestID, decision).Scan(&count)
+	err := s.db.Pool.QueryRow(ctx, query, requestID, decision, stageIndex).Scan(&count)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, nil
@@ -78,11 +78,11 @@ func (s *ApprovalStore) CountByDecision(ctx context.Context, requestID uuid.UUID
 	return count, nil
 }
 
-func (s *ApprovalStore) ExistsByChecker(ctx context.Context, requestID uuid.UUID, checkerID string) (bool, error) {
-	query := `SELECT EXISTS(SELECT 1 FROM approvals WHERE request_id = $1 AND checker_id = $2)`
+func (s *ApprovalStore) ExistsByCheckerAndStage(ctx context.Context, requestID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM approvals WHERE request_id = $1 AND checker_id = $2 AND stage_index = $3)`
 
 	var exists bool
-	err := s.db.Pool.QueryRow(ctx, query, requestID, checkerID).Scan(&exists)
+	err := s.db.Pool.QueryRow(ctx, query, requestID, checkerID, stageIndex).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("checking approval existence: %w", err)
 	}

@@ -18,6 +18,7 @@ type MockRequestStore struct {
 	FindPendingByFingerprintFunc func(ctx context.Context, reqType string, fingerprint string) (*model.Request, error)
 	ListFunc                     func(ctx context.Context, filter store.RequestFilter) ([]model.Request, int, error)
 	UpdateStatusFunc             func(ctx context.Context, id uuid.UUID, status model.RequestStatus) error
+	UpdateStageAndStatusFunc     func(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error
 	ListExpiredFunc              func(ctx context.Context) ([]model.Request, error)
 }
 
@@ -63,6 +64,13 @@ func (m *MockRequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, statu
 	panic("MockRequestStore.UpdateStatus not set up")
 }
 
+func (m *MockRequestStore) UpdateStageAndStatus(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
+	if m.UpdateStageAndStatusFunc != nil {
+		return m.UpdateStageAndStatusFunc(ctx, id, stage, status)
+	}
+	panic("MockRequestStore.UpdateStageAndStatus not set up")
+}
+
 func (m *MockRequestStore) ListExpired(ctx context.Context) ([]model.Request, error) {
 	if m.ListExpiredFunc != nil {
 		return m.ListExpiredFunc(ctx)
@@ -72,10 +80,10 @@ func (m *MockRequestStore) ListExpired(ctx context.Context) ([]model.Request, er
 
 // MockApprovalStore implements store.ApprovalStore with configurable function fields.
 type MockApprovalStore struct {
-	CreateFunc          func(ctx context.Context, approval *model.Approval) error
-	ListByRequestIDFunc func(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error)
-	CountByDecisionFunc func(ctx context.Context, requestID uuid.UUID, decision model.Decision) (int, error)
-	ExistsByCheckerFunc func(ctx context.Context, requestID uuid.UUID, checkerID string) (bool, error)
+	CreateFunc                  func(ctx context.Context, approval *model.Approval) error
+	ListByRequestIDFunc         func(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error)
+	CountByDecisionAndStageFunc func(ctx context.Context, requestID uuid.UUID, decision model.Decision, stageIndex int) (int, error)
+	ExistsByCheckerAndStageFunc func(ctx context.Context, requestID uuid.UUID, checkerID string, stageIndex int) (bool, error)
 }
 
 func (m *MockApprovalStore) Create(ctx context.Context, approval *model.Approval) error {
@@ -92,18 +100,18 @@ func (m *MockApprovalStore) ListByRequestID(ctx context.Context, requestID uuid.
 	panic("MockApprovalStore.ListByRequestID not set up")
 }
 
-func (m *MockApprovalStore) CountByDecision(ctx context.Context, requestID uuid.UUID, decision model.Decision) (int, error) {
-	if m.CountByDecisionFunc != nil {
-		return m.CountByDecisionFunc(ctx, requestID, decision)
+func (m *MockApprovalStore) CountByDecisionAndStage(ctx context.Context, requestID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
+	if m.CountByDecisionAndStageFunc != nil {
+		return m.CountByDecisionAndStageFunc(ctx, requestID, decision, stageIndex)
 	}
-	panic("MockApprovalStore.CountByDecision not set up")
+	panic("MockApprovalStore.CountByDecisionAndStage not set up")
 }
 
-func (m *MockApprovalStore) ExistsByChecker(ctx context.Context, requestID uuid.UUID, checkerID string) (bool, error) {
-	if m.ExistsByCheckerFunc != nil {
-		return m.ExistsByCheckerFunc(ctx, requestID, checkerID)
+func (m *MockApprovalStore) ExistsByCheckerAndStage(ctx context.Context, requestID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
+	if m.ExistsByCheckerAndStageFunc != nil {
+		return m.ExistsByCheckerAndStageFunc(ctx, requestID, checkerID, stageIndex)
 	}
-	panic("MockApprovalStore.ExistsByChecker not set up")
+	panic("MockApprovalStore.ExistsByCheckerAndStage not set up")
 }
 
 // MockPolicyStore implements store.PolicyStore with configurable function fields.

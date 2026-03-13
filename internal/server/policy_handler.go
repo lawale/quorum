@@ -20,16 +20,22 @@ func NewPolicyHandler(ps *service.PolicyService) *PolicyHandler {
 	return &PolicyHandler{policyService: ps}
 }
 
-type createPolicyBody struct {
-	Name                string          `json:"name"`
-	RequestType         string          `json:"request_type"`
+type stageBody struct {
+	Index               int             `json:"index"`
+	Name                string          `json:"name,omitempty"`
 	RequiredApprovals   int             `json:"required_approvals"`
 	AllowedCheckerRoles json.RawMessage `json:"allowed_checker_roles,omitempty"`
 	RejectionPolicy     string          `json:"rejection_policy,omitempty"`
 	MaxCheckers         *int            `json:"max_checkers,omitempty"`
-	IdentityFields      []string        `json:"identity_fields,omitempty"`
-	PermissionCheckURL  *string         `json:"permission_check_url,omitempty"`
-	AutoExpireDuration  string          `json:"auto_expire_duration,omitempty"`
+}
+
+type createPolicyBody struct {
+	Name               string      `json:"name"`
+	RequestType        string      `json:"request_type"`
+	Stages             []stageBody `json:"stages"`
+	IdentityFields     []string    `json:"identity_fields,omitempty"`
+	PermissionCheckURL *string     `json:"permission_check_url,omitempty"`
+	AutoExpireDuration string      `json:"auto_expire_duration,omitempty"`
 }
 
 func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -47,16 +53,29 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "request_type is required")
 		return
 	}
+	if len(body.Stages) == 0 {
+		writeError(w, http.StatusBadRequest, "at least one stage is required")
+		return
+	}
+
+	stages := make([]model.ApprovalStage, len(body.Stages))
+	for i, sb := range body.Stages {
+		stages[i] = model.ApprovalStage{
+			Index:               sb.Index,
+			Name:                sb.Name,
+			RequiredApprovals:   sb.RequiredApprovals,
+			AllowedCheckerRoles: sb.AllowedCheckerRoles,
+			RejectionPolicy:     model.RejectionPolicy(sb.RejectionPolicy),
+			MaxCheckers:         sb.MaxCheckers,
+		}
+	}
 
 	policy := &model.Policy{
-		Name:                body.Name,
-		RequestType:         body.RequestType,
-		RequiredApprovals:   body.RequiredApprovals,
-		AllowedCheckerRoles: body.AllowedCheckerRoles,
-		RejectionPolicy:     model.RejectionPolicy(body.RejectionPolicy),
-		MaxCheckers:         body.MaxCheckers,
-		IdentityFields:      body.IdentityFields,
-		PermissionCheckURL:  body.PermissionCheckURL,
+		Name:               body.Name,
+		RequestType:        body.RequestType,
+		Stages:             stages,
+		IdentityFields:     body.IdentityFields,
+		PermissionCheckURL: body.PermissionCheckURL,
 	}
 
 	if body.AutoExpireDuration != "" {
@@ -71,6 +90,10 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := h.policyService.Create(r.Context(), policy); err != nil {
 		if errors.Is(err, service.ErrPolicyTypeConflict) {
 			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) {
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to create policy")
@@ -111,14 +134,11 @@ func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 type updatePolicyBody struct {
-	Name                string          `json:"name"`
-	RequiredApprovals   int             `json:"required_approvals"`
-	AllowedCheckerRoles json.RawMessage `json:"allowed_checker_roles,omitempty"`
-	RejectionPolicy     string          `json:"rejection_policy,omitempty"`
-	MaxCheckers         *int            `json:"max_checkers,omitempty"`
-	IdentityFields      []string        `json:"identity_fields,omitempty"`
-	PermissionCheckURL  *string         `json:"permission_check_url,omitempty"`
-	AutoExpireDuration  string          `json:"auto_expire_duration,omitempty"`
+	Name               string      `json:"name"`
+	Stages             []stageBody `json:"stages,omitempty"`
+	IdentityFields     []string    `json:"identity_fields,omitempty"`
+	PermissionCheckURL *string     `json:"permission_check_url,omitempty"`
+	AutoExpireDuration string      `json:"auto_expire_duration,omitempty"`
 }
 
 func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -147,17 +167,19 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.Name != "" {
 		existing.Name = body.Name
 	}
-	if body.RequiredApprovals > 0 {
-		existing.RequiredApprovals = body.RequiredApprovals
-	}
-	if body.AllowedCheckerRoles != nil {
-		existing.AllowedCheckerRoles = body.AllowedCheckerRoles
-	}
-	if body.RejectionPolicy != "" {
-		existing.RejectionPolicy = model.RejectionPolicy(body.RejectionPolicy)
-	}
-	if body.MaxCheckers != nil {
-		existing.MaxCheckers = body.MaxCheckers
+	if body.Stages != nil {
+		stages := make([]model.ApprovalStage, len(body.Stages))
+		for i, sb := range body.Stages {
+			stages[i] = model.ApprovalStage{
+				Index:               sb.Index,
+				Name:                sb.Name,
+				RequiredApprovals:   sb.RequiredApprovals,
+				AllowedCheckerRoles: sb.AllowedCheckerRoles,
+				RejectionPolicy:     model.RejectionPolicy(sb.RejectionPolicy),
+				MaxCheckers:         sb.MaxCheckers,
+			}
+		}
+		existing.Stages = stages
 	}
 	if body.IdentityFields != nil {
 		existing.IdentityFields = body.IdentityFields
