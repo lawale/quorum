@@ -15,39 +15,50 @@ import (
 )
 
 type Server struct {
-	router         chi.Router
-	requestHandler *RequestHandler
-	policyHandler  *PolicyHandler
-	webhookHandler *WebhookHandler
-	auditStore     store.AuditStore
-	authProvider   auth.Provider
-	metrics        *metrics.Metrics
-	metricsPath    string
-	registry       *prometheus.Registry
+	router          chi.Router
+	requestHandler  *RequestHandler
+	policyHandler   *PolicyHandler
+	webhookHandler  *WebhookHandler
+	consoleHandler  *ConsoleHandler
+	operatorService *service.OperatorService
+	auditStore      store.AuditStore
+	authProvider    auth.Provider
+	consoleEnabled  bool
+	metrics         *metrics.Metrics
+	metricsPath     string
+	registry        *prometheus.Registry
 }
 
 type Config struct {
-	RequestService *service.RequestService
-	PolicyService  *service.PolicyService
-	WebhookService *service.WebhookService
-	AuditStore     store.AuditStore
-	AuthProvider   auth.Provider
-	Metrics        *metrics.Metrics
-	MetricsPath    string
-	Registry       *prometheus.Registry
+	RequestService  *service.RequestService
+	PolicyService   *service.PolicyService
+	WebhookService  *service.WebhookService
+	OperatorService *service.OperatorService
+	AuditStore      store.AuditStore
+	AuthProvider    auth.Provider
+	ConsoleEnabled  bool
+	Metrics         *metrics.Metrics
+	MetricsPath     string
+	Registry        *prometheus.Registry
 }
 
 func New(cfg Config) *Server {
 	s := &Server{
-		router:         chi.NewRouter(),
-		requestHandler: NewRequestHandler(cfg.RequestService),
-		policyHandler:  NewPolicyHandler(cfg.PolicyService),
-		webhookHandler: NewWebhookHandler(cfg.WebhookService),
-		auditStore:     cfg.AuditStore,
-		authProvider:   cfg.AuthProvider,
-		metrics:        cfg.Metrics,
-		metricsPath:    cfg.MetricsPath,
-		registry:       cfg.Registry,
+		router:          chi.NewRouter(),
+		requestHandler:  NewRequestHandler(cfg.RequestService),
+		policyHandler:   NewPolicyHandler(cfg.PolicyService),
+		webhookHandler:  NewWebhookHandler(cfg.WebhookService),
+		auditStore:      cfg.AuditStore,
+		authProvider:    cfg.AuthProvider,
+		consoleEnabled:  cfg.ConsoleEnabled,
+		operatorService: cfg.OperatorService,
+		metrics:         cfg.Metrics,
+		metricsPath:     cfg.MetricsPath,
+		registry:        cfg.Registry,
+	}
+
+	if cfg.OperatorService != nil {
+		s.consoleHandler = NewConsoleHandler(cfg.OperatorService)
 	}
 
 	s.setupRoutes()
@@ -72,6 +83,43 @@ func (s *Server) setupRoutes() {
 	// Metrics endpoint — no auth
 	if s.registry != nil {
 		r.Handle(s.metricsPath, promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}))
+	}
+
+	// Console API — JWT auth for admin console
+	if s.consoleEnabled && s.consoleHandler != nil {
+		r.Route("/api/v1/console", func(r chi.Router) {
+			// Public endpoints — no auth
+			r.Get("/auth/status", s.consoleHandler.NeedsSetup)
+			r.Post("/auth/setup", s.consoleHandler.Setup)
+			r.Post("/auth/login", s.consoleHandler.Login)
+
+			// Authenticated endpoints — JWT required
+			r.Group(func(r chi.Router) {
+				r.Use(consoleJWTMiddleware(s.operatorService))
+
+				// Operator management
+				r.Get("/me", s.consoleHandler.Me)
+				r.Put("/me/password", s.consoleHandler.ChangePassword)
+				r.Get("/operators", s.consoleHandler.ListOperators)
+				r.Post("/operators", s.consoleHandler.CreateOperator)
+				r.Delete("/operators/{id}", s.consoleHandler.DeleteOperator)
+
+				// Data endpoints — reuse existing handlers via JWT auth
+				r.Get("/policies", s.policyHandler.List)
+				r.Post("/policies", s.policyHandler.Create)
+				r.Get("/policies/{id}", s.policyHandler.Get)
+				r.Put("/policies/{id}", s.policyHandler.Update)
+				r.Delete("/policies/{id}", s.policyHandler.Delete)
+
+				r.Get("/webhooks", s.webhookHandler.List)
+				r.Post("/webhooks", s.webhookHandler.Create)
+				r.Delete("/webhooks/{id}", s.webhookHandler.Delete)
+
+				r.Get("/requests", s.requestHandler.List)
+				r.Get("/requests/{id}", s.requestHandler.Get)
+				r.Get("/requests/{id}/audit", s.handleAudit)
+			})
+		})
 	}
 
 	// API v1 — requires auth

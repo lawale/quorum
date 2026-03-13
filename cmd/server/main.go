@@ -107,16 +107,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Operator service for admin console (optional)
+	var operatorService *service.OperatorService
+	if cfg.Console.Enabled {
+		operatorService = service.NewOperatorService(stores.Operators, cfg.Console.JWTSecret)
+		slog.Info("admin console enabled")
+	}
+
 	// HTTP server
 	srv := server.New(server.Config{
-		RequestService: requestService,
-		PolicyService:  policyService,
-		WebhookService: webhookService,
-		AuditStore:     stores.Audits,
-		AuthProvider:   authProvider,
-		Metrics:        metricsInstance,
-		MetricsPath:    cfg.Metrics.Path,
-		Registry:       metricsRegistry,
+		RequestService:  requestService,
+		PolicyService:   policyService,
+		WebhookService:  webhookService,
+		OperatorService: operatorService,
+		AuditStore:      stores.Audits,
+		AuthProvider:    authProvider,
+		ConsoleEnabled:  cfg.Console.Enabled,
+		Metrics:         metricsInstance,
+		MetricsPath:     cfg.Metrics.Path,
+		Registry:        metricsRegistry,
 	})
 
 	httpServer := &http.Server{
