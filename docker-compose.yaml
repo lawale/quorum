@@ -27,5 +27,24 @@ services:
     environment:
       - MC_DB_HOST=postgres
 
+  # Uncomment to use MSSQL instead of Postgres.
+  # Set database.driver to "mssql" in your config.yaml.
+  # mssql:
+  #   image: mcr.microsoft.com/mssql/server:2022-latest
+  #   environment:
+  #     ACCEPT_EULA: "Y"
+  #     SA_PASSWORD: "Quorum_Pass1!"
+  #     MSSQL_PID: "Developer"
+  #   ports:
+  #     - "1433:1433"
+  #   volumes:
+  #     - mssqldata:/var/opt/mssql
+  #   healthcheck:
+  #     test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "Quorum_Pass1!" -Q "SELECT 1" -C -b
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+
 volumes:
   pgdata:
+  # mssqldata:

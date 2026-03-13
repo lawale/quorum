@@ -15,6 +15,8 @@ import (
 	"github.com/lawale/quorum/internal/config"
 	"github.com/lawale/quorum/internal/server"
 	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store"
+	"github.com/lawale/quorum/internal/store/mssql"
 	"github.com/lawale/quorum/internal/store/postgres"
 	"github.com/lawale/quorum/internal/webhook"
 )
@@ -34,33 +36,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Database
+	// Database and Stores
 	ctx := context.Background()
-	db, err := postgres.New(ctx, cfg.Database.DSN(), cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns)
+	dsn := cfg.Database.DSN()
+	maxOpen := cfg.Database.MaxOpenConns
+	maxIdle := cfg.Database.MaxIdleConns
+
+	var stores *store.Stores
+	switch cfg.Database.Driver {
+	case "postgres", "":
+		stores, err = postgres.NewStores(ctx, dsn, maxOpen, maxIdle)
+	case "mssql":
+		stores, err = mssql.NewStores(ctx, dsn, maxOpen, maxIdle)
+	default:
+		slog.Error("unsupported database driver", "driver", cfg.Database.Driver)
+		os.Exit(1)
+	}
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
-	defer db.Close()
-	slog.Info("connected to database")
-
-	// Stores
-	requestStore := postgres.NewRequestStore(db)
-	approvalStore := postgres.NewApprovalStore(db)
-	policyStore := postgres.NewPolicyStore(db)
-	webhookStore := postgres.NewWebhookStore(db)
-	auditStore := postgres.NewAuditStore(db)
+	defer stores.Close()
+	slog.Info("connected to database", "driver", cfg.Database.Driver)
 
 	// Permission checker for external permission callback
 	permissionChecker := auth.NewPermissionChecker(cfg.Webhook.Timeout)
 
 	// Services
-	policyService := service.NewPolicyService(policyStore)
-	requestService := service.NewRequestService(requestStore, approvalStore, policyStore, auditStore, permissionChecker)
-	webhookService := service.NewWebhookService(webhookStore)
+	policyService := service.NewPolicyService(stores.Policies)
+	requestService := service.NewRequestService(stores.Requests, stores.Approvals, stores.Policies, stores.Audits, permissionChecker)
+	webhookService := service.NewWebhookService(stores.Webhooks)
 
 	// Webhook dispatcher
-	dispatcher := webhook.NewDispatcher(webhookStore, auditStore, cfg.Webhook.Timeout, cfg.Webhook.MaxRetries, cfg.Webhook.RetryInterval)
+	dispatcher := webhook.NewDispatcher(stores.Webhooks, stores.Audits, cfg.Webhook.Timeout, cfg.Webhook.MaxRetries, cfg.Webhook.RetryInterval)
 	appCtx, appCancel := context.WithCancel(context.Background())
 	defer appCancel()
 	dispatcher.Start(appCtx)
@@ -69,7 +77,7 @@ func main() {
 	requestService.SetOnResolve(dispatcher.Dispatch)
 
 	// Expiry worker
-	expiryWorker := service.NewExpiryWorker(requestStore, auditStore, cfg.Expiry.CheckInterval)
+	expiryWorker := service.NewExpiryWorker(stores.Requests, stores.Audits, cfg.Expiry.CheckInterval)
 	expiryWorker.SetOnExpire(dispatcher.Dispatch)
 	expiryWorker.Start(appCtx)
 
@@ -88,7 +96,7 @@ func main() {
 		RequestService: requestService,
 		PolicyService:  policyService,
 		WebhookService: webhookService,
-		AuditStore:     auditStore,
+		AuditStore:     stores.Audits,
 		AuthProvider:   authProvider,
 	})
 

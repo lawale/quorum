@@ -1,37 +1,33 @@
-package postgres
+package mssql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lawale/quorum/internal/store"
+	_ "github.com/microsoft/go-mssqldb"
 )
 
 type DB struct {
-	Pool *pgxpool.Pool
+	Pool *sql.DB
 }
 
 func New(ctx context.Context, dsn string, maxOpen, maxIdle int) (*DB, error) {
-	config, err := pgxpool.ParseConfig(dsn)
+	db, err := sql.Open("sqlserver", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("parsing dsn: %w", err)
+		return nil, fmt.Errorf("opening database: %w", err)
 	}
 
-	config.MaxConns = int32(maxOpen)
-	config.MinConns = int32(maxIdle)
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxIdle)
 
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return nil, fmt.Errorf("connecting to database: %w", err)
-	}
-
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("pinging database: %w", err)
 	}
 
-	return &DB{Pool: pool}, nil
+	return &DB{Pool: db}, nil
 }
 
 func (db *DB) Close() {

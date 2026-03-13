@@ -1,0 +1,216 @@
+package mssql
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
+)
+
+const requestColumns = `id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, expires_at, created_at, updated_at`
+
+type RequestStore struct {
+	db *DB
+}
+
+func NewRequestStore(db *DB) *RequestStore {
+	return &RequestStore{db: db}
+}
+
+func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
+	query := `
+		INSERT INTO requests (` + requestColumns + `)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13)`
+
+	now := time.Now().UTC()
+	if req.ID == uuid.Nil {
+		req.ID = uuid.New()
+	}
+	req.CreatedAt = now
+	req.UpdatedAt = now
+	if req.Status == "" {
+		req.Status = model.StatusPending
+	}
+
+	var eligibleJSON []byte
+	if len(req.EligibleReviewers) > 0 {
+		eligibleJSON, _ = json.Marshal(req.EligibleReviewers)
+	}
+
+	_, err := s.db.Pool.ExecContext(ctx, query,
+		req.ID, req.IdempotencyKey, req.Type, string(req.Payload), req.Status,
+		req.MakerID, req.CallbackURL, nullableString(eligibleJSON), nullableString(req.Metadata), req.Fingerprint,
+		req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting request: %w", err)
+	}
+
+	return nil
+}
+
+func (s *RequestStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE id = @p1`
+	return s.scanOne(ctx, query, id)
+}
+
+func (s *RequestStore) GetByIdempotencyKey(ctx context.Context, key string) (*model.Request, error) {
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE idempotency_key = @p1`
+	return s.scanOne(ctx, query, key)
+}
+
+func (s *RequestStore) FindPendingByFingerprint(ctx context.Context, reqType string, fingerprint string) (*model.Request, error) {
+	query := `SELECT TOP 1 ` + requestColumns + ` FROM requests WHERE type = @p1 AND fingerprint = @p2 AND status = 'pending'`
+	return s.scanOne(ctx, query, reqType, fingerprint)
+}
+
+func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]model.Request, int, error) {
+	var conditions []string
+	var args []any
+	argIdx := 1
+
+	if filter.Status != nil {
+		conditions = append(conditions, fmt.Sprintf("status = @p%d", argIdx))
+		args = append(args, *filter.Status)
+		argIdx++
+	}
+	if filter.Type != nil {
+		conditions = append(conditions, fmt.Sprintf("type = @p%d", argIdx))
+		args = append(args, *filter.Type)
+		argIdx++
+	}
+	if filter.MakerID != nil {
+		conditions = append(conditions, fmt.Sprintf("maker_id = @p%d", argIdx))
+		args = append(args, *filter.MakerID)
+		argIdx++
+	}
+
+	where := ""
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	// Count total
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM requests %s", where)
+	var total int
+	if err := s.db.Pool.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting requests: %w", err)
+	}
+
+	// Pagination
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PerPage < 1 {
+		filter.PerPage = 20
+	}
+	offset := (filter.Page - 1) * filter.PerPage
+
+	query := fmt.Sprintf(
+		`SELECT `+requestColumns+` FROM requests %s ORDER BY created_at DESC OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY`,
+		where, argIdx, argIdx+1,
+	)
+	args = append(args, offset, filter.PerPage)
+
+	return s.scanMany(ctx, query, args...)
+}
+
+func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {
+	query := `UPDATE requests SET status = @p1, updated_at = @p2 WHERE id = @p3`
+	_, err := s.db.Pool.ExecContext(ctx, query, status, time.Now().UTC(), id)
+	if err != nil {
+		return fmt.Errorf("updating request status: %w", err)
+	}
+	return nil
+}
+
+func (s *RequestStore) ListExpired(ctx context.Context) ([]model.Request, error) {
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= GETUTCDATE()`
+	requests, _, err := s.scanMany(ctx, query)
+	return requests, err
+}
+
+// scanOne scans a single request row, returning nil if not found.
+func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (*model.Request, error) {
+	req := &model.Request{}
+	var eligibleJSON, payload, metadata sql.NullString
+
+	err := s.db.Pool.QueryRowContext(ctx, query, args...).Scan(
+		&req.ID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
+		&req.MakerID, &req.CallbackURL, &eligibleJSON, &metadata, &req.Fingerprint,
+		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying request: %w", err)
+	}
+
+	if payload.Valid {
+		req.Payload = json.RawMessage(payload.String)
+	}
+	if metadata.Valid {
+		req.Metadata = json.RawMessage(metadata.String)
+	}
+	if eligibleJSON.Valid {
+		if err := json.Unmarshal([]byte(eligibleJSON.String), &req.EligibleReviewers); err != nil {
+			return nil, fmt.Errorf("unmarshaling eligible reviewers: %w", err)
+		}
+	}
+
+	return req, nil
+}
+
+// scanMany scans multiple request rows.
+func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) ([]model.Request, int, error) {
+	rows, err := s.db.Pool.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("querying requests: %w", err)
+	}
+	defer rows.Close()
+
+	var requests []model.Request
+	for rows.Next() {
+		var req model.Request
+		var eligibleJSON, payload, metadata sql.NullString
+
+		if err := rows.Scan(
+			&req.ID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
+			&req.MakerID, &req.CallbackURL, &eligibleJSON, &metadata, &req.Fingerprint,
+			&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scanning request: %w", err)
+		}
+
+		if payload.Valid {
+			req.Payload = json.RawMessage(payload.String)
+		}
+		if metadata.Valid {
+			req.Metadata = json.RawMessage(metadata.String)
+		}
+		if eligibleJSON.Valid {
+			if err := json.Unmarshal([]byte(eligibleJSON.String), &req.EligibleReviewers); err != nil {
+				return nil, 0, fmt.Errorf("unmarshaling eligible reviewers: %w", err)
+			}
+		}
+
+		requests = append(requests, req)
+	}
+
+	return requests, len(requests), nil
+}
+
+// nullableString converts a []byte or json.RawMessage to a sql.NullString for NVARCHAR(MAX) columns.
+func nullableString(data []byte) sql.NullString {
+	if data == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: string(data), Valid: true}
+}

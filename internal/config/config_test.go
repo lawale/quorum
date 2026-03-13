@@ -78,8 +78,14 @@ func TestConfig_SetDefaults(t *testing.T) {
 	if cfg.Server.Port != 8080 {
 		t.Errorf("default Server.Port = %d, want %d", cfg.Server.Port, 8080)
 	}
-	if cfg.Database.SSLMode != "disable" {
-		t.Errorf("default SSLMode = %q, want %q", cfg.Database.SSLMode, "disable")
+	if cfg.Database.Driver != "postgres" {
+		t.Errorf("default Driver = %q, want %q", cfg.Database.Driver, "postgres")
+	}
+	if cfg.Database.Port != 5432 {
+		t.Errorf("default Port = %d, want %d", cfg.Database.Port, 5432)
+	}
+	if cfg.Database.Params == nil {
+		t.Error("default Params should be initialized, got nil")
 	}
 	if cfg.Database.MaxOpenConns != 25 {
 		t.Errorf("default MaxOpenConns = %d, want %d", cfg.Database.MaxOpenConns, 25)
@@ -120,16 +126,69 @@ func TestServerConfig_Addr(t *testing.T) {
 
 func TestDatabaseConfig_DSN(t *testing.T) {
 	cfg := DatabaseConfig{
+		Driver:   "postgres",
 		Host:     "localhost",
 		Port:     5432,
 		User:     "quorum",
 		Password: "secret",
 		Name:     "quorum_db",
-		SSLMode:  "disable",
+		Params:   map[string]string{"sslmode": "disable"},
 	}
 	got := cfg.DSN()
 	expected := "postgres://quorum:secret@localhost:5432/quorum_db?sslmode=disable"
 	if got != expected {
 		t.Errorf("DSN() = %q, want %q", got, expected)
+	}
+}
+
+func TestDatabaseConfig_DSN_NoParams(t *testing.T) {
+	cfg := DatabaseConfig{
+		Driver:   "postgres",
+		Host:     "localhost",
+		Port:     5432,
+		User:     "quorum",
+		Password: "secret",
+		Name:     "quorum_db",
+	}
+	got := cfg.DSN()
+	expected := "postgres://quorum:secret@localhost:5432/quorum_db"
+	if got != expected {
+		t.Errorf("DSN() = %q, want %q", got, expected)
+	}
+}
+
+func TestDatabaseConfig_DSN_MSSQL(t *testing.T) {
+	cfg := DatabaseConfig{
+		Driver:   "mssql",
+		Host:     "localhost",
+		Port:     1433,
+		User:     "sa",
+		Password: "Secret1!",
+		Name:     "quorum",
+		Params:   map[string]string{"encrypt": "disable", "TrustServerCertificate": "true"},
+	}
+	got := cfg.DSN()
+	// url.Values sorts keys alphabetically
+	expected := "sqlserver://sa:Secret1!@localhost:1433?database=quorum&TrustServerCertificate=true&encrypt=disable"
+	if got != expected {
+		t.Errorf("DSN() = %q, want %q", got, expected)
+	}
+}
+
+func TestConfig_SetDefaults_MSSQL_Port(t *testing.T) {
+	content := `
+database:
+  driver: "mssql"
+`
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "mssql.yaml")
+	os.WriteFile(path, []byte(content), 0644)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Database.Port != 1433 {
+		t.Errorf("default mssql Port = %d, want %d", cfg.Database.Port, 1433)
 	}
 }

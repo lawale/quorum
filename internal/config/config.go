@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -26,21 +27,38 @@ func (s ServerConfig) Addr() string {
 }
 
 type DatabaseConfig struct {
-	Host         string `yaml:"host"`
-	Port         int    `yaml:"port"`
-	User         string `yaml:"user"`
-	Password     string `yaml:"password"`
-	Name         string `yaml:"name"`
-	SSLMode      string `yaml:"sslmode"`
-	MaxOpenConns int    `yaml:"max_open_conns"`
-	MaxIdleConns int    `yaml:"max_idle_conns"`
+	Driver       string            `yaml:"driver"`
+	Host         string            `yaml:"host"`
+	Port         int               `yaml:"port"`
+	User         string            `yaml:"user"`
+	Password     string            `yaml:"password"`
+	Name         string            `yaml:"name"`
+	Params       map[string]string `yaml:"params"`
+	MaxOpenConns int               `yaml:"max_open_conns"`
+	MaxIdleConns int               `yaml:"max_idle_conns"`
 }
 
 func (d DatabaseConfig) DSN() string {
-	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		d.User, d.Password, d.Host, d.Port, d.Name, d.SSLMode,
-	)
+	params := url.Values{}
+	for k, v := range d.Params {
+		params.Set(k, v)
+	}
+	query := params.Encode()
+
+	switch d.Driver {
+	case "mssql":
+		if query != "" {
+			query = "&" + query
+		}
+		return fmt.Sprintf("sqlserver://%s:%s@%s:%d?database=%s%s",
+			d.User, d.Password, d.Host, d.Port, d.Name, query)
+	default:
+		if query != "" {
+			query = "?" + query
+		}
+		return fmt.Sprintf("postgres://%s:%s@%s:%d/%s%s",
+			d.User, d.Password, d.Host, d.Port, d.Name, query)
+	}
 }
 
 type AuthConfig struct {
@@ -105,8 +123,19 @@ func setDefaults(cfg *Config) {
 	if cfg.Server.Port == 0 {
 		cfg.Server.Port = 8080
 	}
-	if cfg.Database.SSLMode == "" {
-		cfg.Database.SSLMode = "disable"
+	if cfg.Database.Driver == "" {
+		cfg.Database.Driver = "postgres"
+	}
+	if cfg.Database.Params == nil {
+		cfg.Database.Params = make(map[string]string)
+	}
+	if cfg.Database.Port == 0 {
+		switch cfg.Database.Driver {
+		case "mssql":
+			cfg.Database.Port = 1433
+		default:
+			cfg.Database.Port = 5432
+		}
 	}
 	if cfg.Database.MaxOpenConns == 0 {
 		cfg.Database.MaxOpenConns = 25

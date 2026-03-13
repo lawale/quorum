@@ -53,3 +53,13 @@ type AuditStore interface {
 	Create(ctx context.Context, log *model.AuditLog) error
 	ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.AuditLog, error)
 }
+
+// Stores bundles every store interface and a Close function for the underlying connection.
+type Stores struct {
+	Requests  RequestStore
+	Approvals ApprovalStore
+	Policies  PolicyStore
+	Webhooks  WebhookStore
+	Audits    AuditStore
+	Close     func()
+}
