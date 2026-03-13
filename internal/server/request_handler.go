@@ -22,10 +22,11 @@ func NewRequestHandler(rs *service.RequestService) *RequestHandler {
 }
 
 type createRequestBody struct {
-	Type        string          `json:"type"`
-	Payload     json.RawMessage `json:"payload"`
-	CallbackURL *string         `json:"callback_url,omitempty"`
-	Metadata    json.RawMessage `json:"metadata,omitempty"`
+	Type              string          `json:"type"`
+	Payload           json.RawMessage `json:"payload"`
+	CallbackURL       *string         `json:"callback_url,omitempty"`
+	EligibleReviewers []string        `json:"eligible_reviewers,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
 }
 
 func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -47,11 +48,12 @@ func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
 	makerID := auth.UserIDFromContext(r.Context())
 
 	req := &model.Request{
-		Type:        body.Type,
-		Payload:     body.Payload,
-		MakerID:     makerID,
-		CallbackURL: body.CallbackURL,
-		Metadata:    body.Metadata,
+		Type:              body.Type,
+		Payload:           body.Payload,
+		MakerID:           makerID,
+		CallbackURL:       body.CallbackURL,
+		EligibleReviewers: body.EligibleReviewers,
+		Metadata:          body.Metadata,
 	}
 
 	// Check for idempotency key
@@ -172,6 +174,10 @@ func (h *RequestHandler) handleDecision(w http.ResponseWriter, r *http.Request, 
 		case errors.Is(err, service.ErrAlreadyActioned):
 			writeError(w, http.StatusConflict, err.Error())
 		case errors.Is(err, service.ErrInvalidCheckerRole):
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, service.ErrNotEligibleReviewer):
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, auth.ErrPermissionDenied):
 			writeError(w, http.StatusForbidden, err.Error())
 		default:
 			writeError(w, http.StatusInternalServerError, "failed to process decision")

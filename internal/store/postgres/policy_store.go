@@ -22,8 +22,8 @@ func NewPolicyStore(db *DB) *PolicyStore {
 
 func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	query := `
-		INSERT INTO policies (id, name, request_type, required_approvals, allowed_checker_roles, rejection_policy, max_checkers, identity_fields, auto_expire_duration, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+		INSERT INTO policies (id, name, request_type, required_approvals, allowed_checker_roles, rejection_policy, max_checkers, identity_fields, permission_check_url, auto_expire_duration, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 
 	now := time.Now().UTC()
 	if policy.ID == uuid.Nil {
@@ -46,7 +46,7 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	_, err = s.db.Pool.Exec(ctx, query,
 		policy.ID, policy.Name, policy.RequestType, policy.RequiredApprovals,
 		policy.AllowedCheckerRoles, policy.RejectionPolicy, policy.MaxCheckers,
-		identityFieldsJSON, autoExpire, policy.CreatedAt, policy.UpdatedAt,
+		identityFieldsJSON, policy.PermissionCheckURL, autoExpire, policy.CreatedAt, policy.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting policy: %w", err)
@@ -56,15 +56,15 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 }
 
 func (s *PolicyStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
-	return s.scanPolicy(ctx, "SELECT id, name, request_type, required_approvals, allowed_checker_roles, rejection_policy, max_checkers, identity_fields, auto_expire_duration, created_at, updated_at FROM policies WHERE id = $1", id)
+	return s.scanPolicy(ctx, "SELECT id, name, request_type, required_approvals, allowed_checker_roles, rejection_policy, max_checkers, identity_fields, permission_check_url, auto_expire_duration, created_at, updated_at FROM policies WHERE id = $1", id)
 }
 
 func (s *PolicyStore) GetByRequestType(ctx context.Context, requestType string) (*model.Policy, error) {
-	return s.scanPolicy(ctx, "SELECT id, name, request_type, required_approvals, allowed_checker_roles, rejection_policy, max_checkers, identity_fields, auto_expire_duration, created_at, updated_at FROM policies WHERE request_type = $1", requestType)
+	return s.scanPolicy(ctx, "SELECT id, name, request_type, required_approvals, allowed_checker_roles, rejection_policy, max_checkers, identity_fields, permission_check_url, auto_expire_duration, created_at, updated_at FROM policies WHERE request_type = $1", requestType)
 }
 
 func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
-	query := `SELECT id, name, request_type, required_approvals, allowed_checker_roles, rejection_policy, max_checkers, identity_fields, auto_expire_duration, created_at, updated_at FROM policies ORDER BY created_at DESC`
+	query := `SELECT id, name, request_type, required_approvals, allowed_checker_roles, rejection_policy, max_checkers, identity_fields, permission_check_url, auto_expire_duration, created_at, updated_at FROM policies ORDER BY created_at DESC`
 
 	rows, err := s.db.Pool.Query(ctx, query)
 	if err != nil {
@@ -87,8 +87,9 @@ func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
 func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 	query := `
 		UPDATE policies SET name = $1, required_approvals = $2, allowed_checker_roles = $3,
-		rejection_policy = $4, max_checkers = $5, identity_fields = $6, auto_expire_duration = $7, updated_at = $8
-		WHERE id = $9`
+		rejection_policy = $4, max_checkers = $5, identity_fields = $6, permission_check_url = $7,
+		auto_expire_duration = $8, updated_at = $9
+		WHERE id = $10`
 
 	policy.UpdatedAt = time.Now().UTC()
 
@@ -106,7 +107,7 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 	_, err = s.db.Pool.Exec(ctx, query,
 		policy.Name, policy.RequiredApprovals, policy.AllowedCheckerRoles,
 		policy.RejectionPolicy, policy.MaxCheckers, identityFieldsJSON,
-		autoExpire, policy.UpdatedAt, policy.ID,
+		policy.PermissionCheckURL, autoExpire, policy.UpdatedAt, policy.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating policy: %w", err)
@@ -147,7 +148,7 @@ func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 	err := row.Scan(
 		&p.ID, &p.Name, &p.RequestType, &p.RequiredApprovals,
 		&p.AllowedCheckerRoles, &p.RejectionPolicy, &p.MaxCheckers,
-		&identityFieldsJSON, &autoExpire, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -178,7 +179,7 @@ func (s *PolicyStore) scanPolicyRow(rows pgx.Rows) (*model.Policy, error) {
 	err := rows.Scan(
 		&p.ID, &p.Name, &p.RequestType, &p.RequiredApprovals,
 		&p.AllowedCheckerRoles, &p.RejectionPolicy, &p.MaxCheckers,
-		&identityFieldsJSON, &autoExpire, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scanning policy: %w", err)

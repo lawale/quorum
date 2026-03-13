@@ -51,9 +51,12 @@ func main() {
 	webhookStore := postgres.NewWebhookStore(db)
 	auditStore := postgres.NewAuditStore(db)
 
+	// Permission checker for external permission callback
+	permissionChecker := auth.NewPermissionChecker(cfg.Webhook.Timeout)
+
 	// Services
 	policyService := service.NewPolicyService(policyStore)
-	requestService := service.NewRequestService(requestStore, approvalStore, policyStore, auditStore)
+	requestService := service.NewRequestService(requestStore, approvalStore, policyStore, auditStore, permissionChecker)
 	webhookService := service.NewWebhookService(webhookStore)
 
 	// Webhook dispatcher

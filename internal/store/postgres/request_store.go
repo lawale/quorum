@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
+const requestColumns = `id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, expires_at, created_at, updated_at`
+
 type RequestStore struct {
 	db *DB
 }
@@ -23,8 +26,8 @@ func NewRequestStore(db *DB) *RequestStore {
 
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
-		INSERT INTO requests (id, idempotency_key, type, payload, status, maker_id, callback_url, metadata, fingerprint, expires_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+		INSERT INTO requests (` + requestColumns + `)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 
 	now := time.Now().UTC()
 	if req.ID == uuid.Nil {
@@ -36,9 +39,14 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 		req.Status = model.StatusPending
 	}
 
+	var eligibleJSON []byte
+	if len(req.EligibleReviewers) > 0 {
+		eligibleJSON, _ = json.Marshal(req.EligibleReviewers)
+	}
+
 	_, err := s.db.Pool.Exec(ctx, query,
 		req.ID, req.IdempotencyKey, req.Type, req.Payload, req.Status,
-		req.MakerID, req.CallbackURL, req.Metadata, req.Fingerprint,
+		req.MakerID, req.CallbackURL, eligibleJSON, req.Metadata, req.Fingerprint,
 		req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
 	)
 	if err != nil {
@@ -49,67 +57,18 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 }
 
 func (s *RequestStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Request, error) {
-	query := `
-		SELECT id, idempotency_key, type, payload, status, maker_id, callback_url, metadata, fingerprint, expires_at, created_at, updated_at
-		FROM requests WHERE id = $1`
-
-	req := &model.Request{}
-	err := s.db.Pool.QueryRow(ctx, query, id).Scan(
-		&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
-		&req.MakerID, &req.CallbackURL, &req.Metadata, &req.Fingerprint,
-		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("querying request: %w", err)
-	}
-
-	return req, nil
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE id = $1`
+	return s.scanOne(ctx, query, id)
 }
 
 func (s *RequestStore) GetByIdempotencyKey(ctx context.Context, key string) (*model.Request, error) {
-	query := `
-		SELECT id, idempotency_key, type, payload, status, maker_id, callback_url, metadata, fingerprint, expires_at, created_at, updated_at
-		FROM requests WHERE idempotency_key = $1`
-
-	req := &model.Request{}
-	err := s.db.Pool.QueryRow(ctx, query, key).Scan(
-		&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
-		&req.MakerID, &req.CallbackURL, &req.Metadata, &req.Fingerprint,
-		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("querying request by idempotency key: %w", err)
-	}
-
-	return req, nil
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE idempotency_key = $1`
+	return s.scanOne(ctx, query, key)
 }
 
 func (s *RequestStore) FindPendingByFingerprint(ctx context.Context, reqType string, fingerprint string) (*model.Request, error) {
-	query := `
-		SELECT id, idempotency_key, type, payload, status, maker_id, callback_url, metadata, fingerprint, expires_at, created_at, updated_at
-		FROM requests WHERE type = $1 AND fingerprint = $2 AND status = 'pending'
-		LIMIT 1`
-
-	req := &model.Request{}
-	err := s.db.Pool.QueryRow(ctx, query, reqType, fingerprint).Scan(
-		&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
-		&req.MakerID, &req.CallbackURL, &req.Metadata, &req.Fingerprint,
-		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("querying request by fingerprint: %w", err)
-	}
-
-	return req, nil
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE type = $1 AND fingerprint = $2 AND status = 'pending' LIMIT 1`
+	return s.scanOne(ctx, query, reqType, fingerprint)
 }
 
 func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]model.Request, int, error) {
@@ -154,31 +113,10 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 	}
 	offset := (filter.Page - 1) * filter.PerPage
 
-	query := fmt.Sprintf(`
-		SELECT id, idempotency_key, type, payload, status, maker_id, callback_url, metadata, fingerprint, expires_at, created_at, updated_at
-		FROM requests %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
+	query := fmt.Sprintf(`SELECT `+requestColumns+` FROM requests %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
 	args = append(args, filter.PerPage, offset)
 
-	rows, err := s.db.Pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("listing requests: %w", err)
-	}
-	defer rows.Close()
-
-	var requests []model.Request
-	for rows.Next() {
-		var req model.Request
-		if err := rows.Scan(
-			&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
-			&req.MakerID, &req.CallbackURL, &req.Metadata, &req.Fingerprint,
-			&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
-		); err != nil {
-			return nil, 0, fmt.Errorf("scanning request: %w", err)
-		}
-		requests = append(requests, req)
-	}
-
-	return requests, total, nil
+	return s.scanMany(ctx, query, args...)
 }
 
 func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {
@@ -191,28 +129,66 @@ func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status mo
 }
 
 func (s *RequestStore) ListExpired(ctx context.Context) ([]model.Request, error) {
-	query := `
-		SELECT id, idempotency_key, type, payload, status, maker_id, callback_url, metadata, fingerprint, expires_at, created_at, updated_at
-		FROM requests WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= NOW()`
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= NOW()`
+	requests, _, err := s.scanMany(ctx, query)
+	return requests, err
+}
 
-	rows, err := s.db.Pool.Query(ctx, query)
+// scanOne scans a single request row, returning nil if not found.
+func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (*model.Request, error) {
+	req := &model.Request{}
+	var eligibleJSON []byte
+
+	err := s.db.Pool.QueryRow(ctx, query, args...).Scan(
+		&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
+		&req.MakerID, &req.CallbackURL, &eligibleJSON, &req.Metadata, &req.Fingerprint,
+		&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("listing expired requests: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying request: %w", err)
+	}
+
+	if eligibleJSON != nil {
+		if err := json.Unmarshal(eligibleJSON, &req.EligibleReviewers); err != nil {
+			return nil, fmt.Errorf("unmarshaling eligible reviewers: %w", err)
+		}
+	}
+
+	return req, nil
+}
+
+// scanMany scans multiple request rows.
+func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) ([]model.Request, int, error) {
+	rows, err := s.db.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("querying requests: %w", err)
 	}
 	defer rows.Close()
 
 	var requests []model.Request
 	for rows.Next() {
 		var req model.Request
+		var eligibleJSON []byte
+
 		if err := rows.Scan(
 			&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
-			&req.MakerID, &req.CallbackURL, &req.Metadata, &req.Fingerprint,
+			&req.MakerID, &req.CallbackURL, &eligibleJSON, &req.Metadata, &req.Fingerprint,
 			&req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 		); err != nil {
-			return nil, fmt.Errorf("scanning expired request: %w", err)
+			return nil, 0, fmt.Errorf("scanning request: %w", err)
 		}
+
+		if eligibleJSON != nil {
+			if err := json.Unmarshal(eligibleJSON, &req.EligibleReviewers); err != nil {
+				return nil, 0, fmt.Errorf("unmarshaling eligible reviewers: %w", err)
+			}
+		}
+
 		requests = append(requests, req)
 	}
 
-	return requests, nil
+	return requests, len(requests), nil
 }

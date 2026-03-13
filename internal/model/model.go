@@ -36,19 +36,20 @@ const (
 )
 
 type Request struct {
-	ID             uuid.UUID       `json:"id"`
-	IdempotencyKey *string         `json:"idempotency_key,omitempty"`
-	Type           string          `json:"type"`
-	Payload        json.RawMessage `json:"payload"`
-	Status         RequestStatus   `json:"status"`
-	MakerID        string          `json:"maker_id"`
-	CallbackURL    *string         `json:"callback_url,omitempty"`
-	Metadata       json.RawMessage `json:"metadata,omitempty"`
-	Fingerprint    *string         `json:"fingerprint,omitempty"`
-	ExpiresAt      *time.Time      `json:"expires_at,omitempty"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
-	Approvals      []Approval      `json:"approvals,omitempty"`
+	ID                uuid.UUID       `json:"id"`
+	IdempotencyKey    *string         `json:"idempotency_key,omitempty"`
+	Type              string          `json:"type"`
+	Payload           json.RawMessage `json:"payload"`
+	Status            RequestStatus   `json:"status"`
+	MakerID           string          `json:"maker_id"`
+	CallbackURL       *string         `json:"callback_url,omitempty"`
+	EligibleReviewers []string        `json:"eligible_reviewers,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	Fingerprint       *string         `json:"fingerprint,omitempty"`
+	ExpiresAt         *time.Time      `json:"expires_at,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+	Approvals         []Approval      `json:"approvals,omitempty"`
 }
 
 type Approval struct {
@@ -61,17 +62,34 @@ type Approval struct {
 }
 
 type Policy struct {
-	ID                 uuid.UUID       `json:"id"`
-	Name               string          `json:"name"`
-	RequestType        string          `json:"request_type"`
-	RequiredApprovals  int             `json:"required_approvals"`
+	ID                  uuid.UUID       `json:"id"`
+	Name                string          `json:"name"`
+	RequestType         string          `json:"request_type"`
+	RequiredApprovals   int             `json:"required_approvals"`
 	AllowedCheckerRoles json.RawMessage `json:"allowed_checker_roles,omitempty"`
-	RejectionPolicy    RejectionPolicy `json:"rejection_policy"`
-	MaxCheckers        *int            `json:"max_checkers,omitempty"`
-	IdentityFields     []string        `json:"identity_fields,omitempty"`
-	AutoExpireDuration *time.Duration  `json:"auto_expire_duration,omitempty"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
+	RejectionPolicy     RejectionPolicy `json:"rejection_policy"`
+	MaxCheckers         *int            `json:"max_checkers,omitempty"`
+	IdentityFields      []string        `json:"identity_fields,omitempty"`
+	PermissionCheckURL  *string         `json:"permission_check_url,omitempty"`
+	AutoExpireDuration  *time.Duration  `json:"auto_expire_duration,omitempty"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+}
+
+// PermissionCheckRequest is the payload sent to the consuming system's permission check endpoint.
+type PermissionCheckRequest struct {
+	RequestID   uuid.UUID       `json:"request_id"`
+	RequestType string          `json:"request_type"`
+	CheckerID   string          `json:"checker_id"`
+	CheckerRoles []string       `json:"checker_roles"`
+	MakerID     string          `json:"maker_id"`
+	Payload     json.RawMessage `json:"payload"`
+}
+
+// PermissionCheckResponse is the expected response from the permission check endpoint.
+type PermissionCheckResponse struct {
+	Allowed bool   `json:"allowed"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 type Webhook struct {

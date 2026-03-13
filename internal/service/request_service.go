@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -23,15 +24,17 @@ var (
 	ErrSelfApproval          = errors.New("maker cannot approve their own request")
 	ErrAlreadyActioned       = errors.New("checker has already acted on this request")
 	ErrInvalidCheckerRole    = errors.New("checker does not have a required role")
+	ErrNotEligibleReviewer   = errors.New("checker is not in the eligible reviewers list")
 	ErrMissingIdentityFields = errors.New("payload is missing required identity fields")
 )
 
 type RequestService struct {
-	requests  store.RequestStore
-	approvals store.ApprovalStore
-	policies  store.PolicyStore
-	audits    store.AuditStore
-	onResolve func(ctx context.Context, req *model.Request, approvals []model.Approval)
+	requests          store.RequestStore
+	approvals         store.ApprovalStore
+	policies          store.PolicyStore
+	audits            store.AuditStore
+	permissionChecker *auth.PermissionChecker
+	onResolve         func(ctx context.Context, req *model.Request, approvals []model.Approval)
 }
 
 func NewRequestService(
@@ -39,12 +42,14 @@ func NewRequestService(
 	approvals store.ApprovalStore,
 	policies store.PolicyStore,
 	audits store.AuditStore,
+	permissionChecker *auth.PermissionChecker,
 ) *RequestService {
 	return &RequestService{
-		requests:  requests,
-		approvals: approvals,
-		policies:  policies,
-		audits:    audits,
+		requests:          requests,
+		approvals:         approvals,
+		policies:          policies,
+		audits:            audits,
+		permissionChecker: permissionChecker,
 	}
 }
 
@@ -204,9 +209,38 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		return nil, ErrPolicyNotFound
 	}
 
-	// Validate checker roles
+	// Validate checker roles (static policy check)
 	if err := validateCheckerRoles(policy, roles); err != nil {
 		return nil, err
+	}
+
+	// Check eligible reviewers (per-request whitelist)
+	if len(req.EligibleReviewers) > 0 {
+		eligible := false
+		for _, r := range req.EligibleReviewers {
+			if r == checkerID {
+				eligible = true
+				break
+			}
+		}
+		if !eligible {
+			return nil, ErrNotEligibleReviewer
+		}
+	}
+
+	// Permission check callback (dynamic check via consuming system)
+	if policy.PermissionCheckURL != nil && *policy.PermissionCheckURL != "" && s.permissionChecker != nil {
+		checkReq := model.PermissionCheckRequest{
+			RequestID:    requestID,
+			RequestType:  req.Type,
+			CheckerID:    checkerID,
+			CheckerRoles: roles,
+			MakerID:      req.MakerID,
+			Payload:      req.Payload,
+		}
+		if err := s.permissionChecker.Check(ctx, *policy.PermissionCheckURL, checkReq); err != nil {
+			return nil, err
+		}
 	}
 
 	// Record the approval/rejection

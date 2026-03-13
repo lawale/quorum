@@ -28,6 +28,7 @@ type createPolicyBody struct {
 	RejectionPolicy     string          `json:"rejection_policy,omitempty"`
 	MaxCheckers         *int            `json:"max_checkers,omitempty"`
 	IdentityFields      []string        `json:"identity_fields,omitempty"`
+	PermissionCheckURL  *string         `json:"permission_check_url,omitempty"`
 	AutoExpireDuration  string          `json:"auto_expire_duration,omitempty"`
 }
 
@@ -55,6 +56,7 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		RejectionPolicy:     model.RejectionPolicy(body.RejectionPolicy),
 		MaxCheckers:         body.MaxCheckers,
 		IdentityFields:      body.IdentityFields,
+		PermissionCheckURL:  body.PermissionCheckURL,
 	}
 
 	if body.AutoExpireDuration != "" {
@@ -115,6 +117,7 @@ type updatePolicyBody struct {
 	RejectionPolicy     string          `json:"rejection_policy,omitempty"`
 	MaxCheckers         *int            `json:"max_checkers,omitempty"`
 	IdentityFields      []string        `json:"identity_fields,omitempty"`
+	PermissionCheckURL  *string         `json:"permission_check_url,omitempty"`
 	AutoExpireDuration  string          `json:"auto_expire_duration,omitempty"`
 }
 
@@ -158,6 +161,9 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.IdentityFields != nil {
 		existing.IdentityFields = body.IdentityFields
+	}
+	if body.PermissionCheckURL != nil {
+		existing.PermissionCheckURL = body.PermissionCheckURL
 	}
 	if body.AutoExpireDuration != "" {
 		d, err := time.ParseDuration(body.AutoExpireDuration)
