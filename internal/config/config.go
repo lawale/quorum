@@ -16,6 +16,12 @@ type Config struct {
 	Webhook  WebhookConfig  `yaml:"webhook"`
 	Expiry   ExpiryConfig   `yaml:"expiry"`
 	Metrics  MetricsConfig  `yaml:"metrics"`
+	Console  ConsoleConfig  `yaml:"console"`
+}
+
+type ConsoleConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	JWTSecret string `yaml:"jwt_secret"`
 }
 
 type MetricsConfig struct {

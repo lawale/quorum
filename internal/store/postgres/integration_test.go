@@ -34,6 +34,7 @@ func setupPostgres(t *testing.T) *postgres.DB {
 			filepath.Join(migrationsDir(), "005_create_audit_logs.up.sql"),
 			filepath.Join(migrationsDir(), "006_add_permission_check_url.up.sql"),
 			filepath.Join(migrationsDir(), "007_add_approval_stages.up.sql"),
+			filepath.Join(migrationsDir(), "008_create_operators.up.sql"),
 		),
 		tcpostgres.BasicWaitStrategies(),
 		tcpostgres.WithSQLDriver("pgx"),
@@ -80,4 +81,9 @@ func TestPostgresWebhookStore(t *testing.T) {
 func TestPostgresAuditStore(t *testing.T) {
 	db := setupPostgres(t)
 	storetest.TestAuditStore(t, postgres.NewAuditStore(db), postgres.NewRequestStore(db))
+}
+
+func TestPostgresOperatorStore(t *testing.T) {
+	db := setupPostgres(t)
+	storetest.TestOperatorStore(t, postgres.NewOperatorStore(db))
 }

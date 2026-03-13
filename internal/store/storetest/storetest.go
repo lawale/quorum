@@ -695,6 +695,157 @@ func TestWebhookStore(t *testing.T, s store.WebhookStore) {
 	})
 }
 
+// TestOperatorStore exercises every method of store.OperatorStore.
+func TestOperatorStore(t *testing.T, s store.OperatorStore) {
+	ctx := context.Background()
+
+	t.Run("Create and GetByID", func(t *testing.T) {
+		op := &model.Operator{
+			Username:           "op-" + uuid.NewString()[:8],
+			PasswordHash:       "$2a$10$fakehash",
+			DisplayName:        "Test Operator",
+			MustChangePassword: false,
+		}
+		if err := s.Create(ctx, op); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		if op.ID == uuid.Nil {
+			t.Fatal("expected ID to be assigned")
+		}
+
+		got, err := s.GetByID(ctx, op.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if got == nil {
+			t.Fatal("expected non-nil result")
+		}
+		if got.Username != op.Username {
+			t.Errorf("Username = %q, want %q", got.Username, op.Username)
+		}
+		if got.DisplayName != "Test Operator" {
+			t.Errorf("DisplayName = %q, want %q", got.DisplayName, "Test Operator")
+		}
+		if got.PasswordHash != "$2a$10$fakehash" {
+			t.Errorf("PasswordHash = %q, want %q", got.PasswordHash, "$2a$10$fakehash")
+		}
+	})
+
+	t.Run("GetByID not found", func(t *testing.T) {
+		got, err := s.GetByID(ctx, uuid.New())
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if got != nil {
+			t.Fatal("expected nil for non-existent ID")
+		}
+	})
+
+	t.Run("GetByUsername", func(t *testing.T) {
+		username := "user-" + uuid.NewString()[:8]
+		op := &model.Operator{
+			Username:     username,
+			PasswordHash: "$2a$10$fakehash",
+			DisplayName:  "By Username",
+		}
+		s.Create(ctx, op)
+
+		got, err := s.GetByUsername(ctx, username)
+		if err != nil {
+			t.Fatalf("GetByUsername: %v", err)
+		}
+		if got == nil || got.Username != username {
+			t.Fatal("expected to find operator by username")
+		}
+	})
+
+	t.Run("GetByUsername not found", func(t *testing.T) {
+		got, err := s.GetByUsername(ctx, "nonexistent-user")
+		if err != nil {
+			t.Fatalf("GetByUsername: %v", err)
+		}
+		if got != nil {
+			t.Fatal("expected nil for non-existent username")
+		}
+	})
+
+	t.Run("List", func(t *testing.T) {
+		list, err := s.List(ctx)
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		if len(list) == 0 {
+			t.Error("expected at least one operator")
+		}
+	})
+
+	t.Run("Update", func(t *testing.T) {
+		op := &model.Operator{
+			Username:           "upd-" + uuid.NewString()[:8],
+			PasswordHash:       "$2a$10$original",
+			DisplayName:        "Original",
+			MustChangePassword: true,
+		}
+		s.Create(ctx, op)
+
+		op.DisplayName = "Updated"
+		op.PasswordHash = "$2a$10$updated"
+		op.MustChangePassword = false
+		if err := s.Update(ctx, op); err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+
+		got, _ := s.GetByID(ctx, op.ID)
+		if got.DisplayName != "Updated" {
+			t.Errorf("DisplayName = %q, want %q", got.DisplayName, "Updated")
+		}
+		if got.PasswordHash != "$2a$10$updated" {
+			t.Errorf("PasswordHash = %q, want %q", got.PasswordHash, "$2a$10$updated")
+		}
+		if got.MustChangePassword {
+			t.Error("expected MustChangePassword=false after update")
+		}
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		op := &model.Operator{
+			Username:     "del-" + uuid.NewString()[:8],
+			PasswordHash: "$2a$10$fakehash",
+			DisplayName:  "ToDelete",
+		}
+		s.Create(ctx, op)
+
+		if err := s.Delete(ctx, op.ID); err != nil {
+			t.Fatalf("Delete: %v", err)
+		}
+		got, _ := s.GetByID(ctx, op.ID)
+		if got != nil {
+			t.Error("expected nil after delete")
+		}
+	})
+
+	t.Run("Count", func(t *testing.T) {
+		before, err := s.Count(ctx)
+		if err != nil {
+			t.Fatalf("Count before: %v", err)
+		}
+
+		s.Create(ctx, &model.Operator{
+			Username:     "cnt-" + uuid.NewString()[:8],
+			PasswordHash: "$2a$10$fakehash",
+			DisplayName:  "Counter",
+		})
+
+		after, err := s.Count(ctx)
+		if err != nil {
+			t.Fatalf("Count after: %v", err)
+		}
+		if after != before+1 {
+			t.Errorf("Count after = %d, want %d", after, before+1)
+		}
+	})
+}
+
 // TestAuditStore exercises every method of store.AuditStore.
 func TestAuditStore(t *testing.T, as store.AuditStore, rs store.RequestStore) {
 	ctx := context.Background()

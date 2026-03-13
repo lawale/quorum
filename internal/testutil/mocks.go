@@ -230,6 +230,66 @@ func (m *MockAuditStore) ListByRequestID(ctx context.Context, requestID uuid.UUI
 	panic("MockAuditStore.ListByRequestID not set up")
 }
 
+// MockOperatorStore implements store.OperatorStore with configurable function fields.
+type MockOperatorStore struct {
+	CreateFunc        func(ctx context.Context, operator *model.Operator) error
+	GetByIDFunc       func(ctx context.Context, id uuid.UUID) (*model.Operator, error)
+	GetByUsernameFunc func(ctx context.Context, username string) (*model.Operator, error)
+	ListFunc          func(ctx context.Context) ([]model.Operator, error)
+	UpdateFunc        func(ctx context.Context, operator *model.Operator) error
+	DeleteFunc        func(ctx context.Context, id uuid.UUID) error
+	CountFunc         func(ctx context.Context) (int, error)
+}
+
+func (m *MockOperatorStore) Create(ctx context.Context, operator *model.Operator) error {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(ctx, operator)
+	}
+	panic("MockOperatorStore.Create not set up")
+}
+
+func (m *MockOperatorStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Operator, error) {
+	if m.GetByIDFunc != nil {
+		return m.GetByIDFunc(ctx, id)
+	}
+	panic("MockOperatorStore.GetByID not set up")
+}
+
+func (m *MockOperatorStore) GetByUsername(ctx context.Context, username string) (*model.Operator, error) {
+	if m.GetByUsernameFunc != nil {
+		return m.GetByUsernameFunc(ctx, username)
+	}
+	panic("MockOperatorStore.GetByUsername not set up")
+}
+
+func (m *MockOperatorStore) List(ctx context.Context) ([]model.Operator, error) {
+	if m.ListFunc != nil {
+		return m.ListFunc(ctx)
+	}
+	panic("MockOperatorStore.List not set up")
+}
+
+func (m *MockOperatorStore) Update(ctx context.Context, operator *model.Operator) error {
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(ctx, operator)
+	}
+	panic("MockOperatorStore.Update not set up")
+}
+
+func (m *MockOperatorStore) Delete(ctx context.Context, id uuid.UUID) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, id)
+	}
+	panic("MockOperatorStore.Delete not set up")
+}
+
+func (m *MockOperatorStore) Count(ctx context.Context) (int, error) {
+	if m.CountFunc != nil {
+		return m.CountFunc(ctx)
+	}
+	panic("MockOperatorStore.Count not set up")
+}
+
 // MockAuthProvider implements auth.Provider with configurable function fields.
 type MockAuthProvider struct {
 	AuthenticateFunc func(r *http.Request) (*auth.Identity, error)

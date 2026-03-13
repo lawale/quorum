@@ -55,6 +55,16 @@ type AuditStore interface {
 	ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.AuditLog, error)
 }
 
+type OperatorStore interface {
+	Create(ctx context.Context, operator *model.Operator) error
+	GetByID(ctx context.Context, id uuid.UUID) (*model.Operator, error)
+	GetByUsername(ctx context.Context, username string) (*model.Operator, error)
+	List(ctx context.Context) ([]model.Operator, error)
+	Update(ctx context.Context, operator *model.Operator) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	Count(ctx context.Context) (int, error)
+}
+
 // Stores bundles every store interface and a Close function for the underlying connection.
 type Stores struct {
 	Requests  RequestStore
@@ -62,5 +72,6 @@ type Stores struct {
 	Policies  PolicyStore
 	Webhooks  WebhookStore
 	Audits    AuditStore
+	Operators OperatorStore
 	Close     func()
 }

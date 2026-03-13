@@ -49,6 +49,7 @@ func setupMSSQL(t *testing.T) *mssql.DB {
 		"005_create_audit_logs.up.sql",
 		"006_add_permission_check_url.up.sql",
 		"007_add_approval_stages.up.sql",
+		"008_create_operators.up.sql",
 	}
 
 	migDB, err := sql.Open("sqlserver", connStr)
@@ -99,4 +100,9 @@ func TestMSSQLWebhookStore(t *testing.T) {
 func TestMSSQLAuditStore(t *testing.T) {
 	db := setupMSSQL(t)
 	storetest.TestAuditStore(t, mssql.NewAuditStore(db), mssql.NewRequestStore(db))
+}
+
+func TestMSSQLOperatorStore(t *testing.T) {
+	db := setupMSSQL(t)
+	storetest.TestOperatorStore(t, mssql.NewOperatorStore(db))
 }

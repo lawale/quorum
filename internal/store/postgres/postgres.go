@@ -49,6 +49,7 @@ func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.St
 		Policies:  NewPolicyStore(db),
 		Webhooks:  NewWebhookStore(db),
 		Audits:    NewAuditStore(db),
+		Operators: NewOperatorStore(db),
 		Close:     db.Close,
 	}, nil
 }
