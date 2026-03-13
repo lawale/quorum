@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lawale/quorum/console"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/config"
 	"github.com/lawale/quorum/internal/metrics"
@@ -123,6 +124,7 @@ func main() {
 		AuditStore:      stores.Audits,
 		AuthProvider:    authProvider,
 		ConsoleEnabled:  cfg.Console.Enabled,
+		ConsoleSPA:      console.Handler(),
 		Metrics:         metricsInstance,
 		MetricsPath:     cfg.Metrics.Path,
 		Registry:        metricsRegistry,

@@ -27,3 +27,7 @@ config.local.yaml
 
 # Environment
 .env
+
+# Console frontend
+console/frontend/node_modules/
+console/frontend/dist/

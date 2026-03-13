@@ -1,4 +1,5 @@
-.PHONY: build run test lint migrate-up migrate-down docker-up docker-down clean
+.PHONY: build run test lint migrate-up migrate-down docker-up docker-down clean \
+       console-deps console-build console-dev build-console
 
 BINARY_NAME=quorum
 BUILD_DIR=bin
@@ -27,6 +28,19 @@ docker-up:
 docker-down:
 	docker-compose down
 
+console-deps:
+	cd console/frontend && npm install
+
+console-build: console-deps
+	cd console/frontend && npm run build
+
+console-dev:
+	cd console/frontend && npm run dev
+
+build-console: console-build
+	go build -tags console -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -rf console/frontend/dist
 	go clean

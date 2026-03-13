@@ -20,6 +20,7 @@ type Server struct {
 	policyHandler   *PolicyHandler
 	webhookHandler  *WebhookHandler
 	consoleHandler  *ConsoleHandler
+	consoleSPA      http.Handler
 	operatorService *service.OperatorService
 	auditStore      store.AuditStore
 	authProvider    auth.Provider
@@ -37,6 +38,7 @@ type Config struct {
 	AuditStore      store.AuditStore
 	AuthProvider    auth.Provider
 	ConsoleEnabled  bool
+	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
 	Metrics         *metrics.Metrics
 	MetricsPath     string
 	Registry        *prometheus.Registry
@@ -51,6 +53,7 @@ func New(cfg Config) *Server {
 		auditStore:      cfg.AuditStore,
 		authProvider:    cfg.AuthProvider,
 		consoleEnabled:  cfg.ConsoleEnabled,
+		consoleSPA:      cfg.ConsoleSPA,
 		operatorService: cfg.OperatorService,
 		metrics:         cfg.Metrics,
 		metricsPath:     cfg.MetricsPath,
@@ -83,6 +86,12 @@ func (s *Server) setupRoutes() {
 	// Metrics endpoint — no auth
 	if s.registry != nil {
 		r.Handle(s.metricsPath, promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}))
+	}
+
+	// Console SPA — static files, no auth
+	if s.consoleSPA != nil {
+		r.Handle("/console", http.RedirectHandler("/console/", http.StatusMovedPermanently))
+		r.Handle("/console/*", http.StripPrefix("/console", s.consoleSPA))
 	}
 
 	// Console API — JWT auth for admin console
