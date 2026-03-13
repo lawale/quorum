@@ -1,0 +1,33 @@
+# Stage 1: Build the frontend
+FROM node:22-alpine AS frontend
+
+WORKDIR /app/console/frontend
+COPY console/frontend/package.json console/frontend/package-lock.json ./
+RUN npm ci
+COPY console/frontend/ ./
+RUN npm run build
+
+# Stage 2: Build the Go binary with embedded console
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+COPY --from=frontend /app/console/frontend/dist ./console/frontend/dist
+
+RUN CGO_ENABLED=0 GOOS=linux go build -tags console -o /bin/quorum ./cmd/server
+
+# Stage 3: Final image
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=builder /bin/quorum /bin/quorum
+COPY --from=builder /app/migrations /migrations
+
+EXPOSE 8080
+
+ENTRYPOINT ["/bin/quorum"]
+CMD ["-config", "/etc/quorum/config.yaml"]
