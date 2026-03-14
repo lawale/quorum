@@ -68,6 +68,7 @@ QUORUM_HEADERS = {
     "Content-Type": "application/json",
     "X-User-ID": "access-portal-service",
     "X-User-Roles": "service",
+    "X-Tenant-ID": "access-portal",
 }
 
 

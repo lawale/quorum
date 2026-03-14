@@ -286,6 +286,7 @@ func (a *app) registerPolicy() {
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-User-ID", "banking-system")
+	req.Header.Set("X-Tenant-ID", "banking")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -381,6 +382,7 @@ func (a *app) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-User-ID", fromUser)
+	httpReq.Header.Set("X-Tenant-ID", "banking")
 
 	resp, err := a.client.Do(httpReq)
 	if err != nil {

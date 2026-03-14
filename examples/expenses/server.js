@@ -42,6 +42,7 @@ async function quorumFetch(urlPath, options = {}) {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      "X-Tenant-ID": "expenses",
       ...options.headers,
     },
   });
