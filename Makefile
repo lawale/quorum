@@ -1,5 +1,6 @@
 .PHONY: build run test lint migrate-up migrate-down docker-up docker-down clean \
-       console-deps console-build console-dev build-console
+       console-deps console-build console-dev build-console \
+       embed-deps embed-build embed-dev build-embed build-all
 
 BINARY_NAME=quorum
 BUILD_DIR=bin
@@ -41,7 +42,23 @@ console-dev:
 build-console: console-build
 	go build -tags console -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 
+embed-deps:
+	cd widgets/frontend && npm install
+
+embed-build: embed-deps
+	cd widgets/frontend && npm run build
+
+embed-dev:
+	cd widgets/frontend && npm run dev
+
+build-embed: embed-build
+	go build -tags embed -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+
+build-all: console-build embed-build
+	go build -tags "console,embed" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf console/frontend/dist
+	rm -rf widgets/frontend/dist
 	go clean

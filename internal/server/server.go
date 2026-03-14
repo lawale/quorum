@@ -21,6 +21,7 @@ type Server struct {
 	webhookHandler  *WebhookHandler
 	consoleHandler  *ConsoleHandler
 	consoleSPA      http.Handler
+	embedHandler    http.Handler
 	operatorService *service.OperatorService
 	auditStore      store.AuditStore
 	authProvider    auth.Provider
@@ -39,6 +40,7 @@ type Config struct {
 	AuthProvider    auth.Provider
 	ConsoleEnabled  bool
 	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
+	EmbedHandler    http.Handler // Widget JS handler from widgets package (nil when built without tag)
 	Metrics         *metrics.Metrics
 	MetricsPath     string
 	Registry        *prometheus.Registry
@@ -54,6 +56,7 @@ func New(cfg Config) *Server {
 		authProvider:    cfg.AuthProvider,
 		consoleEnabled:  cfg.ConsoleEnabled,
 		consoleSPA:      cfg.ConsoleSPA,
+		embedHandler:    cfg.EmbedHandler,
 		operatorService: cfg.OperatorService,
 		metrics:         cfg.Metrics,
 		metricsPath:     cfg.MetricsPath,
@@ -86,6 +89,11 @@ func (s *Server) setupRoutes() {
 	// Metrics endpoint — no auth
 	if s.registry != nil {
 		r.Handle(s.metricsPath, promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{}))
+	}
+
+	// Embeddable widget JS — no auth
+	if s.embedHandler != nil {
+		r.Get("/assets/embed.js", s.embedHandler.ServeHTTP)
 	}
 
 	// Console SPA — static files, no auth

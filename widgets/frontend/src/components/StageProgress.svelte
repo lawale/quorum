@@ -1,0 +1,93 @@
+<svelte:options customElement={{ tag: "quorum-stage-progress", shadow: "open" }} />
+
+<script lang="ts">
+  import { createClient, ApiError } from '../lib/api';
+  import type { Request, Policy, Approval } from '../lib/types';
+  import StageBar from './internal/StageBar.svelte';
+  import StatusBadge from './internal/StatusBadge.svelte';
+
+  let {
+    'request-id': requestId = '',
+    'api-url': apiUrl = '',
+    token = '',
+    'auth-headers': authHeadersStr = '',
+  }: {
+    'request-id'?: string;
+    'api-url'?: string;
+    token?: string;
+    'auth-headers'?: string;
+  } = $props();
+
+  let req: Request | null = $state(null);
+  let policy: Policy | null = $state(null);
+  let approvals: Approval[] = $state([]);
+  let error: string | null = $state(null);
+  let loading = $state(true);
+
+  function getClient() {
+    let authHeaders: Record<string, string> | undefined;
+    if (authHeadersStr) {
+      try { authHeaders = JSON.parse(authHeadersStr); } catch {}
+    }
+    return createClient({ apiUrl, token: token || undefined, authHeaders });
+  }
+
+  async function load() {
+    if (!requestId || !apiUrl) return;
+    loading = true;
+    error = null;
+    try {
+      const client = getClient();
+      req = await client.getRequest(requestId);
+      policy = await client.getPolicyByType(req.type);
+    } catch (e) {
+      error = e instanceof ApiError ? e.message : 'Failed to load';
+    } finally {
+      loading = false;
+    }
+  }
+
+  $effect(() => {
+    if (requestId && apiUrl) load();
+  });
+</script>
+
+<div class="container">
+  {#if loading}
+    <div class="loading">Loading...</div>
+  {:else if error}
+    <div class="error">{error}</div>
+  {:else if req && policy}
+    <div class="header">
+      <StatusBadge status={req.status} />
+      <span class="type">{req.type}</span>
+    </div>
+    <StageBar stages={policy.stages} currentStage={req.current_stage} {approvals} status={req.status} />
+  {:else}
+    <div class="error">Request or policy not found</div>
+  {/if}
+</div>
+
+<style>
+  .container {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 12px;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .type {
+    font-size: 13px;
+    color: #6b7280;
+    font-family: monospace;
+  }
+  .loading, .error {
+    font-size: 13px;
+    padding: 8px 0;
+  }
+  .loading { color: #6b7280; }
+  .error { color: #ef4444; }
+</style>

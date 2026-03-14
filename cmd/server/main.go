@@ -21,6 +21,7 @@ import (
 	"github.com/lawale/quorum/internal/store/mssql"
 	"github.com/lawale/quorum/internal/store/postgres"
 	"github.com/lawale/quorum/internal/webhook"
+	"github.com/lawale/quorum/widgets"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -125,6 +126,7 @@ func main() {
 		AuthProvider:    authProvider,
 		ConsoleEnabled:  cfg.Console.Enabled,
 		ConsoleSPA:      console.Handler(),
+		EmbedHandler:    widgets.Handler(),
 		Metrics:         metricsInstance,
 		MetricsPath:     cfg.Metrics.Path,
 		Registry:        metricsRegistry,

@@ -39,6 +39,8 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 
 - **Optional Admin Console** — Manage everything with a built-in web UI built with Svelte 5. Browse requests, define policies, inspect audit logs, and manage operators — all served directly from the Go binary. Opt-in via build tag for a smaller default binary.
 
+- **Embeddable UI Widgets** — Drop pre-built Web Components into your own application to give end users approval functionality without building custom UI. Three widgets (`<quorum-approval-panel>`, `<quorum-request-list>`, `<quorum-stage-progress>`) use Shadow DOM for style isolation and work with any frontend framework. Opt-in via build tag.
+
 - **Production-Ready from Day One:**
   - **Multi-Database Support** — Choose between PostgreSQL and Microsoft SQL Server.
   - **Flexible Authentication** — Support for header-based ("trust"), JWT/JWKS verification, or a custom auth endpoint to fit your existing security model.
@@ -374,6 +376,56 @@ Visit `http://localhost:8080/console/` after starting the server. On first run, 
 
 **Console features:** Dashboard overview, policy CRUD with multi-stage editor, webhook management, request browser with status/type filters, request detail with tabbed payload and audit trail, audit log search, and operator management.
 
+### Embeddable Widgets
+
+Quorum provides three Web Components that you can embed directly in your application's UI. They connect to the Quorum API and render approval workflows — no custom UI code needed.
+
+**Build with widgets:**
+
+```bash
+make build-embed
+```
+
+**Build with both console and widgets:**
+
+```bash
+make build-all
+```
+
+The bundle is served at `/assets/embed.js` with CORS headers, so you can load it from any origin.
+
+**Usage:**
+
+```html
+<script src="https://your-quorum-host/assets/embed.js"></script>
+
+<!-- Show approval details with approve/reject actions -->
+<quorum-approval-panel
+  request-id="uuid-here"
+  api-url="https://your-quorum-host"
+  token="Bearer ..."
+></quorum-approval-panel>
+
+<!-- List requests with filters and pagination -->
+<quorum-request-list
+  api-url="https://your-quorum-host"
+  status="pending"
+  page-size="10"
+  token="Bearer ..."
+></quorum-request-list>
+
+<!-- Visualize approval stage progress -->
+<quorum-stage-progress
+  request-id="uuid-here"
+  api-url="https://your-quorum-host"
+  token="Bearer ..."
+></quorum-stage-progress>
+```
+
+**Authentication:** Pass a `token` attribute for Bearer authentication, or an `auth-headers` attribute (JSON string) for trust-mode headers like `{"X-User-ID": "alice", "X-User-Roles": "manager"}`.
+
+**Events:** Widgets dispatch custom events you can listen for: `quorum:approved`, `quorum:rejected`, `quorum:select`, and `quorum:error`.
+
 ### Docker
 
 ```bash
@@ -398,24 +450,36 @@ make test
 # Lint
 make lint
 
-# Run the frontend dev server (with hot reload)
+# Run the console frontend dev server (with hot reload)
 make console-dev
 
-# Build everything (frontend + Go binary with console)
+# Run the widgets frontend dev server
+make embed-dev
+
+# Build with console
 make build-console
+
+# Build with embeddable widgets
+make build-embed
+
+# Build with everything (console + widgets)
+make build-all
 ```
 
 ### Makefile Targets
 
 | Target | Description |
 |--------|-------------|
-| `build` | Build the Go binary (no console) |
-| `build-console` | Build frontend + Go binary with console |
+| `build` | Build the Go binary (no console, no widgets) |
+| `build-console` | Build console frontend + Go binary with console |
+| `build-embed` | Build widget frontend + Go binary with embeddable widgets |
+| `build-all` | Build both frontends + Go binary with console and widgets |
 | `test` | Run all tests with race detector |
 | `lint` | Run golangci-lint |
 | `migrate-up` | Run PostgreSQL migrations |
 | `migrate-down` | Roll back one PostgreSQL migration |
-| `console-dev` | Start the Svelte dev server |
+| `console-dev` | Start the console Svelte dev server |
+| `embed-dev` | Start the widgets Svelte dev server |
 | `clean` | Remove build artifacts |
 
 ### Project Structure
@@ -437,6 +501,10 @@ console/
   console.go         — Embedded SPA handler (build tag: console)
   console_stub.go    — No-op when built without console tag
   frontend/          — Svelte 5 + TypeScript + Tailwind CSS
+widgets/
+  embed.go           — Embedded widget JS handler (build tag: embed)
+  embed_stub.go      — No-op when built without embed tag
+  frontend/          — Svelte 5 Web Components (custom elements)
 migrations/
   postgres/          — PostgreSQL migration files
   mssql/             — SQL Server migration files

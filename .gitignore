@@ -31,5 +31,5 @@ config.local.yaml
 .env
 
 # Console frontend
-console/frontend/node_modules/
-console/frontend/dist/
+node_modules/
+dist/

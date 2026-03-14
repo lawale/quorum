@@ -72,3 +72,19 @@ jobs:
           cache-dependency-path: console/frontend/package-lock.json
       - run: cd console/frontend && npm ci && npm run build
       - run: go build -tags console ./cmd/server
+
+  build-embed:
+    name: Build (Embed Widgets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: widgets/frontend/package-lock.json
+      - run: cd widgets/frontend && npm ci && npm run build
+      - run: go build -tags embed ./cmd/server
