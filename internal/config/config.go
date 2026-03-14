@@ -15,6 +15,7 @@ type Config struct {
 	Auth     AuthConfig     `yaml:"auth"`
 	Webhook  WebhookConfig  `yaml:"webhook"`
 	Expiry   ExpiryConfig   `yaml:"expiry"`
+	Tenant   TenantConfig   `yaml:"tenant"`
 	Metrics  MetricsConfig  `yaml:"metrics"`
 	Console  ConsoleConfig  `yaml:"console"`
 }
@@ -81,8 +82,9 @@ type AuthConfig struct {
 }
 
 type TrustConfig struct {
-	UserIDHeader string `yaml:"user_id_header"`
-	RolesHeader  string `yaml:"roles_header"`
+	UserIDHeader   string `yaml:"user_id_header"`
+	RolesHeader    string `yaml:"roles_header"`
+	TenantIDHeader string `yaml:"tenant_id_header"`
 }
 
 type VerifyConfig struct {
@@ -113,6 +115,10 @@ type WebhookConfig struct {
 
 type ExpiryConfig struct {
 	CheckInterval time.Duration `yaml:"check_interval"`
+}
+
+type TenantConfig struct {
+	CacheRefreshInterval time.Duration `yaml:"cache_refresh_interval"`
 }
 
 func Load(path string) (*Config, error) {
@@ -167,6 +173,9 @@ func setDefaults(cfg *Config) {
 	if cfg.Auth.Trust.RolesHeader == "" {
 		cfg.Auth.Trust.RolesHeader = "X-User-Roles"
 	}
+	if cfg.Auth.Trust.TenantIDHeader == "" {
+		cfg.Auth.Trust.TenantIDHeader = "X-Tenant-ID"
+	}
 	if cfg.Webhook.MaxRetries == 0 {
 		cfg.Webhook.MaxRetries = 3
 	}
@@ -178,6 +187,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Expiry.CheckInterval == 0 {
 		cfg.Expiry.CheckInterval = time.Minute
+	}
+	if cfg.Tenant.CacheRefreshInterval == 0 {
+		cfg.Tenant.CacheRefreshInterval = time.Minute
 	}
 	if cfg.Metrics.Path == "" {
 		cfg.Metrics.Path = "/metrics"

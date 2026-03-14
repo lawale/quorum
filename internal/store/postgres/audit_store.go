@@ -20,8 +20,8 @@ func NewAuditStore(db *DB) *AuditStore {
 
 func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 	query := `
-		INSERT INTO audit_logs (id, request_id, action, actor_id, details, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)`
+		INSERT INTO audit_logs (id, tenant_id, request_id, action, actor_id, details, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
 	if log.ID == uuid.Nil {
 		log.ID = uuid.New()
@@ -29,7 +29,7 @@ func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 	log.CreatedAt = time.Now().UTC()
 
 	_, err := s.db.Pool.Exec(ctx, query,
-		log.ID, log.RequestID, log.Action, log.ActorID, log.Details, log.CreatedAt,
+		log.ID, log.TenantID, log.RequestID, log.Action, log.ActorID, log.Details, log.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting audit log: %w", err)
@@ -40,7 +40,7 @@ func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 
 func (s *AuditStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.AuditLog, error) {
 	query := `
-		SELECT id, request_id, action, actor_id, details, created_at
+		SELECT id, tenant_id, request_id, action, actor_id, details, created_at
 		FROM audit_logs WHERE request_id = $1 ORDER BY created_at ASC`
 
 	rows, err := s.db.Pool.Query(ctx, query, requestID)
@@ -52,7 +52,7 @@ func (s *AuditStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) (
 	var logs []model.AuditLog
 	for rows.Next() {
 		var l model.AuditLog
-		if err := rows.Scan(&l.ID, &l.RequestID, &l.Action, &l.ActorID, &l.Details, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TenantID, &l.RequestID, &l.Action, &l.ActorID, &l.Details, &l.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning audit log: %w", err)
 		}
 		logs = append(logs, l)

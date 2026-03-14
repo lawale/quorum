@@ -23,6 +23,7 @@ auth:
   trust:
     user_id_header: "X-User-ID"
     roles_header: "X-User-Roles"
+    tenant_id_header: "X-Tenant-ID"
 
   verify:
     jwks_url: ""
@@ -46,6 +47,9 @@ webhook:
 
 expiry:
   check_interval: "1m"
+
+tenant:
+  cache_refresh_interval: "1m"  # how often to reload tenant slugs from DB (multi-instance sync)
 
 metrics:
   enabled: false

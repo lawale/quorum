@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 )
 
@@ -22,12 +23,15 @@ func NewPolicyStore(db *DB) *PolicyStore {
 
 func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	query := `
-		INSERT INTO policies (id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+		INSERT INTO policies (id, tenant_id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 	now := time.Now().UTC()
 	if policy.ID == uuid.Nil {
 		policy.ID = uuid.New()
+	}
+	if policy.TenantID == "" {
+		policy.TenantID = auth.TenantIDFromContext(ctx)
 	}
 	policy.CreatedAt = now
 	policy.UpdatedAt = now
@@ -49,7 +53,7 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	}
 
 	_, err = s.db.Pool.Exec(ctx, query,
-		policy.ID, policy.Name, policy.RequestType, stagesJSON,
+		policy.ID, policy.TenantID, policy.Name, policy.RequestType, stagesJSON,
 		identityFieldsJSON, policy.PermissionCheckURL, autoExpire, policy.DisplayTemplate, policy.CreatedAt, policy.UpdatedAt,
 	)
 	if err != nil {
@@ -60,17 +64,38 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 }
 
 func (s *PolicyStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
-	return s.scanPolicy(ctx, "SELECT id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at FROM policies WHERE id = $1", id)
+	query := "SELECT id, tenant_id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at FROM policies WHERE id = $1"
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $2"
+		return s.scanPolicy(ctx, query, id, tenant)
+	}
+	return s.scanPolicy(ctx, query, id)
 }
 
 func (s *PolicyStore) GetByRequestType(ctx context.Context, requestType string) (*model.Policy, error) {
-	return s.scanPolicy(ctx, "SELECT id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at FROM policies WHERE request_type = $1", requestType)
+	query := "SELECT id, tenant_id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at FROM policies WHERE request_type = $1"
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $2"
+		return s.scanPolicy(ctx, query, requestType, tenant)
+	}
+	return s.scanPolicy(ctx, query, requestType)
 }
 
 func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
-	query := `SELECT id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at FROM policies ORDER BY created_at DESC`
+	query := `SELECT id, tenant_id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at FROM policies`
 
-	rows, err := s.db.Pool.Query(ctx, query)
+	tenant := auth.TenantIDFromContext(ctx)
+	var rows pgx.Rows
+	var err error
+	if tenant != "" {
+		query += " WHERE tenant_id = $1 ORDER BY created_at DESC"
+		rows, err = s.db.Pool.Query(ctx, query, tenant)
+	} else {
+		query += " ORDER BY created_at DESC"
+		rows, err = s.db.Pool.Query(ctx, query)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("listing policies: %w", err)
 	}
@@ -112,10 +137,18 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 		autoExpire = &s
 	}
 
-	_, err = s.db.Pool.Exec(ctx, query,
+	args := []any{
 		policy.Name, stagesJSON, identityFieldsJSON,
 		policy.PermissionCheckURL, autoExpire, policy.DisplayTemplate, policy.UpdatedAt, policy.ID,
-	)
+	}
+
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $9"
+		args = append(args, tenant)
+	}
+
+	_, err = s.db.Pool.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("updating policy: %w", err)
 	}
@@ -124,7 +157,17 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 }
 
 func (s *PolicyStore) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.Pool.Exec(ctx, "DELETE FROM policies WHERE id = $1", id)
+	query := "DELETE FROM policies WHERE id = $1"
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $2"
+		_, err := s.db.Pool.Exec(ctx, query, id, tenant)
+		if err != nil {
+			return fmt.Errorf("deleting policy: %w", err)
+		}
+		return nil
+	}
+	_, err := s.db.Pool.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("deleting policy: %w", err)
 	}
@@ -153,7 +196,7 @@ func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 	var autoExpire *string
 
 	err := row.Scan(
-		&p.ID, &p.Name, &p.RequestType, &stagesJSON,
+		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
 		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &p.DisplayTemplate, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
@@ -188,7 +231,7 @@ func (s *PolicyStore) scanPolicyRow(rows pgx.Rows) (*model.Policy, error) {
 	var autoExpire *string
 
 	err := rows.Scan(
-		&p.ID, &p.Name, &p.RequestType, &stagesJSON,
+		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
 		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &p.DisplayTemplate, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {

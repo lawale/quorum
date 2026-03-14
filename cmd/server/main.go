@@ -70,6 +70,11 @@ func main() {
 	policyService := service.NewPolicyService(stores.Policies)
 	requestService := service.NewRequestService(stores.Requests, stores.Approvals, stores.Policies, stores.Audits, permissionChecker)
 	webhookService := service.NewWebhookService(stores.Webhooks)
+	tenantService := service.NewTenantService(stores.Tenants)
+	if err := tenantService.LoadCache(ctx); err != nil {
+		slog.Error("failed to load tenant cache", "error", err)
+		os.Exit(1)
+	}
 
 	// Webhook dispatcher (outbox-backed, signal-driven)
 	dispatcher := webhook.NewDispatcher(stores.Outbox, stores.Audits, webhook.Config{
@@ -105,12 +110,13 @@ func main() {
 	defer appCancel()
 	dispatcher.Start(appCtx)
 	expiryWorker.Start(appCtx)
+	tenantService.StartCacheRefresh(appCtx, cfg.Tenant.CacheRefreshInterval)
 
 	// Auth provider
 	var authProvider auth.Provider
 	switch cfg.Auth.Mode {
 	case "trust":
-		authProvider = auth.NewTrustProvider(cfg.Auth.Trust.UserIDHeader, cfg.Auth.Trust.RolesHeader)
+		authProvider = auth.NewTrustProvider(cfg.Auth.Trust.UserIDHeader, cfg.Auth.Trust.RolesHeader, cfg.Auth.Trust.TenantIDHeader)
 	default:
 		slog.Error("unsupported auth mode", "mode", cfg.Auth.Mode)
 		os.Exit(1)
@@ -128,6 +134,7 @@ func main() {
 		RequestService:  requestService,
 		PolicyService:   policyService,
 		WebhookService:  webhookService,
+		TenantService:   tenantService,
 		OperatorService: operatorService,
 		AuditStore:      stores.Audits,
 		AuthProvider:    authProvider,

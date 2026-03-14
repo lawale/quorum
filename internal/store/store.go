@@ -20,11 +20,12 @@ var ErrStatusConflict = errors.New("request status has already changed")
 var ErrDuplicateApproval = errors.New("checker has already acted on this request at this stage")
 
 type RequestFilter struct {
-	Status  *model.RequestStatus
-	Type    *string
-	MakerID *string
-	Page    int
-	PerPage int
+	TenantID *string
+	Status   *model.RequestStatus
+	Type     *string
+	MakerID  *string
+	Page     int
+	PerPage  int
 }
 
 type RequestStore interface {
@@ -70,6 +71,15 @@ type AuditStore interface {
 	ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.AuditLog, error)
 }
 
+// TenantStore manages registered tenants.
+type TenantStore interface {
+	Create(ctx context.Context, tenant *model.Tenant) error
+	GetBySlug(ctx context.Context, slug string) (*model.Tenant, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*model.Tenant, error)
+	List(ctx context.Context) ([]model.Tenant, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
 type OperatorStore interface {
 	Create(ctx context.Context, operator *model.Operator) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Operator, error)
@@ -101,6 +111,7 @@ type Stores struct {
 	Webhooks  WebhookStore
 	Audits    AuditStore
 	Operators OperatorStore
+	Tenants   TenantStore
 	Outbox    OutboxStore
 	Close     func()
 

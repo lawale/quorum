@@ -37,6 +37,7 @@ const (
 
 type Request struct {
 	ID                uuid.UUID       `json:"id"`
+	TenantID          string          `json:"tenant_id"`
 	IdempotencyKey    *string         `json:"idempotency_key,omitempty"`
 	Type              string          `json:"type"`
 	Payload           json.RawMessage `json:"payload"`
@@ -74,6 +75,7 @@ type ApprovalStage struct {
 
 type Policy struct {
 	ID                 uuid.UUID       `json:"id"`
+	TenantID           string          `json:"tenant_id"`
 	Name               string          `json:"name"`
 	RequestType        string          `json:"request_type"`
 	Stages             []ApprovalStage `json:"stages"`
@@ -116,6 +118,7 @@ type PermissionCheckResponse struct {
 
 type Webhook struct {
 	ID          uuid.UUID `json:"id"`
+	TenantID    string    `json:"tenant_id"`
 	URL         string    `json:"url"`
 	Events      []string  `json:"events"`
 	Secret      string    `json:"-"`
@@ -126,6 +129,7 @@ type Webhook struct {
 
 type AuditLog struct {
 	ID        uuid.UUID       `json:"id"`
+	TenantID  string          `json:"tenant_id"`
 	RequestID uuid.UUID       `json:"request_id"`
 	Action    string          `json:"action"`
 	ActorID   string          `json:"actor_id"`
@@ -138,6 +142,15 @@ type WebhookPayload struct {
 	Request   Request    `json:"request"`
 	Approvals []Approval `json:"approvals,omitempty"`
 	Timestamp time.Time  `json:"timestamp"`
+}
+
+// Tenant represents a registered tenant (application) in the system.
+type Tenant struct {
+	ID        uuid.UUID `json:"id"`
+	Slug      string    `json:"slug"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // OutboxEntry represents a durable webhook delivery entry in the outbox table.

@@ -79,6 +79,10 @@ func (s *RequestService) SetWebhookDispatch(
 }
 
 func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model.Request, error) {
+	if req.TenantID == "" {
+		req.TenantID = auth.TenantIDFromContext(ctx)
+	}
+
 	// Check idempotency key first
 	if req.IdempotencyKey != nil {
 		existing, err := s.requests.GetByIdempotencyKey(ctx, *req.IdempotencyKey)
@@ -520,6 +524,7 @@ func evaluateWithCounts(approvalCount, rejectionCount int, currentStage int, pol
 
 func (s *RequestService) audit(ctx context.Context, requestID uuid.UUID, action string, actorID string, details json.RawMessage) {
 	log := &model.AuditLog{
+		TenantID:  auth.TenantIDFromContext(ctx),
 		RequestID: requestID,
 		Action:    action,
 		ActorID:   actorID,

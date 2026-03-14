@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 )
 
@@ -21,11 +22,14 @@ func NewWebhookStore(db *DB) *WebhookStore {
 
 func (s *WebhookStore) Create(ctx context.Context, webhook *model.Webhook) error {
 	query := `
-		INSERT INTO webhooks (id, url, events, secret, request_type, active, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`
+		INSERT INTO webhooks (id, tenant_id, url, events, secret, request_type, active, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
 	if webhook.ID == uuid.Nil {
 		webhook.ID = uuid.New()
+	}
+	if webhook.TenantID == "" {
+		webhook.TenantID = auth.TenantIDFromContext(ctx)
 	}
 	webhook.CreatedAt = time.Now().UTC()
 	if !webhook.Active {
@@ -38,7 +42,7 @@ func (s *WebhookStore) Create(ctx context.Context, webhook *model.Webhook) error
 	}
 
 	_, err = s.db.Pool.Exec(ctx, query,
-		webhook.ID, webhook.URL, eventsJSON, webhook.Secret,
+		webhook.ID, webhook.TenantID, webhook.URL, eventsJSON, webhook.Secret,
 		webhook.RequestType, webhook.Active, webhook.CreatedAt,
 	)
 	if err != nil {
@@ -49,12 +53,20 @@ func (s *WebhookStore) Create(ctx context.Context, webhook *model.Webhook) error
 }
 
 func (s *WebhookStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Webhook, error) {
-	query := `SELECT id, url, events, secret, request_type, active, created_at FROM webhooks WHERE id = $1`
+	query := `SELECT id, tenant_id, url, events, secret, request_type, active, created_at FROM webhooks WHERE id = $1`
+
+	var args []any
+	args = append(args, id)
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $2"
+		args = append(args, tenant)
+	}
 
 	w := &model.Webhook{}
 	var eventsJSON []byte
-	err := s.db.Pool.QueryRow(ctx, query, id).Scan(
-		&w.ID, &w.URL, &eventsJSON, &w.Secret, &w.RequestType, &w.Active, &w.CreatedAt,
+	err := s.db.Pool.QueryRow(ctx, query, args...).Scan(
+		&w.ID, &w.TenantID, &w.URL, &eventsJSON, &w.Secret, &w.RequestType, &w.Active, &w.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -71,9 +83,18 @@ func (s *WebhookStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Webhoo
 }
 
 func (s *WebhookStore) List(ctx context.Context) ([]model.Webhook, error) {
-	query := `SELECT id, url, events, secret, request_type, active, created_at FROM webhooks ORDER BY created_at DESC`
+	query := `SELECT id, tenant_id, url, events, secret, request_type, active, created_at FROM webhooks`
 
-	rows, err := s.db.Pool.Query(ctx, query)
+	tenant := auth.TenantIDFromContext(ctx)
+	var rows pgx.Rows
+	var err error
+	if tenant != "" {
+		query += " WHERE tenant_id = $1 ORDER BY created_at DESC"
+		rows, err = s.db.Pool.Query(ctx, query, tenant)
+	} else {
+		query += " ORDER BY created_at DESC"
+		rows, err = s.db.Pool.Query(ctx, query)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("listing webhooks: %w", err)
 	}
@@ -83,7 +104,7 @@ func (s *WebhookStore) List(ctx context.Context) ([]model.Webhook, error) {
 	for rows.Next() {
 		var w model.Webhook
 		var eventsJSON []byte
-		if err := rows.Scan(&w.ID, &w.URL, &eventsJSON, &w.Secret, &w.RequestType, &w.Active, &w.CreatedAt); err != nil {
+		if err := rows.Scan(&w.ID, &w.TenantID, &w.URL, &eventsJSON, &w.Secret, &w.RequestType, &w.Active, &w.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning webhook: %w", err)
 		}
 		if err := unmarshalJSON(eventsJSON, &w.Events); err != nil {
@@ -97,14 +118,22 @@ func (s *WebhookStore) List(ctx context.Context) ([]model.Webhook, error) {
 
 func (s *WebhookStore) ListByEventAndType(ctx context.Context, event string, requestType string) ([]model.Webhook, error) {
 	query := `
-		SELECT id, url, events, secret, request_type, active, created_at
+		SELECT id, tenant_id, url, events, secret, request_type, active, created_at
 		FROM webhooks
 		WHERE active = true AND events @> $1::jsonb
 		AND (request_type IS NULL OR request_type = $2)`
 
 	eventJSON := fmt.Sprintf(`["%s"]`, event)
 
-	rows, err := s.db.Pool.Query(ctx, query, eventJSON, requestType)
+	var args []any
+	args = append(args, eventJSON, requestType)
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $3"
+		args = append(args, tenant)
+	}
+
+	rows, err := s.db.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing webhooks by event: %w", err)
 	}
@@ -114,7 +143,7 @@ func (s *WebhookStore) ListByEventAndType(ctx context.Context, event string, req
 	for rows.Next() {
 		var w model.Webhook
 		var eventsJSON []byte
-		if err := rows.Scan(&w.ID, &w.URL, &eventsJSON, &w.Secret, &w.RequestType, &w.Active, &w.CreatedAt); err != nil {
+		if err := rows.Scan(&w.ID, &w.TenantID, &w.URL, &eventsJSON, &w.Secret, &w.RequestType, &w.Active, &w.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning webhook: %w", err)
 		}
 		if err := unmarshalJSON(eventsJSON, &w.Events); err != nil {
@@ -127,7 +156,17 @@ func (s *WebhookStore) ListByEventAndType(ctx context.Context, event string, req
 }
 
 func (s *WebhookStore) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.Pool.Exec(ctx, "DELETE FROM webhooks WHERE id = $1", id)
+	query := "DELETE FROM webhooks WHERE id = $1"
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $2"
+		_, err := s.db.Pool.Exec(ctx, query, id, tenant)
+		if err != nil {
+			return fmt.Errorf("deleting webhook: %w", err)
+		}
+		return nil
+	}
+	_, err := s.db.Pool.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("deleting webhook: %w", err)
 	}

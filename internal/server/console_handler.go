@@ -13,10 +13,11 @@ import (
 // ConsoleHandler handles admin console API endpoints for operator management.
 type ConsoleHandler struct {
 	operatorService *service.OperatorService
+	tenantService   *service.TenantService
 }
 
-func NewConsoleHandler(os *service.OperatorService) *ConsoleHandler {
-	return &ConsoleHandler{operatorService: os}
+func NewConsoleHandler(os *service.OperatorService, ts *service.TenantService) *ConsoleHandler {
+	return &ConsoleHandler{operatorService: os, tenantService: ts}
 }
 
 type setupBody struct {
@@ -234,6 +235,78 @@ func (h *ConsoleHandler) DeleteOperator(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to delete operator")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Tenant management ---
+
+type createTenantBody struct {
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+}
+
+// ListTenants returns all registered tenants.
+func (h *ConsoleHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
+	tenants, err := h.tenantService.List(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list tenants")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"data": tenants})
+}
+
+// CreateTenant registers a new tenant.
+func (h *ConsoleHandler) CreateTenant(w http.ResponseWriter, r *http.Request) {
+	var body createTenantBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if body.Slug == "" || body.Name == "" {
+		writeError(w, http.StatusBadRequest, "slug and name are required")
+		return
+	}
+
+	tenant, err := h.tenantService.Create(r.Context(), body.Slug, body.Name)
+	if err != nil {
+		if errors.Is(err, service.ErrTenantSlugInvalid) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrTenantSlugExists) {
+			writeError(w, http.StatusConflict, "a tenant with this slug already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to create tenant")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, tenant)
+}
+
+// DeleteTenant removes a tenant by ID.
+func (h *ConsoleHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid tenant ID")
+		return
+	}
+
+	if err := h.tenantService.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, service.ErrTenantNotFound) {
+			writeError(w, http.StatusNotFound, "tenant not found")
+			return
+		}
+		if errors.Is(err, service.ErrCannotDeleteDefault) {
+			writeError(w, http.StatusBadRequest, "cannot delete the default tenant")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to delete tenant")
 		return
 	}
 

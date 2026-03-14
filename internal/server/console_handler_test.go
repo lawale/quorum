@@ -29,7 +29,7 @@ func TestConsoleHandler_Setup_Success(t *testing.T) {
 		},
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"username":"admin","password":"password123","display_name":"Admin"}`
 	req := httptest.NewRequest("POST", "/api/v1/console/auth/setup", bytes.NewBufferString(body))
@@ -56,7 +56,7 @@ func TestConsoleHandler_Setup_AlreadyDone(t *testing.T) {
 		CountFunc: func(ctx context.Context) (int, error) { return 1, nil },
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"username":"admin","password":"password123"}`
 	req := httptest.NewRequest("POST", "/api/v1/console/auth/setup", bytes.NewBufferString(body))
@@ -72,7 +72,7 @@ func TestConsoleHandler_Setup_AlreadyDone(t *testing.T) {
 func TestConsoleHandler_Setup_MissingFields(t *testing.T) {
 	store := &testutil.MockOperatorStore{}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"username":"admin"}`
 	req := httptest.NewRequest("POST", "/api/v1/console/auth/setup", bytes.NewBufferString(body))
@@ -98,7 +98,7 @@ func TestConsoleHandler_Login_Success(t *testing.T) {
 		},
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"username":"admin","password":"password123"}`
 	req := httptest.NewRequest("POST", "/api/v1/console/auth/login", bytes.NewBufferString(body))
@@ -124,7 +124,7 @@ func TestConsoleHandler_Login_InvalidCredentials(t *testing.T) {
 		},
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"username":"nobody","password":"wrong"}`
 	req := httptest.NewRequest("POST", "/api/v1/console/auth/login", bytes.NewBufferString(body))
@@ -142,7 +142,7 @@ func TestConsoleHandler_NeedsSetup(t *testing.T) {
 		CountFunc: func(ctx context.Context) (int, error) { return 0, nil },
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/console/auth/status", nil)
 	rec := httptest.NewRecorder()
@@ -172,7 +172,7 @@ func TestConsoleHandler_Me(t *testing.T) {
 		},
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/console/me", nil)
 	ctx := context.WithValue(req.Context(), operatorIDCtxKey, opID)
@@ -189,7 +189,7 @@ func TestConsoleHandler_Me(t *testing.T) {
 func TestConsoleHandler_Me_Unauthenticated(t *testing.T) {
 	store := &testutil.MockOperatorStore{}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/console/me", nil)
 	rec := httptest.NewRecorder()
@@ -212,7 +212,7 @@ func TestConsoleHandler_CreateOperator_Success(t *testing.T) {
 		},
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"username":"newuser","password":"pass123","display_name":"New User"}`
 	req := httptest.NewRequest("POST", "/api/v1/console/operators", bytes.NewBufferString(body))
@@ -232,7 +232,7 @@ func TestConsoleHandler_CreateOperator_UsernameConflict(t *testing.T) {
 		},
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"username":"existing","password":"pass123"}`
 	req := httptest.NewRequest("POST", "/api/v1/console/operators", bytes.NewBufferString(body))
@@ -257,7 +257,7 @@ func TestConsoleHandler_DeleteOperator_Success(t *testing.T) {
 		DeleteFunc: func(ctx context.Context, id uuid.UUID) error { return nil },
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/console/operators/"+targetID.String(), nil)
 	ctx := context.WithValue(req.Context(), operatorIDCtxKey, callerID)
@@ -282,7 +282,7 @@ func TestConsoleHandler_DeleteOperator_CannotDeleteSelf(t *testing.T) {
 
 	store := &testutil.MockOperatorStore{}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	req := httptest.NewRequest("DELETE", "/api/v1/console/operators/"+selfID.String(), nil)
 	ctx := context.WithValue(req.Context(), operatorIDCtxKey, selfID)
@@ -311,7 +311,7 @@ func TestConsoleHandler_ListOperators(t *testing.T) {
 		},
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/console/operators", nil)
 	rec := httptest.NewRecorder()
@@ -346,7 +346,7 @@ func TestConsoleHandler_ChangePassword_Success(t *testing.T) {
 		UpdateFunc: func(ctx context.Context, op *model.Operator) error { return nil },
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"current_password":"old-pass","new_password":"new-pass"}`
 	req := httptest.NewRequest("PUT", "/api/v1/console/me/password", bytes.NewBufferString(body))
@@ -374,7 +374,7 @@ func TestConsoleHandler_ChangePassword_WrongCurrent(t *testing.T) {
 		},
 	}
 	svc := setupOperatorService(store)
-	handler := NewConsoleHandler(svc)
+	handler := NewConsoleHandler(svc, nil)
 
 	body := `{"current_password":"wrong-pass","new_password":"new-pass"}`
 	req := httptest.NewRequest("PUT", "/api/v1/console/me/password", bytes.NewBufferString(body))

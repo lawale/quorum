@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
@@ -71,12 +72,15 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 	for _, req := range expired {
 		req.Status = model.StatusExpired
 
+		// Inject the request's tenant into context so webhook lookup is scoped correctly
+		tenantCtx := auth.WithTenantID(ctx, req.TenantID)
+
 		if w.runInTx != nil && w.enqueueWebhooks != nil {
-			err := w.runInTx(ctx, func(txStores *store.Stores) error {
-				if err := txStores.Requests.UpdateStatus(ctx, req.ID, model.StatusExpired); err != nil {
+			err := w.runInTx(tenantCtx, func(txStores *store.Stores) error {
+				if err := txStores.Requests.UpdateStatus(tenantCtx, req.ID, model.StatusExpired); err != nil {
 					return err
 				}
-				return w.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, &req, nil)
+				return w.enqueueWebhooks(tenantCtx, txStores.Outbox, txStores.Webhooks, &req, nil)
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrStatusConflict) {
@@ -102,6 +106,7 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 
 		// Audit
 		log := &model.AuditLog{
+			TenantID:  req.TenantID,
 			RequestID: req.ID,
 			Action:    "expired",
 			ActorID:   "system",

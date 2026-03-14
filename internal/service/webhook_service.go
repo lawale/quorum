@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -24,6 +25,10 @@ func NewWebhookService(webhooks store.WebhookStore) *WebhookService {
 }
 
 func (s *WebhookService) Create(ctx context.Context, webhook *model.Webhook) error {
+	if webhook.TenantID == "" {
+		webhook.TenantID = auth.TenantIDFromContext(ctx)
+	}
+
 	if webhook.URL == "" {
 		return errors.New("webhook URL is required")
 	}

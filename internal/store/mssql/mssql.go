@@ -72,6 +72,7 @@ func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.St
 		Webhooks:  NewWebhookStore(db),
 		Audits:    NewAuditStore(db),
 		Operators: NewOperatorStore(db),
+		Tenants:   NewTenantStore(db),
 		Outbox:    NewOutboxStore(db),
 		Close:     db.Close,
 	}
@@ -91,6 +92,7 @@ func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.St
 			Webhooks:  NewWebhookStore(txDB),
 			Audits:    NewAuditStore(txDB),
 			Operators: NewOperatorStore(txDB),
+			Tenants:   NewTenantStore(txDB),
 			Outbox:    NewOutboxStore(txDB),
 		}
 

@@ -10,11 +10,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
 
-const requestColumns = `id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
+const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
 
 type RequestStore struct {
 	db *DB
@@ -27,11 +28,14 @@ func NewRequestStore(db *DB) *RequestStore {
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
 		INSERT INTO requests (` + requestColumns + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
 
 	now := time.Now().UTC()
 	if req.ID == uuid.Nil {
 		req.ID = uuid.New()
+	}
+	if req.TenantID == "" {
+		req.TenantID = auth.TenantIDFromContext(ctx)
 	}
 	req.CreatedAt = now
 	req.UpdatedAt = now
@@ -45,7 +49,7 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	}
 
 	_, err := s.db.Pool.Exec(ctx, query,
-		req.ID, req.IdempotencyKey, req.Type, req.Payload, req.Status,
+		req.ID, req.TenantID, req.IdempotencyKey, req.Type, req.Payload, req.Status,
 		req.MakerID, req.CallbackURL, eligibleJSON, req.Metadata, req.Fingerprint,
 		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
 	)
@@ -58,21 +62,44 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 
 func (s *RequestStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Request, error) {
 	query := `SELECT ` + requestColumns + ` FROM requests WHERE id = $1`
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $2"
+		return s.scanOne(ctx, query, id, tenant)
+	}
 	return s.scanOne(ctx, query, id)
 }
 
 func (s *RequestStore) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (*model.Request, error) {
-	query := `SELECT ` + requestColumns + ` FROM requests WHERE id = $1 FOR UPDATE`
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE id = $1`
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $2 FOR UPDATE"
+		return s.scanOne(ctx, query, id, tenant)
+	}
+	query += " FOR UPDATE"
 	return s.scanOne(ctx, query, id)
 }
 
 func (s *RequestStore) GetByIdempotencyKey(ctx context.Context, key string) (*model.Request, error) {
 	query := `SELECT ` + requestColumns + ` FROM requests WHERE idempotency_key = $1`
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $2"
+		return s.scanOne(ctx, query, key, tenant)
+	}
 	return s.scanOne(ctx, query, key)
 }
 
 func (s *RequestStore) FindPendingByFingerprint(ctx context.Context, reqType string, fingerprint string) (*model.Request, error) {
-	query := `SELECT ` + requestColumns + ` FROM requests WHERE type = $1 AND fingerprint = $2 AND status = 'pending' LIMIT 1`
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE type = $1 AND fingerprint = $2 AND status = 'pending'`
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " AND tenant_id = $3"
+		query += " LIMIT 1"
+		return s.scanOne(ctx, query, reqType, fingerprint, tenant)
+	}
+	query += " LIMIT 1"
 	return s.scanOne(ctx, query, reqType, fingerprint)
 }
 
@@ -80,6 +107,19 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 	var conditions []string
 	var args []any
 	argIdx := 1
+
+	// Tenant scoping: use explicit filter or fall back to context
+	tenantID := ""
+	if filter.TenantID != nil {
+		tenantID = *filter.TenantID
+	} else {
+		tenantID = auth.TenantIDFromContext(ctx)
+	}
+	if tenantID != "" {
+		conditions = append(conditions, fmt.Sprintf("tenant_id = $%d", argIdx))
+		args = append(args, tenantID)
+		argIdx++
+	}
 
 	if filter.Status != nil {
 		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
@@ -166,7 +206,7 @@ func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (
 	var eligibleJSON []byte
 
 	err := s.db.Pool.QueryRow(ctx, query, args...).Scan(
-		&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
+		&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
 		&req.MakerID, &req.CallbackURL, &eligibleJSON, &req.Metadata, &req.Fingerprint,
 		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 	)
@@ -200,7 +240,7 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 		var eligibleJSON []byte
 
 		if err := rows.Scan(
-			&req.ID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
+			&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
 			&req.MakerID, &req.CallbackURL, &eligibleJSON, &req.Metadata, &req.Fingerprint,
 			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 		); err != nil {

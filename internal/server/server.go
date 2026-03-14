@@ -24,6 +24,7 @@ type Server struct {
 	embedHandler    http.Handler
 	operatorService *service.OperatorService
 	auditStore      store.AuditStore
+	tenantService   *service.TenantService
 	authProvider    auth.Provider
 	consoleEnabled  bool
 	metrics         *metrics.Metrics
@@ -35,6 +36,7 @@ type Config struct {
 	RequestService  *service.RequestService
 	PolicyService   *service.PolicyService
 	WebhookService  *service.WebhookService
+	TenantService   *service.TenantService
 	OperatorService *service.OperatorService
 	AuditStore      store.AuditStore
 	AuthProvider    auth.Provider
@@ -53,6 +55,7 @@ func New(cfg Config) *Server {
 		policyHandler:   NewPolicyHandler(cfg.PolicyService),
 		webhookHandler:  NewWebhookHandler(cfg.WebhookService),
 		auditStore:      cfg.AuditStore,
+		tenantService:   cfg.TenantService,
 		authProvider:    cfg.AuthProvider,
 		consoleEnabled:  cfg.ConsoleEnabled,
 		consoleSPA:      cfg.ConsoleSPA,
@@ -64,7 +67,7 @@ func New(cfg Config) *Server {
 	}
 
 	if cfg.OperatorService != nil {
-		s.consoleHandler = NewConsoleHandler(cfg.OperatorService)
+		s.consoleHandler = NewConsoleHandler(cfg.OperatorService, cfg.TenantService)
 	}
 
 	s.setupRoutes()
@@ -121,27 +124,40 @@ func (s *Server) setupRoutes() {
 				r.Post("/operators", s.consoleHandler.CreateOperator)
 				r.Delete("/operators/{id}", s.consoleHandler.DeleteOperator)
 
+				// Tenant management
+				r.Get("/tenants", s.consoleHandler.ListTenants)
+				r.Post("/tenants", s.consoleHandler.CreateTenant)
+				r.Delete("/tenants/{id}", s.consoleHandler.DeleteTenant)
+
 				// Data endpoints — reuse existing handlers via JWT auth
-				r.Get("/policies", s.policyHandler.List)
-				r.Post("/policies", s.policyHandler.Create)
-				r.Get("/policies/{id}", s.policyHandler.Get)
-				r.Put("/policies/{id}", s.policyHandler.Update)
-				r.Delete("/policies/{id}", s.policyHandler.Delete)
+				// consoleTenantMiddleware injects optional ?tenant_id= into context
+				r.Group(func(r chi.Router) {
+					r.Use(consoleTenantMiddleware)
 
-				r.Get("/webhooks", s.webhookHandler.List)
-				r.Post("/webhooks", s.webhookHandler.Create)
-				r.Delete("/webhooks/{id}", s.webhookHandler.Delete)
+					r.Get("/policies", s.policyHandler.List)
+					r.Post("/policies", s.policyHandler.Create)
+					r.Get("/policies/{id}", s.policyHandler.Get)
+					r.Put("/policies/{id}", s.policyHandler.Update)
+					r.Delete("/policies/{id}", s.policyHandler.Delete)
 
-				r.Get("/requests", s.requestHandler.List)
-				r.Get("/requests/{id}", s.requestHandler.Get)
-				r.Get("/requests/{id}/audit", s.handleAudit)
+					r.Get("/webhooks", s.webhookHandler.List)
+					r.Post("/webhooks", s.webhookHandler.Create)
+					r.Delete("/webhooks/{id}", s.webhookHandler.Delete)
+
+					r.Get("/requests", s.requestHandler.List)
+					r.Get("/requests/{id}", s.requestHandler.Get)
+					r.Get("/requests/{id}/audit", s.handleAudit)
+				})
 			})
 		})
 	}
 
-	// API v1 — requires auth
+	// API v1 — requires auth + tenant validation
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(authMiddleware(s.authProvider))
+		if s.tenantService != nil {
+			r.Use(tenantValidationMiddleware(s.tenantService))
+		}
 
 		// Requests
 		r.Route("/requests", func(r chi.Router) {

@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
 
-const requestColumns = `id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
+const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
 
 type RequestStore struct {
 	db *DB
@@ -26,12 +27,13 @@ func NewRequestStore(db *DB) *RequestStore {
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
 		INSERT INTO [quorum].[requests] (` + requestColumns + `)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14)`
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15)`
 
 	now := time.Now().UTC()
 	if req.ID == uuid.Nil {
 		req.ID = uuid.New()
 	}
+	req.TenantID = auth.TenantIDFromContext(ctx)
 	req.CreatedAt = now
 	req.UpdatedAt = now
 	if req.Status == "" {
@@ -44,7 +46,7 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	}
 
 	_, err := s.db.Pool.ExecContext(ctx, query,
-		req.ID, req.IdempotencyKey, req.Type, string(req.Payload), req.Status,
+		req.ID, req.TenantID, req.IdempotencyKey, req.Type, string(req.Payload), req.Status,
 		req.MakerID, req.CallbackURL, nullableString(eligibleJSON), nullableString(req.Metadata), req.Fingerprint,
 		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
 	)
@@ -56,21 +58,41 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 }
 
 func (s *RequestStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+	tenantID := auth.TenantIDFromContext(ctx)
+	if tenantID != "" {
+		query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WHERE id = @p1 AND tenant_id = @p2`
+		return s.scanOne(ctx, query, id, tenantID)
+	}
 	query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WHERE id = @p1`
 	return s.scanOne(ctx, query, id)
 }
 
 func (s *RequestStore) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+	tenantID := auth.TenantIDFromContext(ctx)
+	if tenantID != "" {
+		query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WITH (UPDLOCK, ROWLOCK) WHERE id = @p1 AND tenant_id = @p2`
+		return s.scanOne(ctx, query, id, tenantID)
+	}
 	query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WITH (UPDLOCK, ROWLOCK) WHERE id = @p1`
 	return s.scanOne(ctx, query, id)
 }
 
 func (s *RequestStore) GetByIdempotencyKey(ctx context.Context, key string) (*model.Request, error) {
+	tenantID := auth.TenantIDFromContext(ctx)
+	if tenantID != "" {
+		query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WHERE idempotency_key = @p1 AND tenant_id = @p2`
+		return s.scanOne(ctx, query, key, tenantID)
+	}
 	query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WHERE idempotency_key = @p1`
 	return s.scanOne(ctx, query, key)
 }
 
 func (s *RequestStore) FindPendingByFingerprint(ctx context.Context, reqType string, fingerprint string) (*model.Request, error) {
+	tenantID := auth.TenantIDFromContext(ctx)
+	if tenantID != "" {
+		query := `SELECT TOP 1 ` + requestColumns + ` FROM [quorum].[requests] WHERE type = @p1 AND fingerprint = @p2 AND status = 'pending' AND tenant_id = @p3`
+		return s.scanOne(ctx, query, reqType, fingerprint, tenantID)
+	}
 	query := `SELECT TOP 1 ` + requestColumns + ` FROM [quorum].[requests] WHERE type = @p1 AND fingerprint = @p2 AND status = 'pending'`
 	return s.scanOne(ctx, query, reqType, fingerprint)
 }
@@ -79,6 +101,13 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 	var conditions []string
 	var args []any
 	argIdx := 1
+
+	tenantID := auth.TenantIDFromContext(ctx)
+	if tenantID != "" {
+		conditions = append(conditions, fmt.Sprintf("tenant_id = @p%d", argIdx))
+		args = append(args, tenantID)
+		argIdx++
+	}
 
 	if filter.Status != nil {
 		conditions = append(conditions, fmt.Sprintf("status = @p%d", argIdx))
@@ -176,7 +205,7 @@ func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (
 	var eligibleJSON, payload, metadata sql.NullString
 
 	err := s.db.Pool.QueryRowContext(ctx, query, args...).Scan(
-		&req.ID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
+		&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
 		&req.MakerID, &req.CallbackURL, &eligibleJSON, &metadata, &req.Fingerprint,
 		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 	)
@@ -216,7 +245,7 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 		var eligibleJSON, payload, metadata sql.NullString
 
 		if err := rows.Scan(
-			&req.ID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
+			&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
 			&req.MakerID, &req.CallbackURL, &eligibleJSON, &metadata, &req.Fingerprint,
 			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 		); err != nil {

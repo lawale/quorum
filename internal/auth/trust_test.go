@@ -6,10 +6,11 @@ import (
 )
 
 func TestTrustProvider_Authenticate_Success(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
 	r.Header.Set("X-User-Roles", "admin,manager")
+	r.Header.Set("X-Tenant-ID", "test-tenant")
 
 	id, err := p.Authenticate(r)
 	if err != nil {
@@ -21,11 +22,15 @@ func TestTrustProvider_Authenticate_Success(t *testing.T) {
 	if len(id.Roles) != 2 || id.Roles[0] != "admin" || id.Roles[1] != "manager" {
 		t.Errorf("Roles = %v, want [admin manager]", id.Roles)
 	}
+	if id.TenantID != "test-tenant" {
+		t.Errorf("TenantID = %q, want %q", id.TenantID, "test-tenant")
+	}
 }
 
 func TestTrustProvider_Authenticate_MissingUserID(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-Tenant-ID", "test-tenant")
 
 	_, err := p.Authenticate(r)
 	if err == nil {
@@ -33,10 +38,22 @@ func TestTrustProvider_Authenticate_MissingUserID(t *testing.T) {
 	}
 }
 
-func TestTrustProvider_Authenticate_NoRoles(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles")
+func TestTrustProvider_Authenticate_MissingTenantID(t *testing.T) {
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
+
+	_, err := p.Authenticate(r)
+	if err == nil {
+		t.Fatal("expected error for missing tenant ID header")
+	}
+}
+
+func TestTrustProvider_Authenticate_NoRoles(t *testing.T) {
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-User-ID", "user-123")
+	r.Header.Set("X-Tenant-ID", "test-tenant")
 
 	id, err := p.Authenticate(r)
 	if err != nil {
@@ -51,10 +68,11 @@ func TestTrustProvider_Authenticate_NoRoles(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_MultipleRoles(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
 	r.Header.Set("X-User-Roles", "admin, manager, viewer")
+	r.Header.Set("X-Tenant-ID", "test-tenant")
 
 	id, err := p.Authenticate(r)
 	if err != nil {
@@ -73,10 +91,11 @@ func TestTrustProvider_Authenticate_MultipleRoles(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_EmptyRoleEntries(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
 	r.Header.Set("X-User-Roles", "admin,,viewer,  ")
+	r.Header.Set("X-Tenant-ID", "test-tenant")
 
 	id, err := p.Authenticate(r)
 	if err != nil {
@@ -92,10 +111,11 @@ func TestTrustProvider_Authenticate_EmptyRoleEntries(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_CustomHeaders(t *testing.T) {
-	p := NewTrustProvider("X-Custom-User", "X-Custom-Roles")
+	p := NewTrustProvider("X-Custom-User", "X-Custom-Roles", "X-Custom-Tenant")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-Custom-User", "custom-user")
 	r.Header.Set("X-Custom-Roles", "role1")
+	r.Header.Set("X-Custom-Tenant", "custom-tenant")
 
 	id, err := p.Authenticate(r)
 	if err != nil {
@@ -106,5 +126,8 @@ func TestTrustProvider_Authenticate_CustomHeaders(t *testing.T) {
 	}
 	if len(id.Roles) != 1 || id.Roles[0] != "role1" {
 		t.Errorf("Roles = %v, want [role1]", id.Roles)
+	}
+	if id.TenantID != "custom-tenant" {
+		t.Errorf("TenantID = %q, want %q", id.TenantID, "custom-tenant")
 	}
 }

@@ -6,16 +6,17 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/display"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
 
 var (
-	ErrPolicyNotFound       = errors.New("policy not found")
-	ErrPolicyTypeConflict   = errors.New("a policy for this request type already exists")
-	ErrNoStages             = errors.New("policy must have at least one approval stage")
-	ErrInvalidStageIndex    = errors.New("stage indices must be sequential starting from 0")
+	ErrPolicyNotFound         = errors.New("policy not found")
+	ErrPolicyTypeConflict     = errors.New("a policy for this request type already exists")
+	ErrNoStages               = errors.New("policy must have at least one approval stage")
+	ErrInvalidStageIndex      = errors.New("stage indices must be sequential starting from 0")
 	ErrInvalidDisplayTemplate = errors.New("invalid display template")
 )
 
@@ -28,6 +29,10 @@ func NewPolicyService(policies store.PolicyStore) *PolicyService {
 }
 
 func (s *PolicyService) Create(ctx context.Context, policy *model.Policy) error {
+	if policy.TenantID == "" {
+		policy.TenantID = auth.TenantIDFromContext(ctx)
+	}
+
 	existing, err := s.policies.GetByRequestType(ctx, policy.RequestType)
 	if err != nil {
 		return fmt.Errorf("checking existing policy: %w", err)

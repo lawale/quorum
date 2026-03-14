@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 )
 
@@ -21,16 +22,17 @@ func NewAuditStore(db *DB) *AuditStore {
 
 func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 	query := `
-		INSERT INTO [quorum].[audit_logs] (id, request_id, action, actor_id, details, created_at)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6)`
+		INSERT INTO [quorum].[audit_logs] (id, tenant_id, request_id, action, actor_id, details, created_at)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)`
 
 	if log.ID == uuid.Nil {
 		log.ID = uuid.New()
 	}
+	log.TenantID = auth.TenantIDFromContext(ctx)
 	log.CreatedAt = time.Now().UTC()
 
 	_, err := s.db.Pool.ExecContext(ctx, query,
-		log.ID, log.RequestID, log.Action, log.ActorID, nullableString(log.Details), log.CreatedAt,
+		log.ID, log.TenantID, log.RequestID, log.Action, log.ActorID, nullableString(log.Details), log.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting audit log: %w", err)
@@ -41,7 +43,7 @@ func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 
 func (s *AuditStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.AuditLog, error) {
 	query := `
-		SELECT id, request_id, action, actor_id, details, created_at
+		SELECT id, tenant_id, request_id, action, actor_id, details, created_at
 		FROM [quorum].[audit_logs] WHERE request_id = @p1 ORDER BY created_at ASC`
 
 	rows, err := s.db.Pool.QueryContext(ctx, query, requestID)
@@ -54,7 +56,7 @@ func (s *AuditStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) (
 	for rows.Next() {
 		var l model.AuditLog
 		var details sql.NullString
-		if err := rows.Scan(&l.ID, &l.RequestID, &l.Action, &l.ActorID, &details, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TenantID, &l.RequestID, &l.Action, &l.ActorID, &details, &l.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning audit log: %w", err)
 		}
 		if details.Valid {
