@@ -14,4 +14,5 @@ CREATE TABLE [quorum].[webhook_outbox] (
     delivered_at DATETIMEOFFSET
 );
 
-CREATE INDEX idx_webhook_outbox_pending ON [quorum].[webhook_outbox] (next_retry_at) WHERE status = 'pending';
+CREATE INDEX idx_webhook_outbox_claimable ON [quorum].[webhook_outbox] (next_retry_at)
+    WHERE status IN ('pending', 'processing');

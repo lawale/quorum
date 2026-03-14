@@ -120,19 +120,27 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 }
 
 func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {
-	query := `UPDATE requests SET status = $1, updated_at = $2 WHERE id = $3`
-	_, err := s.db.Pool.Exec(ctx, query, status, time.Now().UTC(), id)
+	// CAS guard: only transition from 'pending'. Prevents duplicate terminal
+	// transitions when two checkers race to approve/reject the same request.
+	query := `UPDATE requests SET status = $1, updated_at = $2 WHERE id = $3 AND status = 'pending'`
+	tag, err := s.db.Pool.Exec(ctx, query, status, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("updating request status: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return store.ErrStatusConflict
 	}
 	return nil
 }
 
 func (s *RequestStore) UpdateStageAndStatus(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
-	query := `UPDATE requests SET current_stage = $1, status = $2, updated_at = $3 WHERE id = $4`
-	_, err := s.db.Pool.Exec(ctx, query, stage, status, time.Now().UTC(), id)
+	query := `UPDATE requests SET current_stage = $1, status = $2, updated_at = $3 WHERE id = $4 AND status = 'pending'`
+	tag, err := s.db.Pool.Exec(ctx, query, stage, status, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("updating request stage and status: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return store.ErrStatusConflict
 	}
 	return nil
 }

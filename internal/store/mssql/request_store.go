@@ -122,19 +122,35 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 }
 
 func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {
-	query := `UPDATE [quorum].[requests] SET status = @p1, updated_at = @p2 WHERE id = @p3`
-	_, err := s.db.Pool.ExecContext(ctx, query, status, time.Now().UTC(), id)
+	// CAS guard: only transition from 'pending'. Prevents duplicate terminal
+	// transitions when two checkers race to approve/reject the same request.
+	query := `UPDATE [quorum].[requests] SET status = @p1, updated_at = @p2 WHERE id = @p3 AND status = 'pending'`
+	result, err := s.db.Pool.ExecContext(ctx, query, status, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("updating request status: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return store.ErrStatusConflict
 	}
 	return nil
 }
 
 func (s *RequestStore) UpdateStageAndStatus(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
-	query := `UPDATE [quorum].[requests] SET current_stage = @p1, status = @p2, updated_at = @p3 WHERE id = @p4`
-	_, err := s.db.Pool.ExecContext(ctx, query, stage, status, time.Now().UTC(), id)
+	query := `UPDATE [quorum].[requests] SET current_stage = @p1, status = @p2, updated_at = @p3 WHERE id = @p4 AND status = 'pending'`
+	result, err := s.db.Pool.ExecContext(ctx, query, stage, status, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("updating request stage and status: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
+	if rows == 0 {
+		return store.ErrStatusConflict
 	}
 	return nil
 }

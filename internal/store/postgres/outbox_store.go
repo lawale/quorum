@@ -45,11 +45,15 @@ func (s *OutboxStore) CreateBatch(ctx context.Context, entries []model.OutboxEnt
 }
 
 func (s *OutboxStore) ClaimBatch(ctx context.Context, limit int) ([]model.OutboxEntry, error) {
+	// Claim pending entries and reclaim stale processing entries whose lease has
+	// expired (next_retry_at in the past). Setting next_retry_at to 5 minutes
+	// from now acts as a lease: if the worker crashes or MarkDelivered fails,
+	// the entry becomes eligible for reclaim after the lease expires.
 	query := `UPDATE webhook_outbox
-		SET status = 'processing'
+		SET status = 'processing', next_retry_at = NOW() + INTERVAL '5 minutes'
 		WHERE id IN (
 			SELECT id FROM webhook_outbox
-			WHERE status = 'pending' AND next_retry_at <= NOW()
+			WHERE (status = 'pending' OR status = 'processing') AND next_retry_at <= NOW()
 			ORDER BY created_at ASC
 			LIMIT $1
 			FOR UPDATE SKIP LOCKED

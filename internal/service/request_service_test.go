@@ -1113,6 +1113,97 @@ func TestReject_MultiStage_StageRejection_RejectsEntireRequest(t *testing.T) {
 	}
 }
 
+func TestApprove_ConcurrentTerminal_ReturnsNotPending(t *testing.T) {
+	req := testutil.NewRequest()
+	policy := testutil.NewPolicy() // 1 stage, 1 required
+	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
+
+	// Simulate CAS failure: UpdateStatus returns ErrStatusConflict
+	// (another checker already transitioned the request)
+	requestStore.UpdateStatusFunc = func(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {
+		return store.ErrStatusConflict
+	}
+
+	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
+	svc.SetWebhookDispatch(
+		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			return fn(&store.Stores{
+				Requests:  requestStore,
+				Approvals: approvalStore,
+				Outbox:    &testutil.MockOutboxStore{},
+				Webhooks:  &testutil.MockWebhookStore{},
+			})
+		},
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+			return nil
+		},
+		func() {},
+	)
+
+	_, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
+	if !errors.Is(err, ErrRequestNotPending) {
+		t.Fatalf("expected ErrRequestNotPending on CAS conflict, got: %v", err)
+	}
+}
+
+func TestApprove_StageAdvance_Atomic(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.CurrentStage = 0
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			{Index: 1, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+		}
+	})
+	_, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
+
+	svc := newTestRequestService(&testutil.MockRequestStore{
+		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+			return req, nil
+		},
+	}, approvalStore, policyStore, auditStore, nil)
+
+	var txApprovalCreated, txStageUpdated bool
+	svc.SetWebhookDispatch(
+		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			txStores := &store.Stores{
+				Requests: &testutil.MockRequestStore{
+					UpdateStageAndStatusFunc: func(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
+						txStageUpdated = true
+						return nil
+					},
+				},
+				Approvals: &testutil.MockApprovalStore{
+					CreateFunc: func(ctx context.Context, approval *model.Approval) error {
+						txApprovalCreated = true
+						return nil
+					},
+				},
+			}
+			return fn(txStores)
+		},
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+			return nil
+		},
+		func() {},
+	)
+
+	result, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != model.StatusPending {
+		t.Errorf("status = %v, want pending", result.Status)
+	}
+	if !txApprovalCreated {
+		t.Error("expected approval to be created inside transaction")
+	}
+	if !txStageUpdated {
+		t.Error("expected stage to be updated inside transaction")
+	}
+}
+
 func TestApprove_MultiStage_PerStageRoleValidation(t *testing.T) {
 	req := testutil.NewRequest(func(r *model.Request) {
 		r.CurrentStage = 1

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -78,6 +79,10 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 				return w.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, &req, nil)
 			})
 			if err != nil {
+				if errors.Is(err, store.ErrStatusConflict) {
+					slog.Debug("request already resolved, skipping expiry", "request_id", req.ID)
+					continue
+				}
 				slog.Error("failed to expire request", "error", err, "request_id", req.ID)
 				continue
 			}
@@ -86,6 +91,10 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 			}
 		} else {
 			if err := w.requests.UpdateStatus(ctx, req.ID, model.StatusExpired); err != nil {
+				if errors.Is(err, store.ErrStatusConflict) {
+					slog.Debug("request already resolved, skipping expiry", "request_id", req.ID)
+					continue
+				}
 				slog.Error("failed to expire request", "error", err, "request_id", req.ID)
 				continue
 			}

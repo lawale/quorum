@@ -2,11 +2,17 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
 )
+
+// ErrStatusConflict is returned by UpdateStatus / UpdateStageAndStatus when
+// the request is no longer in 'pending' status. This acts as a compare-and-set
+// guard, preventing double terminal transitions from concurrent approvers.
+var ErrStatusConflict = errors.New("request status has already changed")
 
 type RequestFilter struct {
 	Status  *model.RequestStatus
