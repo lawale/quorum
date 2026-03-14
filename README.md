@@ -15,7 +15,7 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat&logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![Svelte](https://img.shields.io/badge/Svelte-FF3E00?style=flat&logo=svelte&logoColor=white)](https://svelte.dev/)
 
-[Quick Start](#quick-start) • [Full Stack Local Setup](#running-the-full-stack-locally) • [Key Features](#-key-features) • [Why Quorum?](#-why-quorum) • [Documentation](#documentation) • [Community & Support](#-community--support)
+[Quick Start](#quick-start) • [Full Stack Local Setup](#running-the-full-stack-locally) • [Demo & Sample Apps](#demo--sample-apps) • [Key Features](#-key-features) • [Why Quorum?](#-why-quorum) • [Documentation](#documentation) • [Community & Support](#-community--support)
 
 ---
 
@@ -619,6 +619,20 @@ To start only the database (useful during local development):
 docker compose up -d postgres
 ```
 
+**Full demo with sample apps:**
+
+```bash
+docker compose --profile demo up
+```
+
+This starts Quorum, PostgreSQL, runs migrations, seeds sample data, and launches three sample consumer applications. See [Demo & Sample Apps](#demo--sample-apps) for details.
+
+**Seed data only (no sample apps):**
+
+```bash
+docker compose --profile seed up
+```
+
 **Manual Docker builds:**
 
 ```bash
@@ -634,6 +648,55 @@ docker build -f Dockerfile.all -t quorum-all .
 # Run
 docker run -p 8080:8080 -v /path/to/config.yaml:/etc/quorum/config.yaml quorum-all
 ```
+
+---
+
+## Demo & Sample Apps
+
+### Seed Data
+
+Quorum ships with a seed script that populates a fresh instance with sample policies, requests, and approvals:
+
+```bash
+# Against a running Quorum server
+make seed
+
+# Or via Docker Compose
+docker compose --profile seed up
+```
+
+The seed script creates:
+- **4 policies**: Expense Approval, Wire Transfer, System Access, Account Closure
+- **6 requests** by different makers (alice, bob, charlie, dave, eve, frank)
+- **Sample approvals**: 2 approved, 1 advanced to stage 2, 3 pending
+- **1 webhook** (httpbin.org for testing)
+- **Console admin**: `admin` / `admin123`
+
+### Sample Consumer Applications
+
+Three example apps in `examples/` demonstrate how real applications integrate with Quorum, each using a different tech stack:
+
+| App | Port | Tech | Scenario |
+|-----|------|------|----------|
+| [Banking](examples/banking/) | [localhost:3001](http://localhost:3001) | Go + html/template | Multi-stage wire transfer approval with webhook callbacks |
+| [Expense Tracker](examples/expenses/) | [localhost:3002](http://localhost:3002) | Node.js + Express | Single-stage expense approval with status polling |
+| [Access Portal](examples/access-portal/) | [localhost:3003](http://localhost:3003) | Python + Flask | Threshold-based security review (2-of-3 voting) |
+
+**Run the full demo:**
+
+```bash
+docker compose --profile demo up
+```
+
+This starts everything: PostgreSQL, Quorum with the admin console, seed data, and all three sample apps. Each app self-registers its policy with Quorum on startup.
+
+**What each app demonstrates:**
+
+- **Banking**: Webhook-driven flow — transfers execute automatically when Quorum sends an approved webhook with HMAC signature verification
+- **Expense Tracker**: Polling-based flow — the detail page fetches the latest status from Quorum on each page load
+- **Access Portal**: Threshold voting — 2 of 3 security reviewers must approve; not every rejection is fatal
+
+Visit the [Quorum console](http://localhost:8080/console/) (admin / admin123) to approve or reject requests created from the sample apps.
 
 ---
 
@@ -677,6 +740,8 @@ make build-all
 | `migrate-down` | Roll back one PostgreSQL migration |
 | `docker-up` | Start all services with docker compose |
 | `docker-down` | Stop all docker compose services |
+| `seed` | Run the seed script against a running server |
+| `demo` | Start the full demo with sample apps via docker compose |
 | `console-dev` | Start the console Svelte dev server |
 | `embed-dev` | Start the widgets Svelte dev server |
 | `clean` | Remove build artifacts |
@@ -708,6 +773,12 @@ widgets/
 migrations/
   postgres/          — PostgreSQL migration files
   mssql/             — SQL Server migration files
+examples/
+  banking/           — Go sample app (wire transfers)
+  expenses/          — Node.js sample app (expense approval)
+  access-portal/     — Python sample app (access requests)
+scripts/
+  seed.sh            — Sample data seeder
 ```
 
 ---
