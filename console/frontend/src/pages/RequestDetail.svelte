@@ -5,6 +5,7 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import type { Request, AuditLog } from '../lib/types';
+  import { getDisplay } from '../lib/types';
 
   let { id }: { id: string } = $props();
 
@@ -12,6 +13,7 @@
   let auditLogs: AuditLog[] = $state([]);
   let isLoading = $state(true);
   let activeTab: 'details' | 'payload' | 'audit' = $state('details');
+  let showRawPayload = $state(false);
 
   $effect(() => {
     loadRequest(id);
@@ -145,8 +147,48 @@
         {/if}
       </div>
     {:else if activeTab === 'payload'}
+      {@const displayData = getDisplay(req.metadata)}
       <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
-        <pre class="bg-gray-50 rounded-md p-4 text-sm font-mono text-gray-800 overflow-x-auto">{formatJson(req.payload)}</pre>
+        {#if displayData && !showRawPayload}
+          {#if displayData.title}
+            <h3 class="text-base font-semibold text-gray-900 mb-4">{displayData.title}</h3>
+          {/if}
+          <div class="space-y-2">
+            {#each displayData.fields as field}
+              <div class="flex items-baseline gap-3">
+                <span class="text-sm text-gray-500 min-w-[140px] flex-shrink-0">{field.label}</span>
+                <span class="text-sm text-gray-900">{field.value}</span>
+              </div>
+            {/each}
+          </div>
+          {#if displayData.items && displayData.items.length > 0}
+            <div class="mt-4 space-y-2">
+              {#each displayData.items as item}
+                <div class="bg-gray-50 border border-gray-200 rounded-md p-3">
+                  <p class="text-sm font-semibold text-gray-900 mb-1">{item.title}</p>
+                  {#each item.fields as field}
+                    <div class="flex items-baseline gap-3 pl-2">
+                      <span class="text-xs text-gray-500 min-w-[120px] flex-shrink-0">{field.label}</span>
+                      <span class="text-sm text-gray-900">{field.value}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/each}
+            </div>
+          {/if}
+          <button
+            onclick={() => showRawPayload = true}
+            class="mt-4 text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded px-2 py-1"
+          >Show raw payload</button>
+        {:else}
+          <pre class="bg-gray-50 rounded-md p-4 text-sm font-mono text-gray-800 overflow-x-auto">{formatJson(req.payload)}</pre>
+          {#if displayData}
+            <button
+              onclick={() => showRawPayload = false}
+              class="mt-4 text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded px-2 py-1"
+            >Show formatted view</button>
+          {/if}
+        {/if}
       </div>
     {:else if activeTab === 'audit'}
       {#if auditLogs.length === 0}

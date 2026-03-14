@@ -100,3 +100,28 @@ export interface SetupStatusResponse {
 export interface ErrorResponse {
   error: string;
 }
+
+// --- Display ---
+
+export interface ResolvedField {
+  label: string;
+  value: string;
+}
+
+export interface ResolvedItem {
+  title: string;
+  fields: ResolvedField[];
+}
+
+export interface ResolvedDisplay {
+  title?: string;
+  fields: ResolvedField[];
+  items?: ResolvedItem[];
+}
+
+export function getDisplay(metadata?: Record<string, unknown>): ResolvedDisplay | null {
+  if (!metadata || !metadata.display) return null;
+  const display = metadata.display as Record<string, unknown>;
+  if (!display.fields || !Array.isArray(display.fields)) return null;
+  return display as unknown as ResolvedDisplay;
+}

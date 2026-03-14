@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/display"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
@@ -110,6 +111,9 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 		expiresAt := time.Now().UTC().Add(*policy.AutoExpireDuration)
 		req.ExpiresAt = &expiresAt
 	}
+
+	// Resolve display template if not already provided by the consumer
+	resolveDisplayTemplate(req, policy)
 
 	// Start at stage 0
 	req.CurrentStage = 0
@@ -450,4 +454,46 @@ func validateCheckerRoles(stage *model.ApprovalStage, checkerRoles []string) err
 	}
 
 	return ErrInvalidCheckerRole
+}
+
+// resolveDisplayTemplate resolves the policy's display template against the request
+// payload and merges the result into metadata.display. If the consumer already
+// provided metadata.display (override), or the policy has no template, this is a no-op.
+func resolveDisplayTemplate(req *model.Request, policy *model.Policy) {
+	if len(policy.DisplayTemplate) == 0 {
+		return
+	}
+
+	// Check if consumer already provided metadata.display (override)
+	if len(req.Metadata) > 0 {
+		var meta map[string]any
+		if err := json.Unmarshal(req.Metadata, &meta); err == nil {
+			if _, ok := meta["display"]; ok {
+				return // consumer override — keep it
+			}
+		}
+	}
+
+	resolved, err := display.Resolve(policy.DisplayTemplate, req.Payload)
+	if err != nil || resolved == nil {
+		return // resolution failed — degrade gracefully, don't block request creation
+	}
+
+	// Merge resolved display into metadata
+	var meta map[string]json.RawMessage
+	if len(req.Metadata) > 0 {
+		if err := json.Unmarshal(req.Metadata, &meta); err != nil {
+			meta = make(map[string]json.RawMessage)
+		}
+	} else {
+		meta = make(map[string]json.RawMessage)
+	}
+
+	meta["display"] = resolved
+
+	merged, err := json.Marshal(meta)
+	if err != nil {
+		return
+	}
+	req.Metadata = merged
 }

@@ -15,4 +15,7 @@ export type {
   AuditLog,
   PaginatedResponse,
   ListResponse,
+  ResolvedField,
+  ResolvedItem,
+  ResolvedDisplay,
 } from './lib/types';

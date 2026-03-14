@@ -11,7 +11,7 @@ import (
 	"github.com/lawale/quorum/internal/model"
 )
 
-const policyColumns = `id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, created_at, updated_at`
+const policyColumns = `id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at`
 
 type PolicyStore struct {
 	db *DB
@@ -24,7 +24,7 @@ func NewPolicyStore(db *DB) *PolicyStore {
 func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	query := `
 		INSERT INTO [quorum].[policies] (` + policyColumns + `)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9)`
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10)`
 
 	now := time.Now().UTC()
 	if policy.ID == uuid.Nil {
@@ -51,7 +51,7 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 
 	_, err = s.db.Pool.ExecContext(ctx, query,
 		policy.ID, policy.Name, policy.RequestType, string(stagesJSON),
-		nullableString(identityFieldsJSON), policy.PermissionCheckURL, autoExpire, policy.CreatedAt, policy.UpdatedAt,
+		nullableString(identityFieldsJSON), policy.PermissionCheckURL, autoExpire, nullableString(policy.DisplayTemplate), policy.CreatedAt, policy.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting policy: %w", err)
@@ -92,8 +92,8 @@ func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
 func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 	query := `
 		UPDATE [quorum].[policies] SET name = @p1, stages = @p2, identity_fields = @p3,
-		permission_check_url = @p4, auto_expire_duration = @p5, updated_at = @p6
-		WHERE id = @p7`
+		permission_check_url = @p4, auto_expire_duration = @p5, display_template = @p6, updated_at = @p7
+		WHERE id = @p8`
 
 	policy.UpdatedAt = time.Now().UTC()
 
@@ -115,7 +115,7 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 
 	_, err = s.db.Pool.ExecContext(ctx, query,
 		policy.Name, string(stagesJSON), nullableString(identityFieldsJSON),
-		policy.PermissionCheckURL, autoExpire, policy.UpdatedAt, policy.ID,
+		policy.PermissionCheckURL, autoExpire, nullableString(policy.DisplayTemplate), policy.UpdatedAt, policy.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating policy: %w", err)
@@ -146,12 +146,12 @@ func (s *PolicyStore) scanPolicy(ctx context.Context, query string, args ...any)
 
 func (s *PolicyStore) scanSingleRow(row *sql.Row) (*model.Policy, error) {
 	p := &model.Policy{}
-	var stagesJSON, identityFieldsJSON sql.NullString
+	var stagesJSON, identityFieldsJSON, displayTemplate sql.NullString
 	var autoExpire *string
 
 	err := row.Scan(
 		&p.ID, &p.Name, &p.RequestType, &stagesJSON,
-		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -167,6 +167,9 @@ func (s *PolicyStore) scanSingleRow(row *sql.Row) (*model.Policy, error) {
 			return nil, fmt.Errorf("unmarshaling identity fields: %w", err)
 		}
 	}
+	if displayTemplate.Valid {
+		p.DisplayTemplate = json.RawMessage(displayTemplate.String)
+	}
 	if autoExpire != nil {
 		d, err := time.ParseDuration(*autoExpire)
 		if err != nil {
@@ -180,12 +183,12 @@ func (s *PolicyStore) scanSingleRow(row *sql.Row) (*model.Policy, error) {
 
 func (s *PolicyStore) scanPolicyRow(rows *sql.Rows) (*model.Policy, error) {
 	p := &model.Policy{}
-	var stagesJSON, identityFieldsJSON sql.NullString
+	var stagesJSON, identityFieldsJSON, displayTemplate sql.NullString
 	var autoExpire *string
 
 	err := rows.Scan(
 		&p.ID, &p.Name, &p.RequestType, &stagesJSON,
-		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scanning policy: %w", err)
@@ -200,6 +203,9 @@ func (s *PolicyStore) scanPolicyRow(rows *sql.Rows) (*model.Policy, error) {
 		if err := json.Unmarshal([]byte(identityFieldsJSON.String), &p.IdentityFields); err != nil {
 			return nil, fmt.Errorf("unmarshaling identity fields: %w", err)
 		}
+	}
+	if displayTemplate.Valid {
+		p.DisplayTemplate = json.RawMessage(displayTemplate.String)
 	}
 	if autoExpire != nil {
 		d, err := time.ParseDuration(*autoExpire)

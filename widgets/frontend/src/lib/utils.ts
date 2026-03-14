@@ -1,4 +1,4 @@
-import type { RequestStatus } from './types';
+import type { RequestStatus, ResolvedDisplay } from './types';
 
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleString();
@@ -35,3 +35,16 @@ export const ACTION_COLORS: Record<string, string> = {
   expired: '#f97316',
   stage_advanced: '#8b5cf6',
 };
+
+/**
+ * Extracts the resolved display data from request metadata, if present.
+ * Returns null if metadata is missing or has no display key.
+ */
+export function getDisplay(metadata?: Record<string, unknown>): ResolvedDisplay | null {
+  if (!metadata || !metadata.display) return null;
+
+  const display = metadata.display as Record<string, unknown>;
+  if (!display.fields || !Array.isArray(display.fields)) return null;
+
+  return display as unknown as ResolvedDisplay;
+}

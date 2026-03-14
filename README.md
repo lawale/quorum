@@ -161,9 +161,19 @@ curl -X POST http://localhost:8080/api/v1/policies \
       }
     ],
     "identity_fields": ["source_account_id"],
-    "auto_expire_duration": "24h"
+    "auto_expire_duration": "24h",
+    "display_template": {
+      "title": "Wire Transfer - {{amount | currency}}",
+      "fields": [
+        { "label": "From Account", "path": "source_account_id" },
+        { "label": "Amount", "path": "amount", "format": "currency" },
+        { "label": "Destination", "path": "destination" }
+      ]
+    }
   }'
 ```
+
+The `display_template` tells Quorum how to render the payload for reviewers. See [Display Templates](#display-templates) for details.
 
 ### 2. Maker Creates a Request
 
@@ -450,6 +460,47 @@ const request = await client.getRequest('uuid-here');
 
 **Events:** Widgets dispatch custom events you can listen for: `quorum:approved`, `quorum:rejected`, `quorum:select`, and `quorum:error`.
 
+### Display Templates
+
+By default, reviewers see the raw JSON payload — which often contains system IDs and machine-oriented data. Display templates let you define how a payload should be presented to human reviewers.
+
+**How it works:**
+
+1. Define a `display_template` on your policy with field labels, paths into the payload, and optional formatters.
+2. When a request is created, Quorum resolves the template against the payload and stores the result in `metadata.display`.
+3. The widgets and console render the resolved fields as a clean label-value view instead of raw JSON.
+
+Templates are resolved once at creation time, so editing a policy template only affects future requests.
+
+**Template format:**
+
+```json
+{
+  "title": "Wire Transfer - {{amount | currency}}",
+  "fields": [
+    { "label": "From Account", "path": "source_account_id" },
+    { "label": "Amount", "path": "amount", "format": "currency" },
+    { "label": "Destination", "path": "destination" }
+  ],
+  "items": {
+    "path": "profiles",
+    "label_path": "name",
+    "fields": [
+      { "label": "Email", "path": "email" },
+      { "label": "Role", "path": "role" }
+    ]
+  }
+}
+```
+
+- **`title`** — interpolated string using `{{path}}` or `{{path | format}}` placeholders
+- **`fields`** — top-level label-value pairs extracted from the payload via dot-notation paths
+- **`items`** — optional repeating section for batch/list payloads (e.g., multiple profiles in one request)
+- **Built-in formatters:** `currency` ($1,234.56), `date` (Mar 14, 2026), `number` (1,000,000), `truncate` (50 chars max)
+- **Missing values** fall back to `"-"`
+
+**Consumer override:** If the request already includes `metadata.display` at creation time, it takes precedence over the policy template. This lets consumers provide custom display data for edge cases.
+
 ### Docker
 
 ```bash
@@ -513,6 +564,7 @@ cmd/server/          — Entry point
 internal/
   auth/              — Authentication providers and permission checker
   config/            — Configuration loading
+  display/           — Display template resolution
   metrics/           — Prometheus metrics
   model/             — Domain models
   server/            — HTTP handlers and routing

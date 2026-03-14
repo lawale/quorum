@@ -3,7 +3,8 @@
 <script lang="ts">
   import { createClient, ApiError } from '../lib/api';
   import type { Request, Policy, Approval, AuditLog } from '../lib/types';
-  import { formatDate, timeAgo } from '../lib/utils';
+  import { formatDate, timeAgo, getDisplay } from '../lib/utils';
+  import type { ResolvedDisplay } from '../lib/types';
   import StatusBadge from './internal/StatusBadge.svelte';
   import StageBar from './internal/StageBar.svelte';
   import AuditTimeline from './internal/AuditTimeline.svelte';
@@ -31,6 +32,7 @@
   let actionLoading = $state(false);
   let comment = $state('');
   let activeTab: 'details' | 'payload' | 'audit' = $state('details');
+  let showRawPayload = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | undefined;
 
   function getClient() {
@@ -164,7 +166,43 @@
           {/if}
         </div>
       {:else if activeTab === 'payload'}
-        <pre class="payload">{JSON.stringify(req.payload, null, 2)}</pre>
+        {@const displayData = getDisplay(req.metadata)}
+        {#if displayData && !showRawPayload}
+          <div class="display-view">
+            {#if displayData.title}
+              <h3 class="display-title">{displayData.title}</h3>
+            {/if}
+            <div class="display-fields">
+              {#each displayData.fields as field}
+                <div class="display-row">
+                  <span class="display-label">{field.label}</span>
+                  <span class="display-value">{field.value}</span>
+                </div>
+              {/each}
+            </div>
+            {#if displayData.items && displayData.items.length > 0}
+              <div class="display-items">
+                {#each displayData.items as item}
+                  <div class="display-item">
+                    <div class="display-item-title">{item.title}</div>
+                    {#each item.fields as field}
+                      <div class="display-row display-row-sm">
+                        <span class="display-label">{field.label}</span>
+                        <span class="display-value">{field.value}</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            <button class="raw-toggle" onclick={() => showRawPayload = true}>Show raw payload</button>
+          </div>
+        {:else}
+          <pre class="payload">{JSON.stringify(req.payload, null, 2)}</pre>
+          {#if displayData}
+            <button class="raw-toggle" onclick={() => showRawPayload = false}>Show formatted view</button>
+          {/if}
+        {/if}
       {:else if activeTab === 'audit'}
         <AuditTimeline logs={auditLogs} />
       {/if}
@@ -304,4 +342,36 @@
   .btn-approve:hover:not(:disabled) { background: #059669; }
   .btn-reject { background: #ef4444; color: #fff; }
   .btn-reject:hover:not(:disabled) { background: #dc2626; }
+
+  .display-view { }
+  .display-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 12px 0;
+  }
+  .display-fields { display: flex; flex-direction: column; gap: 6px; }
+  .display-row { display: flex; align-items: baseline; gap: 8px; }
+  .display-row-sm { padding-left: 8px; }
+  .display-label { font-size: 12px; color: #9ca3af; min-width: 120px; flex-shrink: 0; }
+  .display-value { font-size: 13px; color: #374151; }
+  .display-items { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .display-item {
+    padding: 8px 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+  }
+  .display-item-title { font-size: 13px; font-weight: 600; color: #111827; margin-bottom: 4px; }
+  .raw-toggle {
+    margin-top: 10px;
+    padding: 4px 10px;
+    font-size: 11px;
+    background: none;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    color: #6b7280;
+    cursor: pointer;
+  }
+  .raw-toggle:hover { background: #f3f4f6; color: #374151; }
 </style>

@@ -3,7 +3,7 @@
 <script lang="ts">
   import { createClient, ApiError } from '../lib/api';
   import type { Request } from '../lib/types';
-  import { timeAgo } from '../lib/utils';
+  import { timeAgo, getDisplay } from '../lib/utils';
   import StatusBadge from './internal/StatusBadge.svelte';
 
   let {
@@ -105,7 +105,7 @@
       <tbody>
         {#each requests as req}
           <tr class="row" onclick={() => selectRequest(req)}>
-            <td class="type-cell">{req.type}</td>
+            <td class="type-cell">{getDisplay(req.metadata)?.title ?? req.type}</td>
             <td><StatusBadge status={req.status} /></td>
             <td class="maker-cell">{req.maker_id}</td>
             <td class="stage-cell">{req.current_stage + 1}</td>

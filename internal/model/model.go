@@ -80,6 +80,7 @@ type Policy struct {
 	IdentityFields     []string        `json:"identity_fields,omitempty"`
 	PermissionCheckURL *string         `json:"permission_check_url,omitempty"`
 	AutoExpireDuration *time.Duration  `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate    json.RawMessage `json:"display_template,omitempty"`
 	CreatedAt          time.Time       `json:"created_at"`
 	UpdatedAt          time.Time       `json:"updated_at"`
 }

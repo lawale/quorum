@@ -30,12 +30,13 @@ type stageBody struct {
 }
 
 type createPolicyBody struct {
-	Name               string      `json:"name"`
-	RequestType        string      `json:"request_type"`
-	Stages             []stageBody `json:"stages"`
-	IdentityFields     []string    `json:"identity_fields,omitempty"`
-	PermissionCheckURL *string     `json:"permission_check_url,omitempty"`
-	AutoExpireDuration string      `json:"auto_expire_duration,omitempty"`
+	Name               string          `json:"name"`
+	RequestType        string          `json:"request_type"`
+	Stages             []stageBody     `json:"stages"`
+	IdentityFields     []string        `json:"identity_fields,omitempty"`
+	PermissionCheckURL *string         `json:"permission_check_url,omitempty"`
+	AutoExpireDuration string          `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate    json.RawMessage `json:"display_template,omitempty"`
 }
 
 func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -76,6 +77,7 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Stages:             stages,
 		IdentityFields:     body.IdentityFields,
 		PermissionCheckURL: body.PermissionCheckURL,
+		DisplayTemplate:    body.DisplayTemplate,
 	}
 
 	if body.AutoExpireDuration != "" {
@@ -134,11 +136,12 @@ func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 type updatePolicyBody struct {
-	Name               string      `json:"name"`
-	Stages             []stageBody `json:"stages,omitempty"`
-	IdentityFields     []string    `json:"identity_fields,omitempty"`
-	PermissionCheckURL *string     `json:"permission_check_url,omitempty"`
-	AutoExpireDuration string      `json:"auto_expire_duration,omitempty"`
+	Name               string          `json:"name"`
+	Stages             []stageBody     `json:"stages,omitempty"`
+	IdentityFields     []string        `json:"identity_fields,omitempty"`
+	PermissionCheckURL *string         `json:"permission_check_url,omitempty"`
+	AutoExpireDuration string          `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate    json.RawMessage `json:"display_template,omitempty"`
 }
 
 func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -194,6 +197,9 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing.AutoExpireDuration = &d
+	}
+	if body.DisplayTemplate != nil {
+		existing.DisplayTemplate = body.DisplayTemplate
 	}
 
 	if err := h.policyService.Update(r.Context(), existing); err != nil {

@@ -66,3 +66,19 @@ export interface PaginatedResponse<T> {
 export interface ListResponse<T> {
   data: T[];
 }
+
+export interface ResolvedField {
+  label: string;
+  value: string;
+}
+
+export interface ResolvedItem {
+  title: string;
+  fields: ResolvedField[];
+}
+
+export interface ResolvedDisplay {
+  title?: string;
+  fields: ResolvedField[];
+  items?: ResolvedItem[];
+}
