@@ -1,0 +1,119 @@
+{% extends "layout.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="sm:flex sm:items-center sm:justify-between mb-8">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">Access Requests</h1>
+        <p class="mt-1 text-sm text-gray-500">Manage system access requests requiring security team approval.</p>
+    </div>
+    <div class="mt-4 sm:mt-0">
+        <a href="/request/new"
+           class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors">
+            <svg class="-ml-0.5 mr-1.5 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
+            </svg>
+            New Request
+        </a>
+    </div>
+</div>
+
+{% if requests %}
+<div class="overflow-hidden bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg">
+    <table class="min-w-full divide-y divide-gray-300">
+        <thead class="bg-gray-50">
+            <tr>
+                <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Requester</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">System</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Access Level</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Submitted</th>
+                <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
+                    <span class="sr-only">View</span>
+                </th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 bg-white">
+            {% for req in requests %}
+            <tr class="hover:bg-gray-50 transition-colors">
+                <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6">
+                    <div class="flex items-center">
+                        <div class="h-8 w-8 flex-shrink-0 rounded-full bg-brand-100 flex items-center justify-center">
+                            <span class="text-xs font-medium text-brand-700">{{ req.requester[:2]|upper }}</span>
+                        </div>
+                        <div class="ml-3">
+                            <div class="font-medium text-gray-900">{{ req.requester }}</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-700">{{ req.system_name }}</td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm">
+                    {% if req.access_level == 'admin' %}
+                    <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20">
+                        {{ req.access_level }}
+                    </span>
+                    {% elif req.access_level == 'read-write' %}
+                    <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                        {{ req.access_level }}
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center rounded-full bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-inset ring-gray-600/20">
+                        {{ req.access_level }}
+                    </span>
+                    {% endif %}
+                </td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm">
+                    {% if req.status == 'pending' %}
+                    <span class="inline-flex items-center gap-x-1.5 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+                        <svg class="h-1.5 w-1.5 fill-blue-500" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" /></svg>
+                        Pending Review
+                    </span>
+                    {% elif req.status == 'granted' %}
+                    <span class="inline-flex items-center gap-x-1.5 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700">
+                        <svg class="h-1.5 w-1.5 fill-green-500" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" /></svg>
+                        Granted
+                    </span>
+                    {% elif req.status == 'denied' %}
+                    <span class="inline-flex items-center gap-x-1.5 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
+                        <svg class="h-1.5 w-1.5 fill-red-500" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" /></svg>
+                        Denied
+                    </span>
+                    {% else %}
+                    <span class="inline-flex items-center gap-x-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                        <svg class="h-1.5 w-1.5 fill-gray-500" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" /></svg>
+                        {{ req.status|capitalize }}
+                    </span>
+                    {% endif %}
+                </td>
+                <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    {{ req.created_at[:19] | replace('T', ' ') }} UTC
+                </td>
+                <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                    <a href="/request/{{ req.id }}" class="text-blue-600 hover:text-blue-800 transition-colors">
+                        View<span class="sr-only">, {{ req.requester }}</span>
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center bg-white rounded-lg shadow ring-1 ring-black ring-opacity-5 py-16 px-6">
+    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+    </svg>
+    <h3 class="mt-4 text-lg font-semibold text-gray-900">No access requests yet</h3>
+    <p class="mt-2 text-sm text-gray-500">Get started by submitting a new system access request.</p>
+    <div class="mt-6">
+        <a href="/request/new"
+           class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors">
+            <svg class="-ml-0.5 mr-1.5 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
+            </svg>
+            New Request
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "layout.html" %}
+{% block title %}Request {{ access_req.id[:8] }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="mb-8">
+        <a href="/" class="text-sm text-blue-600 hover:text-blue-800 transition-colors">&larr; Back to Dashboard</a>
+    </div>
+
+    <!-- Request header -->
+    <div class="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg p-6 mb-6">
+        <div class="flex items-start justify-between">
+            <div>
+                <p class="text-sm text-gray-500 font-mono">{{ access_req.id[:8] }}</p>
+                <h1 class="mt-2 text-2xl font-bold text-gray-900">{{ access_req.system_name }}</h1>
+                <p class="mt-1 text-sm text-gray-600">Requested by <span class="font-medium">{{ access_req.requester }}</span></p>
+            </div>
+            {% if access_req.status == 'pending' %}
+            <span class="inline-flex items-center gap-x-1.5 rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
+                <svg class="h-2 w-2 fill-blue-500 animate-pulse" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" /></svg>
+                Pending Review
+            </span>
+            {% elif access_req.status == 'granted' %}
+            <span class="inline-flex items-center gap-x-1.5 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
+                <svg class="h-2 w-2 fill-green-500" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" /></svg>
+                Granted
+            </span>
+            {% elif access_req.status == 'denied' %}
+            <span class="inline-flex items-center gap-x-1.5 rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">
+                <svg class="h-2 w-2 fill-red-500" viewBox="0 0 6 6"><circle cx="3" cy="3" r="3" /></svg>
+                Denied
+            </span>
+            {% else %}
+            <span class="inline-flex items-center gap-x-1.5 rounded-full bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700">
+                {{ access_req.status|capitalize }}
+            </span>
+            {% endif %}
+        </div>
+
+        <div class="mt-6 grid grid-cols-2 gap-4">
+            <div class="bg-gray-50 rounded-lg p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide font-medium">Access Level</p>
+                <p class="mt-1 text-sm font-medium text-gray-900">
+                    {% if access_req.access_level == 'admin' %}
+                    <span class="text-red-700">{{ access_req.access_level }}</span>
+                    {% elif access_req.access_level == 'read-write' %}
+                    <span class="text-amber-700">{{ access_req.access_level }}</span>
+                    {% else %}
+                    {{ access_req.access_level }}
+                    {% endif %}
+                </p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <p class="text-xs text-gray-500 uppercase tracking-wide font-medium">Submitted</p>
+                <p class="mt-1 text-sm font-medium text-gray-900">{{ access_req.created_at[:19] | replace('T', ' ') }} UTC</p>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Justification</p>
+            <p class="text-sm text-gray-700">{{ access_req.justification }}</p>
+        </div>
+
+        {% if access_req.quorum_request_id %}
+        <div class="mt-4 pt-4 border-t border-gray-100">
+            <p class="text-xs text-gray-400">Quorum Request ID: <span class="font-mono">{{ access_req.quorum_request_id }}</span></p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Approval voting progress -->
+    <div class="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Security Review</h2>
+        <p class="text-sm text-gray-500 mb-4">Requires 2 of 3 security reviewers to approve (threshold-based voting).</p>
+
+        {% if quorum_data and quorum_data.approvals %}
+        <div class="space-y-3">
+            {% for approval in quorum_data.approvals %}
+            <div class="flex items-center space-x-3 p-3 rounded-lg {{ 'bg-green-50' if approval.decision == 'approved' else 'bg-red-50' }}">
+                {% if approval.decision == 'approved' %}
+                <div class="flex-shrink-0 h-8 w-8 rounded-full bg-green-200 flex items-center justify-center">
+                    <svg class="h-4 w-4 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-green-800">{{ approval.checker_id }} approved</p>
+                    {% if approval.comment %}
+                    <p class="text-xs text-green-600 mt-0.5">"{{ approval.comment }}"</p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="flex-shrink-0 h-8 w-8 rounded-full bg-red-200 flex items-center justify-center">
+                    <svg class="h-4 w-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-sm font-medium text-red-800">{{ approval.checker_id }} rejected</p>
+                    {% if approval.comment %}
+                    <p class="text-xs text-red-600 mt-0.5">"{{ approval.comment }}"</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% elif access_req.status == 'pending' %}
+        <div class="text-center py-8 text-gray-500">
+            <svg class="mx-auto h-10 w-10 text-gray-300 animate-pulse" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <p class="mt-3 text-sm">Waiting for security team to review...</p>
+            <p class="text-xs text-gray-400 mt-1">Security reviewers can approve or reject in the Quorum console.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if access_req.status == 'pending' %}
+    <div class="text-center">
+        <p class="text-xs text-gray-400">This page fetches the latest status from Quorum on each load.</p>
+        <button onclick="window.location.reload()"
+            class="mt-2 text-sm text-blue-600 hover:text-blue-700 font-medium">
+            Refresh Status
+        </button>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
