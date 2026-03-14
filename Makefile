@@ -17,10 +17,10 @@ lint:
 	golangci-lint run ./...
 
 migrate-up:
-	migrate -path migrations -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" up
+	migrate -path migrations/postgres -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" up
 
 migrate-down:
-	migrate -path migrations -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" down 1
+	migrate -path migrations/postgres -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" down 1
 
 docker-up:
 	docker-compose up -d

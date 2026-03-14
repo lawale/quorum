@@ -47,3 +47,7 @@ expiry:
 metrics:
   enabled: false
   path: "/metrics"
+
+console:
+  enabled: false                 # requires binary built with -tags console
+  jwt_secret: ""                 # optional; auto-generated if empty (sessions lost on restart)

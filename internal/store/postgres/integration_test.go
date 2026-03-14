@@ -15,7 +15,7 @@ import (
 
 func migrationsDir() string {
 	_, f, _, _ := runtime.Caller(0)
-	return filepath.Join(filepath.Dir(f), "..", "..", "..", "migrations")
+	return filepath.Join(filepath.Dir(f), "..", "..", "..", "migrations", "postgres")
 }
 
 func setupPostgres(t *testing.T) *postgres.DB {
