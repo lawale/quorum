@@ -105,9 +105,9 @@
     </div>
   </div>
 {:else if state === 'setup'}
-  <Setup />
+  <Setup onSuccess={() => init()} />
 {:else if state === 'login' || hash === '#/login'}
-  <Login />
+  <Login onSuccess={() => init()} />
 {:else}
   <Layout>
     {#snippet children()}

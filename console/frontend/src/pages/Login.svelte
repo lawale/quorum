@@ -3,6 +3,8 @@
   import { setToken, setStoredOperator } from '../lib/auth';
   import { currentUser, addToast } from '../lib/stores';
 
+  let { onSuccess }: { onSuccess?: () => void } = $props();
+
   let username = $state('');
   let password = $state('');
   let error = $state('');
@@ -18,7 +20,7 @@
       setToken(res.token);
       setStoredOperator(res.operator);
       currentUser.set(res.operator);
-      window.location.hash = '#/';
+      onSuccess ? onSuccess() : (window.location.hash = '#/');
     } catch (err) {
       if (err instanceof ApiError) {
         error = err.message;
