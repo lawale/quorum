@@ -22,16 +22,17 @@ import (
 // Instead of an in-memory channel, webhooks are persisted to a database outbox
 // and delivered by a background worker that wakes on signal or heartbeat.
 type Dispatcher struct {
-	outbox         store.OutboxStore
-	audits         store.AuditStore
-	client         *http.Client
-	callbackSecret string
-	maxRetries     int
-	retryDelay     time.Duration
-	heartbeat      time.Duration
-	batchSize      int
-	signal         chan struct{}
-	metrics        *metrics.Metrics
+	outbox          store.OutboxStore
+	audits          store.AuditStore
+	client          *http.Client
+	callbackSecret  string
+	maxRetries      int
+	retryDelay      time.Duration
+	heartbeat       time.Duration
+	batchSize       int
+	retentionPeriod time.Duration
+	signal          chan struct{}
+	metrics         *metrics.Metrics
 }
 
 // SetMetrics sets the optional Prometheus metrics collector.
@@ -41,12 +42,13 @@ func (d *Dispatcher) SetMetrics(m *metrics.Metrics) {
 
 // Config holds configuration for the webhook Dispatcher.
 type Config struct {
-	Timeout        time.Duration
-	MaxRetries     int
-	RetryDelay     time.Duration
-	CallbackSecret string
-	Heartbeat      time.Duration
-	BatchSize      int
+	Timeout         time.Duration
+	MaxRetries      int
+	RetryDelay      time.Duration
+	CallbackSecret  string
+	Heartbeat       time.Duration
+	BatchSize       int
+	RetentionPeriod time.Duration // how long to keep delivered entries; 0 = never clean up
 }
 
 func NewDispatcher(outbox store.OutboxStore, audits store.AuditStore, cfg Config) *Dispatcher {
@@ -59,15 +61,16 @@ func NewDispatcher(outbox store.OutboxStore, audits store.AuditStore, cfg Config
 		batchSize = 50
 	}
 	return &Dispatcher{
-		outbox:         outbox,
-		audits:         audits,
-		client:         &http.Client{Timeout: cfg.Timeout},
-		callbackSecret: cfg.CallbackSecret,
-		maxRetries:     cfg.MaxRetries,
-		retryDelay:     cfg.RetryDelay,
-		heartbeat:      heartbeat,
-		batchSize:      batchSize,
-		signal:         make(chan struct{}, 1),
+		outbox:          outbox,
+		audits:          audits,
+		client:          &http.Client{Timeout: cfg.Timeout},
+		callbackSecret:  cfg.CallbackSecret,
+		maxRetries:      cfg.MaxRetries,
+		retryDelay:      cfg.RetryDelay,
+		heartbeat:       heartbeat,
+		batchSize:       batchSize,
+		retentionPeriod: cfg.RetentionPeriod,
+		signal:          make(chan struct{}, 1),
 	}
 }
 
@@ -144,6 +147,17 @@ func (d *Dispatcher) runWorker(ctx context.Context) {
 	ticker := time.NewTicker(d.heartbeat)
 	defer ticker.Stop()
 
+	// Retention cleanup runs at 10× the heartbeat interval (or every hour, whichever is shorter)
+	var cleanupTicker *time.Ticker
+	if d.retentionPeriod > 0 {
+		cleanupInterval := d.heartbeat * 10
+		if cleanupInterval > time.Hour {
+			cleanupInterval = time.Hour
+		}
+		cleanupTicker = time.NewTicker(cleanupInterval)
+		defer cleanupTicker.Stop()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -152,7 +166,30 @@ func (d *Dispatcher) runWorker(ctx context.Context) {
 			d.processBatch(ctx)
 		case <-ticker.C:
 			d.processBatch(ctx)
+		case <-d.cleanupChan(cleanupTicker):
+			d.cleanupDelivered(ctx)
 		}
+	}
+}
+
+// cleanupChan returns the ticker channel if cleanup is configured, or a nil
+// channel (which blocks forever) if not.
+func (d *Dispatcher) cleanupChan(t *time.Ticker) <-chan time.Time {
+	if t != nil {
+		return t.C
+	}
+	return nil
+}
+
+func (d *Dispatcher) cleanupDelivered(ctx context.Context) {
+	olderThan := time.Now().Add(-d.retentionPeriod)
+	deleted, err := d.outbox.DeleteDelivered(ctx, olderThan)
+	if err != nil {
+		slog.Error("failed to clean up delivered outbox entries", "error", err)
+		return
+	}
+	if deleted > 0 {
+		slog.Info("cleaned up delivered outbox entries", "deleted", deleted, "older_than", olderThan)
 	}
 }
 

@@ -42,6 +42,7 @@ webhook:
   timeout: "10s"
   callback_secret: ""              # HMAC secret for per-request callback_url signatures; leave empty to skip signing
   heartbeat: "30s"                 # outbox polling interval (safety net); most deliveries are signal-driven
+  outbox_retention: "72h"          # how long to keep delivered outbox entries; 0 = never clean up
 
 expiry:
   check_interval: "1m"

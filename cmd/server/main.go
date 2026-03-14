@@ -73,11 +73,12 @@ func main() {
 
 	// Webhook dispatcher (outbox-backed, signal-driven)
 	dispatcher := webhook.NewDispatcher(stores.Outbox, stores.Audits, webhook.Config{
-		Timeout:        cfg.Webhook.Timeout,
-		MaxRetries:     cfg.Webhook.MaxRetries,
-		RetryDelay:     cfg.Webhook.RetryInterval,
-		CallbackSecret: cfg.Webhook.CallbackSecret,
-		Heartbeat:      cfg.Webhook.Heartbeat,
+		Timeout:         cfg.Webhook.Timeout,
+		MaxRetries:      cfg.Webhook.MaxRetries,
+		RetryDelay:      cfg.Webhook.RetryInterval,
+		CallbackSecret:  cfg.Webhook.CallbackSecret,
+		Heartbeat:       cfg.Webhook.Heartbeat,
+		RetentionPeriod: cfg.Webhook.OutboxRetention,
 	})
 	requestService.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
 
