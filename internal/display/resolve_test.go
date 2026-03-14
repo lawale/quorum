@@ -354,3 +354,84 @@ func TestResolve_TitleInterpolation(t *testing.T) {
 		t.Errorf("title = %q, want %q", resolved.Title, want)
 	}
 }
+
+func TestResolve_ItemsOnly(t *testing.T) {
+	tmpl := json.RawMessage(`{
+		"items": {
+			"path": "profiles",
+			"label_path": "name",
+			"fields": [
+				{"label": "Email", "path": "email"}
+			]
+		}
+	}`)
+
+	payload := json.RawMessage(`{
+		"profiles": [
+			{"name": "Alice", "email": "alice@example.com"}
+		]
+	}`)
+
+	result, err := Resolve(tmpl, payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result for items-only template")
+	}
+
+	var resolved Resolved
+	if err := json.Unmarshal(result, &resolved); err != nil {
+		t.Fatalf("failed to unmarshal result: %v", err)
+	}
+
+	if len(resolved.Items) != 1 {
+		t.Fatalf("got %d items, want 1", len(resolved.Items))
+	}
+	if resolved.Items[0].Title != "Alice" {
+		t.Errorf("item[0].Title = %q, want %q", resolved.Items[0].Title, "Alice")
+	}
+}
+
+func TestResolve_NonObjectItems_Skipped(t *testing.T) {
+	tmpl := json.RawMessage(`{
+		"title": "Mixed Items",
+		"fields": [],
+		"items": {
+			"path": "data",
+			"label_path": "name",
+			"fields": [
+				{"label": "Value", "path": "val"}
+			]
+		}
+	}`)
+
+	payload := json.RawMessage(`{
+		"data": [
+			{"name": "Valid", "val": "ok"},
+			"not-an-object",
+			42,
+			{"name": "Also Valid", "val": "yes"}
+		]
+	}`)
+
+	result, err := Resolve(tmpl, payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var resolved Resolved
+	if err := json.Unmarshal(result, &resolved); err != nil {
+		t.Fatalf("failed to unmarshal result: %v", err)
+	}
+
+	if len(resolved.Items) != 2 {
+		t.Fatalf("got %d items, want 2 (non-objects should be skipped)", len(resolved.Items))
+	}
+	if resolved.Items[0].Title != "Valid" {
+		t.Errorf("item[0].Title = %q, want %q", resolved.Items[0].Title, "Valid")
+	}
+	if resolved.Items[1].Title != "Also Valid" {
+		t.Errorf("item[1].Title = %q, want %q", resolved.Items[1].Title, "Also Valid")
+	}
+}

@@ -117,7 +117,7 @@ func Resolve(tmpl json.RawMessage, payload json.RawMessage) (json.RawMessage, er
 		return nil, fmt.Errorf("parsing display template: %w", err)
 	}
 
-	if len(t.Fields) == 0 && t.Title == "" {
+	if len(t.Fields) == 0 && t.Title == "" && t.Items == nil {
 		return nil, nil
 	}
 
@@ -189,11 +189,11 @@ func resolveItems(items *TemplateItems, data map[string]any) []ResolvedItem {
 		return nil
 	}
 
-	result := make([]ResolvedItem, len(arr))
-	for i, item := range arr {
+	var result []ResolvedItem
+	for _, item := range arr {
 		itemMap, ok := item.(map[string]any)
 		if !ok {
-			continue
+			continue // skip non-object entries instead of creating empty rows
 		}
 
 		title := "-"
@@ -203,10 +203,10 @@ func resolveItems(items *TemplateItems, data map[string]any) []ResolvedItem {
 			}
 		}
 
-		result[i] = ResolvedItem{
+		result = append(result, ResolvedItem{
 			Title:  title,
 			Fields: resolveFields(items.Fields, itemMap),
-		}
+		})
 	}
 
 	return result

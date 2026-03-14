@@ -70,6 +70,8 @@
         submitting = false;
         return;
       }
+    } else if (isEdit) {
+      payload.display_template = null;
     }
 
     try {
