@@ -45,15 +45,16 @@ func (s *OutboxStore) CreateBatch(ctx context.Context, entries []model.OutboxEnt
 	return nil
 }
 
-func (s *OutboxStore) ListPending(ctx context.Context, limit int) ([]model.OutboxEntry, error) {
-	query := `SELECT TOP(@p1) ` + outboxColumns + `
-		FROM [quorum].[webhook_outbox]
-		WHERE status = 'pending' AND next_retry_at <= SYSDATETIMEOFFSET()
-		ORDER BY created_at ASC`
+func (s *OutboxStore) ClaimBatch(ctx context.Context, limit int) ([]model.OutboxEntry, error) {
+	query := `UPDATE TOP(@p1) o
+		SET o.status = 'processing'
+		OUTPUT inserted.` + outboxColumns + `
+		FROM [quorum].[webhook_outbox] o WITH (UPDLOCK, ROWLOCK, READPAST)
+		WHERE o.status = 'pending' AND o.next_retry_at <= SYSDATETIMEOFFSET()`
 
 	rows, err := s.db.Pool.QueryContext(ctx, query, limit)
 	if err != nil {
-		return nil, fmt.Errorf("querying pending outbox entries: %w", err)
+		return nil, fmt.Errorf("claiming pending outbox entries: %w", err)
 	}
 	defer rows.Close()
 
@@ -89,7 +90,7 @@ func (s *OutboxStore) MarkDelivered(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *OutboxStore) MarkRetry(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error {
-	query := `UPDATE [quorum].[webhook_outbox] SET attempts = @p1, last_error = @p2, next_retry_at = @p3 WHERE id = @p4`
+	query := `UPDATE [quorum].[webhook_outbox] SET status = 'pending', attempts = @p1, last_error = @p2, next_retry_at = @p3 WHERE id = @p4`
 	_, err := s.db.Pool.ExecContext(ctx, query, attempts, lastError, nextRetryAt, id)
 	if err != nil {
 		return fmt.Errorf("marking outbox entry for retry: %w", err)

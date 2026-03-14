@@ -69,7 +69,10 @@ type OperatorStore interface {
 // OutboxStore manages durable webhook delivery entries.
 type OutboxStore interface {
 	CreateBatch(ctx context.Context, entries []model.OutboxEntry) error
-	ListPending(ctx context.Context, limit int) ([]model.OutboxEntry, error)
+	// ClaimBatch atomically selects and locks up to `limit` pending entries for
+	// delivery, transitioning their status to 'processing'. This prevents
+	// duplicate deliveries across multiple app instances.
+	ClaimBatch(ctx context.Context, limit int) ([]model.OutboxEntry, error)
 	MarkDelivered(ctx context.Context, id uuid.UUID) error
 	MarkRetry(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, attempts int, lastError string) error

@@ -157,9 +157,9 @@ func (d *Dispatcher) runWorker(ctx context.Context) {
 }
 
 func (d *Dispatcher) processBatch(ctx context.Context) {
-	entries, err := d.outbox.ListPending(ctx, d.batchSize)
+	entries, err := d.outbox.ClaimBatch(ctx, d.batchSize)
 	if err != nil {
-		slog.Error("failed to list pending outbox entries", "error", err)
+		slog.Error("failed to claim pending outbox entries", "error", err)
 		return
 	}
 
@@ -196,6 +196,7 @@ func (d *Dispatcher) deliverEntry(ctx context.Context, entry model.OutboxEntry) 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if markErr := d.outbox.MarkDelivered(ctx, entry.ID); markErr != nil {
 			slog.Error("failed to mark outbox entry delivered", "error", markErr, "entry_id", entry.ID)
+			return // Don't audit success — entry will be retried on next claim
 		}
 		slog.Info("webhook delivered", "url", entry.WebhookURL, "status", resp.StatusCode, "request_id", entry.RequestID)
 		d.auditWebhook(ctx, entry.RequestID, "webhook_sent", entry.WebhookURL)

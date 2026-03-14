@@ -409,10 +409,7 @@ func setupApproveTest(req *model.Request, policy *model.Policy) (*testutil.MockR
 			return nil
 		},
 		CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-			if decision == model.DecisionApproved {
-				return 1, nil // This approval is the first
-			}
-			return 0, nil
+			return 0, nil // Counts are read before the vote; 0 existing votes
 		},
 		ListByRequestIDFunc: func(ctx context.Context, id uuid.UUID) ([]model.Approval, error) {
 			return []model.Approval{}, nil
@@ -452,7 +449,7 @@ func TestApprove_Success_BelowThreshold(t *testing.T) {
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
-	// Override: only 1 approval so far, need 3
+	// Override: 1 existing approval, this vote adds another → 2 total, need 3
 	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 		if decision == model.DecisionApproved {
 			return 1, nil
@@ -695,9 +692,10 @@ func TestApprove_WebhookDispatch_CalledOnTerminal(t *testing.T) {
 	svc.SetWebhookDispatch(
 		func(ctx context.Context, fn func(tx *store.Stores) error) error {
 			txStores := &store.Stores{
-				Requests: requestStore,
-				Outbox:   &testutil.MockOutboxStore{},
-				Webhooks: &testutil.MockWebhookStore{},
+				Requests:  requestStore,
+				Approvals: approvalStore,
+				Outbox:    &testutil.MockOutboxStore{},
+				Webhooks:  &testutil.MockWebhookStore{},
 			}
 			return fn(txStores)
 		},
@@ -727,7 +725,7 @@ func TestApprove_WebhookDispatch_NotCalledWhenPending(t *testing.T) {
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
-	// Override: 1 approval, need 3
+	// Override: 1 existing approval + this vote = 2, need 3 → still pending
 	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 		if decision == model.DecisionApproved {
 			return 1, nil
@@ -796,13 +794,9 @@ func TestReject_RejectionPolicyThreshold_StillPossible(t *testing.T) {
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
-	// 0 approvals, 1 rejection. Remaining = 3 - 0 - 1 = 2. 0 + 2 >= 2 → still possible
-	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-		if decision == model.DecisionRejected {
-			return 1, nil
-		}
-		return 0, nil
-	}
+	// 0 existing rejections; this vote adds 1 → predicted: 0 approvals, 1 rejection
+	// Remaining = 3 - 0 - 1 = 2. 0 + 2 = 2 >= 2 → still possible → pending
+	// (default mock returns 0 for all counts, which is correct here)
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
 
@@ -824,7 +818,8 @@ func TestReject_RejectionPolicyThreshold_Impossible(t *testing.T) {
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
-	// 0 approvals, 1 rejection. Remaining = 3 - 0 - 1 = 2. 0 + 2 < 3 → impossible
+	// 1 existing rejection; this vote adds another → predicted: 0 approvals, 2 rejections
+	// Remaining = 3 - 0 - 2 = 1. 0 + 1 < 3 → impossible → rejected
 	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
 		if decision == model.DecisionRejected {
 			return 1, nil

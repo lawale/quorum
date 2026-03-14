@@ -298,7 +298,28 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		}
 	}
 
-	// Record the approval/rejection with the current stage index
+	// Read current approval/rejection counts BEFORE writing the approval vote.
+	// This lets us predict the outcome and choose the right atomicity strategy.
+	approvalCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, req.CurrentStage)
+	if err != nil {
+		return nil, err
+	}
+	rejectionCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, req.CurrentStage)
+	if err != nil {
+		return nil, err
+	}
+
+	// Predict the outcome after this vote is recorded
+	predictedApprovals := approvalCount
+	predictedRejections := rejectionCount
+	if decision == model.DecisionApproved {
+		predictedApprovals++
+	} else {
+		predictedRejections++
+	}
+
+	newStatus, newStage := evaluateWithCounts(predictedApprovals, predictedRejections, req.CurrentStage, policy)
+
 	approval := &model.Approval{
 		RequestID:  requestID,
 		CheckerID:  checkerID,
@@ -306,60 +327,67 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		StageIndex: req.CurrentStage,
 		Comment:    comment,
 	}
-	if err := s.approvals.Create(ctx, approval); err != nil {
-		return nil, fmt.Errorf("recording decision: %w", err)
-	}
 
-	s.audit(ctx, requestID, string(decision), checkerID, nil)
-
-	// Evaluate state transition
-	newStatus, newStage, err := s.evaluateStatus(ctx, requestID, req.CurrentStage, policy)
-	if err != nil {
-		return nil, err
-	}
-
-	if newStatus != nil && *newStatus != req.Status {
-		req.Status = *newStatus
-
-		if newStatus.IsTerminal() && s.runInTx != nil && s.enqueueWebhooks != nil {
-			// Atomic: status update + outbox writes in a single transaction
-			resolveApprovals, _ := s.approvals.ListByRequestID(ctx, requestID)
+	if newStatus != nil && newStatus.IsTerminal() && s.runInTx != nil && s.enqueueWebhooks != nil {
+		// Atomic: approval + status update + outbox writes in a single transaction.
+		// This prevents orphaned approvals if the status/outbox write fails.
+		err := s.runInTx(ctx, func(txStores *store.Stores) error {
+			if err := txStores.Approvals.Create(ctx, approval); err != nil {
+				return fmt.Errorf("recording decision: %w", err)
+			}
+			if err := txStores.Requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
+				return err
+			}
+			resolveApprovals, _ := txStores.Approvals.ListByRequestID(ctx, requestID)
+			req.Status = *newStatus
 			req.Approvals = resolveApprovals
-
-			err := s.runInTx(ctx, func(txStores *store.Stores) error {
-				if err := txStores.Requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
-					return err
-				}
-				return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, resolveApprovals)
-			})
-			if err != nil {
-				return nil, err
-			}
-
-			if s.signalWebhooks != nil {
-				s.signalWebhooks()
-			}
-		} else {
-			// Fallback: no outbox configured, just update status
-			if err := s.requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
-				return nil, err
-			}
+			return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, resolveApprovals)
+		})
+		if err != nil {
+			return nil, err
 		}
 
-		if newStatus.IsTerminal() && s.metrics != nil {
+		s.audit(ctx, requestID, string(decision), checkerID, nil)
+
+		if s.signalWebhooks != nil {
+			s.signalWebhooks()
+		}
+
+		if s.metrics != nil {
 			s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
 			s.metrics.PendingRequestsGauge.Dec()
 			s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
 		}
-	} else if newStage != nil && *newStage != req.CurrentStage {
-		// Stage advance — still pending but move to next stage
-		if err := s.requests.UpdateStageAndStatus(ctx, requestID, *newStage, model.StatusPending); err != nil {
-			return nil, err
+	} else {
+		// Non-atomic path: write approval first, then update status/stage
+		if err := s.approvals.Create(ctx, approval); err != nil {
+			return nil, fmt.Errorf("recording decision: %w", err)
 		}
-		req.CurrentStage = *newStage
 
-		stageDetails, _ := json.Marshal(map[string]int{"from_stage": req.CurrentStage - 1, "to_stage": *newStage})
-		s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
+		s.audit(ctx, requestID, string(decision), checkerID, nil)
+
+		if newStatus != nil && *newStatus != req.Status {
+			req.Status = *newStatus
+
+			if err := s.requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
+				return nil, err
+			}
+
+			if newStatus.IsTerminal() && s.metrics != nil {
+				s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
+				s.metrics.PendingRequestsGauge.Dec()
+				s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
+			}
+		} else if newStage != nil && *newStage != req.CurrentStage {
+			// Stage advance — still pending but move to next stage
+			if err := s.requests.UpdateStageAndStatus(ctx, requestID, *newStage, model.StatusPending); err != nil {
+				return nil, err
+			}
+			req.CurrentStage = *newStage
+
+			stageDetails, _ := json.Marshal(map[string]int{"from_stage": req.CurrentStage - 1, "to_stage": *newStage})
+			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
+		}
 	}
 
 	// Refresh approvals
@@ -372,24 +400,18 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 	return req, nil
 }
 
-// evaluateStatus evaluates the current stage's approval/rejection state.
+// evaluateWithCounts determines the outcome based on approval/rejection counts.
+// This is a pure function with no database access — counts are read beforehand
+// so the caller can choose the correct transaction boundary.
+//
 // Returns:
-//   - (*RequestStatus, nil, nil) — terminal status change (approved/rejected)
-//   - (nil, *int, nil) — stage advance (next stage index)
-//   - (nil, nil, nil) — no change yet
-func (s *RequestService) evaluateStatus(ctx context.Context, requestID uuid.UUID, currentStage int, policy *model.Policy) (*model.RequestStatus, *int, error) {
+//   - (*RequestStatus, nil) — terminal status change (approved/rejected)
+//   - (nil, *int) — stage advance (next stage index)
+//   - (nil, nil) — no change yet
+func evaluateWithCounts(approvalCount, rejectionCount int, currentStage int, policy *model.Policy) (*model.RequestStatus, *int) {
 	stage := policy.StageAt(currentStage)
 	if stage == nil {
-		return nil, nil, ErrInvalidStage
-	}
-
-	approvalCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, currentStage)
-	if err != nil {
-		return nil, nil, err
-	}
-	rejectionCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, currentStage)
-	if err != nil {
-		return nil, nil, err
+		return nil, nil
 	}
 
 	// Check rejection policy for the current stage
@@ -397,14 +419,14 @@ func (s *RequestService) evaluateStatus(ctx context.Context, requestID uuid.UUID
 	case model.RejectionPolicyAny:
 		if rejectionCount > 0 {
 			status := model.StatusRejected
-			return &status, nil, nil
+			return &status, nil
 		}
 	case model.RejectionPolicyThreshold:
 		if stage.MaxCheckers != nil {
 			remaining := *stage.MaxCheckers - approvalCount - rejectionCount
 			if approvalCount+remaining < stage.RequiredApprovals {
 				status := model.StatusRejected
-				return &status, nil, nil
+				return &status, nil
 			}
 		}
 	}
@@ -415,14 +437,14 @@ func (s *RequestService) evaluateStatus(ctx context.Context, requestID uuid.UUID
 		if nextStage >= policy.TotalStages() {
 			// All stages complete — request approved
 			status := model.StatusApproved
-			return &status, nil, nil
+			return &status, nil
 		}
 		// Advance to next stage
-		return nil, &nextStage, nil
+		return nil, &nextStage
 	}
 
 	// Not enough votes either way yet
-	return nil, nil, nil
+	return nil, nil
 }
 
 func (s *RequestService) audit(ctx context.Context, requestID uuid.UUID, action string, actorID string, details json.RawMessage) {

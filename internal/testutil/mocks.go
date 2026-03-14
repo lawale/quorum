@@ -294,7 +294,7 @@ func (m *MockOperatorStore) Count(ctx context.Context) (int, error) {
 // MockOutboxStore implements store.OutboxStore with configurable function fields.
 type MockOutboxStore struct {
 	CreateBatchFunc     func(ctx context.Context, entries []model.OutboxEntry) error
-	ListPendingFunc     func(ctx context.Context, limit int) ([]model.OutboxEntry, error)
+	ClaimBatchFunc     func(ctx context.Context, limit int) ([]model.OutboxEntry, error)
 	MarkDeliveredFunc   func(ctx context.Context, id uuid.UUID) error
 	MarkRetryFunc       func(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error
 	MarkFailedFunc      func(ctx context.Context, id uuid.UUID, attempts int, lastError string) error
@@ -308,9 +308,9 @@ func (m *MockOutboxStore) CreateBatch(ctx context.Context, entries []model.Outbo
 	return nil
 }
 
-func (m *MockOutboxStore) ListPending(ctx context.Context, limit int) ([]model.OutboxEntry, error) {
-	if m.ListPendingFunc != nil {
-		return m.ListPendingFunc(ctx, limit)
+func (m *MockOutboxStore) ClaimBatch(ctx context.Context, limit int) ([]model.OutboxEntry, error) {
+	if m.ClaimBatchFunc != nil {
+		return m.ClaimBatchFunc(ctx, limit)
 	}
 	return nil, nil
 }
