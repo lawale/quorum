@@ -1,0 +1,67 @@
+{{template "layout" .}}
+
+{{define "title"}}New Transfer{{end}}
+
+{{define "content"}}
+<div class="max-w-2xl mx-auto">
+    <div class="mb-8">
+        <a href="/" class="text-sm text-blue-600 hover:text-blue-700 font-medium">&larr; Back to Dashboard</a>
+        <h1 class="mt-3 text-2xl font-bold text-gray-900">New Wire Transfer</h1>
+        <p class="mt-1 text-sm text-gray-500">Submit a wire transfer for approval. Requires manager review and compliance check.</p>
+    </div>
+
+    <form method="POST" action="/transfer/new" class="bg-white rounded-lg border border-gray-200 shadow-sm p-6 space-y-6">
+        <div>
+            <label for="from_user" class="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+            <input type="text" id="from_user" name="from_user" required
+                placeholder="e.g. alice"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" />
+            <p class="mt-1 text-xs text-gray-400">Used as the maker identity for this request.</p>
+        </div>
+
+        <div>
+            <label for="source_account" class="block text-sm font-medium text-gray-700 mb-1">Source Account</label>
+            <input type="text" id="source_account" name="source_account" required
+                placeholder="e.g. ACC-001"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono" />
+        </div>
+
+        <div>
+            <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">Amount (USD)</label>
+            <input type="text" id="amount" name="amount" required
+                placeholder="50000"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" />
+        </div>
+
+        <div>
+            <label for="destination" class="block text-sm font-medium text-gray-700 mb-1">Destination (IBAN)</label>
+            <input type="text" id="destination" name="destination" required
+                placeholder="e.g. IBAN-DE89370400440532013000"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono" />
+        </div>
+
+        <!-- Info box -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex">
+                <svg class="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                </svg>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">Multi-stage Approval</h3>
+                    <p class="mt-1 text-sm text-blue-700">
+                        Wire transfers require <strong>manager review</strong> followed by <strong>compliance check</strong>
+                        before execution. You'll be notified via webhook when a decision is made.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="pt-2">
+            <button type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors shadow-sm">
+                Submit for Approval
+            </button>
+        </div>
+    </form>
+</div>
+{{end}}

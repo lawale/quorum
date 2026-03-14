@@ -1,0 +1,57 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{block "title" .}}Acme Bank{{end}} | Wire Transfers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Smooth status badge transitions */
+        .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white border-b border-gray-200 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="flex items-center space-x-2">
+                        <svg class="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0 0 12 9.75c-2.551 0-5.056.2-7.5.582V21" />
+                        </svg>
+                        <span class="text-xl font-bold text-gray-900">Acme Bank</span>
+                    </a>
+                    <div class="hidden sm:flex sm:space-x-4">
+                        <a href="/" class="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-100">Dashboard</a>
+                        <a href="/transfer/new" class="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-100">New Transfer</a>
+                    </div>
+                </div>
+                <div class="flex items-center">
+                    <span class="text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">Powered by Quorum</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {{block "content" .}}{{end}}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-gray-200 mt-12">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <p class="text-center text-sm text-gray-400">
+                Acme Bank &mdash; Sample application for
+                <a href="https://github.com/lawale/quorum" class="text-blue-500 hover:underline">Quorum</a>
+                maker-checker system
+            </p>
+        </div>
+    </footer>
+
+    {{block "scripts" .}}{{end}}
+</body>
+</html>
+{{end}}
