@@ -37,7 +37,9 @@ type RequestService struct {
 	policies          store.PolicyStore
 	audits            store.AuditStore
 	permissionChecker *auth.PermissionChecker
-	onResolve         func(ctx context.Context, req *model.Request, approvals []model.Approval)
+	enqueueWebhooks   func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
+	signalWebhooks    func()
+	runInTx           func(ctx context.Context, fn func(tx *store.Stores) error) error
 	metrics           *metrics.Metrics
 }
 
@@ -62,9 +64,18 @@ func NewRequestService(
 	}
 }
 
-// SetOnResolve sets a callback that fires when a request transitions to a terminal state.
-func (s *RequestService) SetOnResolve(fn func(ctx context.Context, req *model.Request, approvals []model.Approval)) {
-	s.onResolve = fn
+// SetWebhookDispatch configures transactional webhook dispatch via an outbox table.
+// enqueue writes outbox rows (should be called inside a transaction), signal wakes
+// the delivery worker (should be called after the transaction commits), and runInTx
+// executes a function within a database transaction.
+func (s *RequestService) SetWebhookDispatch(
+	runInTx func(ctx context.Context, fn func(tx *store.Stores) error) error,
+	enqueue func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error,
+	signal func(),
+) {
+	s.runInTx = runInTx
+	s.enqueueWebhooks = enqueue
+	s.signalWebhooks = signal
 }
 
 func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model.Request, error) {
@@ -179,10 +190,27 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 		return nil, errors.New("only the maker can cancel their own request")
 	}
 
-	if err := s.requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
-		return nil, err
-	}
 	req.Status = model.StatusCancelled
+	approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
+
+	if s.runInTx != nil && s.enqueueWebhooks != nil {
+		err := s.runInTx(ctx, func(txStores *store.Stores) error {
+			if err := txStores.Requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
+				return err
+			}
+			return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, approvals)
+		})
+		if err != nil {
+			return nil, err
+		}
+		if s.signalWebhooks != nil {
+			s.signalWebhooks()
+		}
+	} else {
+		if err := s.requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
+			return nil, err
+		}
+	}
 
 	s.audit(ctx, requestID, "cancelled", makerID, nil)
 
@@ -190,11 +218,6 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 		s.metrics.RequestsTotal.WithLabelValues("cancelled").Inc()
 		s.metrics.PendingRequestsGauge.Dec()
 		s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
-	}
-
-	if s.onResolve != nil {
-		approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
-		s.onResolve(ctx, req, approvals)
 	}
 
 	return req, nil
@@ -296,24 +319,37 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 	}
 
 	if newStatus != nil && *newStatus != req.Status {
-		// Terminal status change (approved or rejected)
-		if err := s.requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
-			return nil, err
-		}
 		req.Status = *newStatus
 
-		if newStatus.IsTerminal() {
-			if s.metrics != nil {
-				s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
-				s.metrics.PendingRequestsGauge.Dec()
-				s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
+		if newStatus.IsTerminal() && s.runInTx != nil && s.enqueueWebhooks != nil {
+			// Atomic: status update + outbox writes in a single transaction
+			resolveApprovals, _ := s.approvals.ListByRequestID(ctx, requestID)
+			req.Approvals = resolveApprovals
+
+			err := s.runInTx(ctx, func(txStores *store.Stores) error {
+				if err := txStores.Requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
+					return err
+				}
+				return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, resolveApprovals)
+			})
+			if err != nil {
+				return nil, err
 			}
 
-			if s.onResolve != nil {
-				approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
-				req.Approvals = approvals
-				s.onResolve(ctx, req, approvals)
+			if s.signalWebhooks != nil {
+				s.signalWebhooks()
 			}
+		} else {
+			// Fallback: no outbox configured, just update status
+			if err := s.requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
+				return nil, err
+			}
+		}
+
+		if newStatus.IsTerminal() && s.metrics != nil {
+			s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
+			s.metrics.PendingRequestsGauge.Dec()
+			s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
 		}
 	} else if newStage != nil && *newStage != req.CurrentStage {
 		// Stage advance — still pending but move to next stage

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/testutil"
 )
 
@@ -73,7 +74,7 @@ func TestExpiryWorker_ProcessExpired_CreatesAuditLogs(t *testing.T) {
 	}
 }
 
-func TestExpiryWorker_ProcessExpired_CallsOnExpire(t *testing.T) {
+func TestExpiryWorker_ProcessExpired_CallsWebhookDispatch(t *testing.T) {
 	req := testutil.NewRequest()
 	requests := &testutil.MockRequestStore{
 		ListExpiredFunc: func(ctx context.Context) ([]model.Request, error) {
@@ -89,16 +90,32 @@ func TestExpiryWorker_ProcessExpired_CallsOnExpire(t *testing.T) {
 
 	worker := NewExpiryWorker(requests, audits, time.Minute)
 
-	called := false
+	enqueueCalled := false
+	signalCalled := false
 	var expiredStatus model.RequestStatus
-	worker.SetOnExpire(func(ctx context.Context, r *model.Request, approvals []model.Approval) {
-		called = true
-		expiredStatus = r.Status
-	})
+	worker.SetWebhookDispatch(
+		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			txStores := &store.Stores{
+				Requests: requests,
+				Outbox:   &testutil.MockOutboxStore{},
+				Webhooks: &testutil.MockWebhookStore{},
+			}
+			return fn(txStores)
+		},
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+			enqueueCalled = true
+			expiredStatus = r.Status
+			return nil
+		},
+		func() { signalCalled = true },
+	)
 	worker.processExpired(context.Background())
 
-	if !called {
-		t.Error("expected onExpire callback to be called")
+	if !enqueueCalled {
+		t.Error("expected enqueueWebhooks to be called")
+	}
+	if !signalCalled {
+		t.Error("expected signalWebhooks to be called")
 	}
 	if expiredStatus != model.StatusExpired {
 		t.Errorf("expired request status = %v, want expired", expiredStatus)
@@ -150,19 +167,31 @@ func TestExpiryWorker_ProcessExpired_UpdateStatusError(t *testing.T) {
 		CreateFunc: func(ctx context.Context, log *model.AuditLog) error { return nil },
 	}
 
-	expiredIDs := make(map[uuid.UUID]bool)
+	enqueueIDs := make(map[uuid.UUID]bool)
 	worker := NewExpiryWorker(requests, audits, time.Minute)
-	worker.SetOnExpire(func(ctx context.Context, r *model.Request, approvals []model.Approval) {
-		expiredIDs[r.ID] = true
-	})
+	worker.SetWebhookDispatch(
+		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			txStores := &store.Stores{
+				Requests: requests,
+				Outbox:   &testutil.MockOutboxStore{},
+				Webhooks: &testutil.MockWebhookStore{},
+			}
+			return fn(txStores)
+		},
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+			enqueueIDs[r.ID] = true
+			return nil
+		},
+		func() {},
+	)
 	worker.processExpired(context.Background())
 
-	// req1 should NOT have onExpire called (update failed), req2 should
-	if expiredIDs[req1.ID] {
-		t.Error("onExpire should not be called for req1 (update failed)")
+	// req1 should NOT have enqueue called (update failed inside tx), req2 should
+	if enqueueIDs[req1.ID] {
+		t.Error("enqueueWebhooks should not be called for req1 (update failed)")
 	}
-	if !expiredIDs[req2.ID] {
-		t.Error("onExpire should be called for req2")
+	if !enqueueIDs[req2.ID] {
+		t.Error("enqueueWebhooks should be called for req2")
 	}
 }
 

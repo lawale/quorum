@@ -5,12 +5,23 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lawale/quorum/internal/store"
 )
 
+// DBTX is the common query interface shared by *pgxpool.Pool and pgx.Tx.
+// All postgres stores use this interface for their queries, allowing them
+// to operate on either a connection pool or a transaction.
+type DBTX interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 type DB struct {
-	Pool *pgxpool.Pool
+	pool *pgxpool.Pool // private: for BeginTx, Close, Ping
+	Pool DBTX          // public: used by stores — can be pool or tx
 }
 
 func New(ctx context.Context, dsn string, maxOpen, maxIdle int) (*DB, error) {
@@ -37,11 +48,16 @@ func New(ctx context.Context, dsn string, maxOpen, maxIdle int) (*DB, error) {
 		return nil, fmt.Errorf("pinging database: %w", err)
 	}
 
-	return &DB{Pool: pool}, nil
+	return &DB{pool: pool, Pool: pool}, nil
 }
 
 func (db *DB) Close() {
-	db.Pool.Close()
+	db.pool.Close()
+}
+
+// withTx returns a new DB that uses the given transaction for all queries.
+func (db *DB) withTx(tx pgx.Tx) *DB {
+	return &DB{pool: db.pool, Pool: tx}
 }
 
 func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.Stores, error) {
@@ -49,13 +65,42 @@ func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.St
 	if err != nil {
 		return nil, err
 	}
-	return &store.Stores{
+
+	s := &store.Stores{
 		Requests:  NewRequestStore(db),
 		Approvals: NewApprovalStore(db),
 		Policies:  NewPolicyStore(db),
 		Webhooks:  NewWebhookStore(db),
 		Audits:    NewAuditStore(db),
 		Operators: NewOperatorStore(db),
+		Outbox:    NewOutboxStore(db),
 		Close:     db.Close,
-	}, nil
+	}
+
+	s.RunInTx = func(ctx context.Context, fn func(tx *store.Stores) error) error {
+		tx, err := db.pool.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("beginning transaction: %w", err)
+		}
+		defer tx.Rollback(ctx) //nolint:errcheck
+
+		txDB := db.withTx(tx)
+		txStores := &store.Stores{
+			Requests:  NewRequestStore(txDB),
+			Approvals: NewApprovalStore(txDB),
+			Policies:  NewPolicyStore(txDB),
+			Webhooks:  NewWebhookStore(txDB),
+			Audits:    NewAuditStore(txDB),
+			Operators: NewOperatorStore(txDB),
+			Outbox:    NewOutboxStore(txDB),
+		}
+
+		if err := fn(txStores); err != nil {
+			return err
+		}
+
+		return tx.Commit(ctx)
+	}
+
+	return s, nil
 }

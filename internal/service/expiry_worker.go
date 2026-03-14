@@ -11,11 +11,13 @@ import (
 )
 
 type ExpiryWorker struct {
-	requests      store.RequestStore
-	audits        store.AuditStore
-	checkInterval time.Duration
-	onExpire      func(ctx context.Context, req *model.Request, approvals []model.Approval)
-	metrics       *metrics.Metrics
+	requests        store.RequestStore
+	audits          store.AuditStore
+	checkInterval   time.Duration
+	enqueueWebhooks func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
+	signalWebhooks  func()
+	runInTx         func(ctx context.Context, fn func(tx *store.Stores) error) error
+	metrics         *metrics.Metrics
 }
 
 // SetMetrics sets the optional Prometheus metrics collector.
@@ -31,8 +33,15 @@ func NewExpiryWorker(requests store.RequestStore, audits store.AuditStore, check
 	}
 }
 
-func (w *ExpiryWorker) SetOnExpire(fn func(ctx context.Context, req *model.Request, approvals []model.Approval)) {
-	w.onExpire = fn
+// SetWebhookDispatch configures transactional webhook dispatch for expired requests.
+func (w *ExpiryWorker) SetWebhookDispatch(
+	runInTx func(ctx context.Context, fn func(tx *store.Stores) error) error,
+	enqueue func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error,
+	signal func(),
+) {
+	w.runInTx = runInTx
+	w.enqueueWebhooks = enqueue
+	w.signalWebhooks = signal
 }
 
 func (w *ExpiryWorker) Start(ctx context.Context) {
@@ -59,9 +68,27 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 	}
 
 	for _, req := range expired {
-		if err := w.requests.UpdateStatus(ctx, req.ID, model.StatusExpired); err != nil {
-			slog.Error("failed to expire request", "error", err, "request_id", req.ID)
-			continue
+		req.Status = model.StatusExpired
+
+		if w.runInTx != nil && w.enqueueWebhooks != nil {
+			err := w.runInTx(ctx, func(txStores *store.Stores) error {
+				if err := txStores.Requests.UpdateStatus(ctx, req.ID, model.StatusExpired); err != nil {
+					return err
+				}
+				return w.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, &req, nil)
+			})
+			if err != nil {
+				slog.Error("failed to expire request", "error", err, "request_id", req.ID)
+				continue
+			}
+			if w.signalWebhooks != nil {
+				w.signalWebhooks()
+			}
+		} else {
+			if err := w.requests.UpdateStatus(ctx, req.ID, model.StatusExpired); err != nil {
+				slog.Error("failed to expire request", "error", err, "request_id", req.ID)
+				continue
+			}
 		}
 
 		// Audit
@@ -81,10 +108,5 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 		}
 
 		slog.Info("request expired", "request_id", req.ID)
-
-		if w.onExpire != nil {
-			req.Status = model.StatusExpired
-			w.onExpire(ctx, &req, nil)
-		}
 	}
 }

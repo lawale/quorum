@@ -139,3 +139,19 @@ type WebhookPayload struct {
 	Approvals []Approval `json:"approvals,omitempty"`
 	Timestamp time.Time  `json:"timestamp"`
 }
+
+// OutboxEntry represents a durable webhook delivery entry in the outbox table.
+type OutboxEntry struct {
+	ID            uuid.UUID       `json:"id"`
+	RequestID     uuid.UUID       `json:"request_id"`
+	WebhookURL    string          `json:"webhook_url"`
+	WebhookSecret string          `json:"-"`
+	Payload       json.RawMessage `json:"payload"`
+	Status        string          `json:"status"` // pending, delivered, failed
+	Attempts      int             `json:"attempts"`
+	MaxRetries    int             `json:"max_retries"`
+	LastError     *string         `json:"last_error,omitempty"`
+	NextRetryAt   time.Time       `json:"next_retry_at"`
+	CreatedAt     time.Time       `json:"created_at"`
+	DeliveredAt   *time.Time      `json:"delivered_at,omitempty"`
+}

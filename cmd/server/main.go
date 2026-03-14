@@ -71,13 +71,19 @@ func main() {
 	requestService := service.NewRequestService(stores.Requests, stores.Approvals, stores.Policies, stores.Audits, permissionChecker)
 	webhookService := service.NewWebhookService(stores.Webhooks)
 
-	// Webhook dispatcher
-	dispatcher := webhook.NewDispatcher(stores.Webhooks, stores.Audits, cfg.Webhook.Timeout, cfg.Webhook.MaxRetries, cfg.Webhook.RetryInterval, cfg.Webhook.CallbackSecret)
-	requestService.SetOnResolve(dispatcher.Dispatch)
+	// Webhook dispatcher (outbox-backed, signal-driven)
+	dispatcher := webhook.NewDispatcher(stores.Outbox, stores.Audits, webhook.Config{
+		Timeout:        cfg.Webhook.Timeout,
+		MaxRetries:     cfg.Webhook.MaxRetries,
+		RetryDelay:     cfg.Webhook.RetryInterval,
+		CallbackSecret: cfg.Webhook.CallbackSecret,
+		Heartbeat:      cfg.Webhook.Heartbeat,
+	})
+	requestService.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
 
 	// Expiry worker
 	expiryWorker := service.NewExpiryWorker(stores.Requests, stores.Audits, cfg.Expiry.CheckInterval)
-	expiryWorker.SetOnExpire(dispatcher.Dispatch)
+	expiryWorker.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
 
 	// Metrics (optional)
 	var (

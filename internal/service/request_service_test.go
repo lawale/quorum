@@ -683,28 +683,44 @@ func TestApprove_PermissionCheck_NoURL_Skips(t *testing.T) {
 	}
 }
 
-func TestApprove_OnResolve_CalledOnTerminal(t *testing.T) {
+func TestApprove_WebhookDispatch_CalledOnTerminal(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy() // 1 stage, 1 required
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
 
-	called := false
-	svc.SetOnResolve(func(ctx context.Context, r *model.Request, approvals []model.Approval) {
-		called = true
-	})
+	enqueueCalled := false
+	signalCalled := false
+	svc.SetWebhookDispatch(
+		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			txStores := &store.Stores{
+				Requests: requestStore,
+				Outbox:   &testutil.MockOutboxStore{},
+				Webhooks: &testutil.MockWebhookStore{},
+			}
+			return fn(txStores)
+		},
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+			enqueueCalled = true
+			return nil
+		},
+		func() { signalCalled = true },
+	)
 
 	_, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !called {
-		t.Error("expected onResolve to be called")
+	if !enqueueCalled {
+		t.Error("expected enqueueWebhooks to be called on terminal status")
+	}
+	if !signalCalled {
+		t.Error("expected signalWebhooks to be called after commit")
 	}
 }
 
-func TestApprove_OnResolve_NotCalledWhenPending(t *testing.T) {
+func TestApprove_WebhookDispatch_NotCalledWhenPending(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy(func(p *model.Policy) {
 		p.Stages[0].RequiredApprovals = 3
@@ -721,17 +737,24 @@ func TestApprove_OnResolve_NotCalledWhenPending(t *testing.T) {
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
 
-	called := false
-	svc.SetOnResolve(func(ctx context.Context, r *model.Request, approvals []model.Approval) {
-		called = true
-	})
+	enqueueCalled := false
+	svc.SetWebhookDispatch(
+		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			return fn(&store.Stores{Requests: requestStore})
+		},
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+			enqueueCalled = true
+			return nil
+		},
+		func() {},
+	)
 
 	_, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if called {
-		t.Error("onResolve should not be called when status is still pending")
+	if enqueueCalled {
+		t.Error("enqueueWebhooks should not be called when status is still pending")
 	}
 }
 
@@ -913,7 +936,7 @@ func TestCancel_WrongMaker(t *testing.T) {
 	}
 }
 
-func TestCancel_OnResolve_Called(t *testing.T) {
+func TestCancel_WebhookDispatch_Called(t *testing.T) {
 	req := testutil.NewRequest(func(r *model.Request) { r.MakerID = "maker-1" })
 	requests := &testutil.MockRequestStore{
 		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Request, error) {
@@ -933,17 +956,33 @@ func TestCancel_OnResolve_Called(t *testing.T) {
 	}
 	svc := newTestRequestService(requests, approvalStore, &testutil.MockPolicyStore{}, audits, nil)
 
-	called := false
-	svc.SetOnResolve(func(ctx context.Context, r *model.Request, approvals []model.Approval) {
-		called = true
-	})
+	enqueueCalled := false
+	signalCalled := false
+	svc.SetWebhookDispatch(
+		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			txStores := &store.Stores{
+				Requests: requests,
+				Outbox:   &testutil.MockOutboxStore{},
+				Webhooks: &testutil.MockWebhookStore{},
+			}
+			return fn(txStores)
+		},
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+			enqueueCalled = true
+			return nil
+		},
+		func() { signalCalled = true },
+	)
 
 	_, err := svc.Cancel(context.Background(), req.ID, "maker-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !called {
-		t.Error("expected onResolve to be called on cancel")
+	if !enqueueCalled {
+		t.Error("expected enqueueWebhooks to be called on cancel")
+	}
+	if !signalCalled {
+		t.Error("expected signalWebhooks to be called on cancel")
 	}
 }
 

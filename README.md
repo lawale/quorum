@@ -35,7 +35,7 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
   - **Duplicate vote prevention** — A checker can only act once per stage.
   - **Request fingerprinting** — Configurable identity fields prevent duplicate pending requests for the same underlying resource.
 
-- **Universal Integration** — Plug Quorum into any stack using its simple REST API. Get notified of state changes via HMAC-signed webhooks with configurable retries, ensuring reliable event delivery.
+- **Universal Integration** — Plug Quorum into any stack using its simple REST API. Get notified of state changes via HMAC-signed webhooks backed by a **transactional outbox**, webhook entries are written atomically with the status update, so no event is ever lost, even if the process crashes mid-request. A signal-driven delivery worker ensures near-instant dispatch with a configurable heartbeat as a safety net.
 
 - **Optional Admin Console** — Manage everything with a built-in web UI built with Svelte 5. Browse requests, define policies, inspect audit logs, and manage operators — all served directly from the Go binary. Opt-in via build tag for a smaller default binary.
 
@@ -206,7 +206,7 @@ curl -X POST http://localhost:8080/api/v1/requests/{request_id}/approve \
 
 ### 4. System Acts on the Result
 
-Your application, listening via webhook, receives a `request.approved` event and executes the transfer; safe in the knowledge that all checks have been passed.
+Your application, listening via webhook, receives a `request.approved` event and executes the transfer; safe in the knowledge that all checks have been passed. The webhook is guaranteed to be delivered as it was written to a durable outbox in the same database transaction as the status change, so nothing can be lost.
 
 ---
 
@@ -324,6 +324,8 @@ See [`config.example.yaml`](config.example.yaml) for all available options.
 | `auth.mode` | `trust` | `trust` (planned: `verify`, `custom`) |
 | `webhook.max_retries` | `3` | Max webhook delivery attempts |
 | `webhook.timeout` | `10s` | HTTP timeout per delivery attempt |
+| `webhook.retry_interval` | `5s` | Base delay between retries (multiplied by attempt number) |
+| `webhook.heartbeat` | `30s` | Safety-net polling interval for the outbox delivery worker |
 | `expiry.check_interval` | `1m` | How often to check for expired requests |
 | `metrics.enabled` | `false` | Enable Prometheus metrics |
 | `console.enabled` | `false` | Enable admin console API routes |
@@ -501,6 +503,24 @@ Templates are resolved once at creation time, so editing a policy template only 
 
 **Consumer override:** If the request already includes `metadata.display` at creation time, it takes precedence over the policy template. This lets consumers provide custom display data for edge cases.
 
+### Webhook Delivery
+
+Quorum uses a **transactional outbox** to guarantee webhook delivery. When a request reaches a terminal status (approved, rejected, cancelled, expired), the outbox entries are written in the same database transaction as the status update. 
+
+**How it works:**
+
+1. A request reaches terminal status (e.g., approved).
+2. In a single database transaction: the status is updated and outbox entries are created for each matching webhook and callback URL.
+3. After the transaction commits, a signal wakes the delivery worker.
+4. The worker reads pending entries from the outbox and delivers them via HTTP POST with HMAC-SHA256 signatures.
+5. Successful deliveries are marked as delivered. Failures are retried with exponential backoff up to `max_retries`.
+
+A configurable heartbeat (default 30s) acts as a safety net, even if a signal is missed, the worker will pick up pending entries on the next heartbeat tick.
+
+**Webhook signature:** Every webhook request includes an `X-Signature-256` header containing `sha256=<hex>`, computed using HMAC-SHA256 with the webhook's secret. Verify this on your end to ensure the request came from Quorum.
+
+**Per-request callback URLs:** Requests can include an optional `callback_url`. This is delivered alongside any matching global webhooks, signed with the server-wide `callback_secret` from config.
+
 ### Docker
 
 ```bash
@@ -572,7 +592,7 @@ internal/
   store/             — Storage interfaces
     postgres/        — PostgreSQL implementation
     mssql/           — SQL Server implementation
-  webhook/           — Webhook dispatcher with retries
+  webhook/           — Signal-driven outbox webhook dispatcher
 console/
   console.go         — Embedded SPA handler (build tag: console)
   console_stub.go    — No-op when built without console tag

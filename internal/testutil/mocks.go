@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
@@ -288,6 +289,58 @@ func (m *MockOperatorStore) Count(ctx context.Context) (int, error) {
 		return m.CountFunc(ctx)
 	}
 	panic("MockOperatorStore.Count not set up")
+}
+
+// MockOutboxStore implements store.OutboxStore with configurable function fields.
+type MockOutboxStore struct {
+	CreateBatchFunc     func(ctx context.Context, entries []model.OutboxEntry) error
+	ListPendingFunc     func(ctx context.Context, limit int) ([]model.OutboxEntry, error)
+	MarkDeliveredFunc   func(ctx context.Context, id uuid.UUID) error
+	MarkRetryFunc       func(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error
+	MarkFailedFunc      func(ctx context.Context, id uuid.UUID, attempts int, lastError string) error
+	DeleteDeliveredFunc func(ctx context.Context, olderThan time.Time) (int64, error)
+}
+
+func (m *MockOutboxStore) CreateBatch(ctx context.Context, entries []model.OutboxEntry) error {
+	if m.CreateBatchFunc != nil {
+		return m.CreateBatchFunc(ctx, entries)
+	}
+	return nil
+}
+
+func (m *MockOutboxStore) ListPending(ctx context.Context, limit int) ([]model.OutboxEntry, error) {
+	if m.ListPendingFunc != nil {
+		return m.ListPendingFunc(ctx, limit)
+	}
+	return nil, nil
+}
+
+func (m *MockOutboxStore) MarkDelivered(ctx context.Context, id uuid.UUID) error {
+	if m.MarkDeliveredFunc != nil {
+		return m.MarkDeliveredFunc(ctx, id)
+	}
+	return nil
+}
+
+func (m *MockOutboxStore) MarkRetry(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error {
+	if m.MarkRetryFunc != nil {
+		return m.MarkRetryFunc(ctx, id, attempts, lastError, nextRetryAt)
+	}
+	return nil
+}
+
+func (m *MockOutboxStore) MarkFailed(ctx context.Context, id uuid.UUID, attempts int, lastError string) error {
+	if m.MarkFailedFunc != nil {
+		return m.MarkFailedFunc(ctx, id, attempts, lastError)
+	}
+	return nil
+}
+
+func (m *MockOutboxStore) DeleteDelivered(ctx context.Context, olderThan time.Time) (int64, error) {
+	if m.DeleteDeliveredFunc != nil {
+		return m.DeleteDeliveredFunc(ctx, olderThan)
+	}
+	return 0, nil
 }
 
 // MockAuthProvider implements auth.Provider with configurable function fields.

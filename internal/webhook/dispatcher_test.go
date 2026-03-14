@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 	"github.com/lawale/quorum/internal/testutil"
 )
 
-func TestDispatcher_Dispatch_QueuesMatchingWebhooks(t *testing.T) {
+func TestDispatcher_Enqueue_WritesMatchingWebhooks(t *testing.T) {
 	wh1 := testutil.NewWebhook()
 	wh2 := testutil.NewWebhook()
 	webhooks := &testutil.MockWebhookStore{
@@ -22,85 +21,135 @@ func TestDispatcher_Dispatch_QueuesMatchingWebhooks(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond, "")
+	var createdEntries []model.OutboxEntry
+	outbox := &testutil.MockOutboxStore{
+		CreateBatchFunc: func(ctx context.Context, entries []model.OutboxEntry) error {
+			createdEntries = entries
+			return nil
+		},
+	}
+
+	dispatcher := NewDispatcher(&testutil.MockOutboxStore{}, &testutil.MockAuditStore{}, Config{
+		Timeout: 5 * time.Second,
+	})
+
 	req := testutil.NewRequest(func(r *model.Request) { r.Status = model.StatusApproved })
 
-	dispatcher.Dispatch(context.Background(), req, nil)
-
-	// Should have 2 jobs in the queue (no callback URL)
-	if len(dispatcher.queue) != 2 {
-		t.Errorf("queue length = %d, want 2", len(dispatcher.queue))
+	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(createdEntries) != 2 {
+		t.Errorf("expected 2 outbox entries, got %d", len(createdEntries))
 	}
 }
 
-func TestDispatcher_Dispatch_IncludesCallbackURL(t *testing.T) {
+func TestDispatcher_Enqueue_IncludesCallbackURL(t *testing.T) {
 	webhooks := &testutil.MockWebhookStore{
 		ListByEventAndTypeFunc: func(ctx context.Context, event, rt string) ([]model.Webhook, error) {
 			return []model.Webhook{*testutil.NewWebhook()}, nil
 		},
 	}
 
-	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond, "")
+	var createdEntries []model.OutboxEntry
+	outbox := &testutil.MockOutboxStore{
+		CreateBatchFunc: func(ctx context.Context, entries []model.OutboxEntry) error {
+			createdEntries = entries
+			return nil
+		},
+	}
+
+	dispatcher := NewDispatcher(&testutil.MockOutboxStore{}, &testutil.MockAuditStore{}, Config{
+		Timeout: 5 * time.Second,
+	})
+
 	req := testutil.NewRequest(func(r *model.Request) {
 		r.Status = model.StatusApproved
 		r.CallbackURL = testutil.StringPtr("https://example.com/callback")
 	})
 
-	dispatcher.Dispatch(context.Background(), req, nil)
-
+	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	// 1 from matching webhook + 1 from callback URL
-	if len(dispatcher.queue) != 2 {
-		t.Errorf("queue length = %d, want 2 (1 webhook + 1 callback)", len(dispatcher.queue))
+	if len(createdEntries) != 2 {
+		t.Errorf("expected 2 outbox entries (1 webhook + 1 callback), got %d", len(createdEntries))
 	}
 }
 
-func TestDispatcher_Dispatch_CallbackURL_Signed(t *testing.T) {
+func TestDispatcher_Enqueue_CallbackURL_Signed(t *testing.T) {
 	webhooks := &testutil.MockWebhookStore{
 		ListByEventAndTypeFunc: func(ctx context.Context, event, rt string) ([]model.Webhook, error) {
 			return nil, nil
 		},
 	}
 
+	var createdEntries []model.OutboxEntry
+	outbox := &testutil.MockOutboxStore{
+		CreateBatchFunc: func(ctx context.Context, entries []model.OutboxEntry) error {
+			createdEntries = entries
+			return nil
+		},
+	}
+
 	callbackSecret := "my-callback-secret"
-	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond, callbackSecret)
+	dispatcher := NewDispatcher(&testutil.MockOutboxStore{}, &testutil.MockAuditStore{}, Config{
+		Timeout:        5 * time.Second,
+		CallbackSecret: callbackSecret,
+	})
+
 	req := testutil.NewRequest(func(r *model.Request) {
 		r.Status = model.StatusApproved
 		r.CallbackURL = testutil.StringPtr("https://example.com/callback")
 	})
 
-	dispatcher.Dispatch(context.Background(), req, nil)
-
-	if len(dispatcher.queue) != 1 {
-		t.Fatalf("queue length = %d, want 1", len(dispatcher.queue))
+	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	job := <-dispatcher.queue
-	if job.webhook.Secret != callbackSecret {
-		t.Errorf("callback webhook secret = %q, want %q", job.webhook.Secret, callbackSecret)
+	if len(createdEntries) != 1 {
+		t.Fatalf("expected 1 outbox entry, got %d", len(createdEntries))
+	}
+	if createdEntries[0].WebhookSecret != callbackSecret {
+		t.Errorf("callback webhook secret = %q, want %q", createdEntries[0].WebhookSecret, callbackSecret)
 	}
 }
 
-func TestDispatcher_Dispatch_NoCallbackURL(t *testing.T) {
+func TestDispatcher_Enqueue_NoCallbackURL(t *testing.T) {
 	webhooks := &testutil.MockWebhookStore{
 		ListByEventAndTypeFunc: func(ctx context.Context, event, rt string) ([]model.Webhook, error) {
 			return []model.Webhook{*testutil.NewWebhook()}, nil
 		},
 	}
 
-	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond, "")
+	var createdEntries []model.OutboxEntry
+	outbox := &testutil.MockOutboxStore{
+		CreateBatchFunc: func(ctx context.Context, entries []model.OutboxEntry) error {
+			createdEntries = entries
+			return nil
+		},
+	}
+
+	dispatcher := NewDispatcher(&testutil.MockOutboxStore{}, &testutil.MockAuditStore{}, Config{
+		Timeout: 5 * time.Second,
+	})
+
 	req := testutil.NewRequest(func(r *model.Request) {
 		r.Status = model.StatusApproved
 		r.CallbackURL = nil
 	})
 
-	dispatcher.Dispatch(context.Background(), req, nil)
-
-	if len(dispatcher.queue) != 1 {
-		t.Errorf("queue length = %d, want 1 (no callback)", len(dispatcher.queue))
+	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(createdEntries) != 1 {
+		t.Errorf("expected 1 outbox entry (no callback), got %d", len(createdEntries))
 	}
 }
 
-func TestDispatcher_Deliver_Success(t *testing.T) {
+func TestDispatcher_DeliverEntry_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -114,76 +163,67 @@ func TestDispatcher_Deliver_Success(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond, "")
-
-	job := deliveryJob{
-		webhook: model.Webhook{URL: server.URL, Secret: "test-secret"},
-		payload: model.WebhookPayload{
-			Event:     "approved",
-			Request:   *testutil.NewRequest(),
-			Timestamp: time.Now().UTC(),
+	outbox := &testutil.MockOutboxStore{
+		MarkDeliveredFunc: func(ctx context.Context, id uuid.UUID) error {
+			return nil
 		},
-		request: *testutil.NewRequest(),
 	}
 
-	dispatcher.deliver(context.Background(), job)
+	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second})
+
+	entry := model.OutboxEntry{
+		ID:            uuid.New(),
+		RequestID:     uuid.New(),
+		WebhookURL:    server.URL,
+		WebhookSecret: "test-secret",
+		Payload:       []byte(`{"event":"approved"}`),
+		MaxRetries:    3,
+	}
+
+	dispatcher.deliverEntry(context.Background(), entry)
 
 	if auditAction != "webhook_sent" {
 		t.Errorf("audit action = %q, want %q", auditAction, "webhook_sent")
 	}
 }
 
-func TestDispatcher_Deliver_RetryOnFailure(t *testing.T) {
-	var mu sync.Mutex
-	attempts := 0
+func TestDispatcher_DeliverEntry_FailureSchedulesRetry(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		attempts++
-		a := attempts
-		mu.Unlock()
-		if a <= 1 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
-	var auditAction string
-	audits := &testutil.MockAuditStore{
-		CreateFunc: func(ctx context.Context, log *model.AuditLog) error {
-			auditAction = log.Action
+	var retryAttempts int
+	outbox := &testutil.MockOutboxStore{
+		MarkRetryFunc: func(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error {
+			retryAttempts = attempts
 			return nil
 		},
 	}
 
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 2, time.Millisecond, "")
+	dispatcher := NewDispatcher(outbox, &testutil.MockAuditStore{}, Config{
+		Timeout:    5 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: time.Millisecond,
+	})
 
-	job := deliveryJob{
-		webhook: model.Webhook{URL: server.URL, Secret: "test"},
-		payload: model.WebhookPayload{
-			Event:     "approved",
-			Request:   *testutil.NewRequest(),
-			Timestamp: time.Now().UTC(),
-		},
-		request: *testutil.NewRequest(),
+	entry := model.OutboxEntry{
+		ID:         uuid.New(),
+		RequestID:  uuid.New(),
+		WebhookURL: server.URL,
+		Payload:    []byte(`{"event":"approved"}`),
+		Attempts:   0,
+		MaxRetries: 3,
 	}
 
-	dispatcher.deliver(context.Background(), job)
+	dispatcher.deliverEntry(context.Background(), entry)
 
-	mu.Lock()
-	totalAttempts := attempts
-	mu.Unlock()
-
-	if totalAttempts < 2 {
-		t.Errorf("expected at least 2 attempts, got %d", totalAttempts)
-	}
-	if auditAction != "webhook_sent" {
-		t.Errorf("audit action = %q, want %q (retry succeeded)", auditAction, "webhook_sent")
+	if retryAttempts != 1 {
+		t.Errorf("retry attempts = %d, want 1", retryAttempts)
 	}
 }
 
-func TestDispatcher_Deliver_ExhaustsRetries(t *testing.T) {
+func TestDispatcher_DeliverEntry_ExhaustsRetries(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError) // Always fail
 	}))
@@ -197,26 +237,35 @@ func TestDispatcher_Deliver_ExhaustsRetries(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 1, time.Millisecond, "")
-
-	job := deliveryJob{
-		webhook: model.Webhook{URL: server.URL, Secret: "test"},
-		payload: model.WebhookPayload{
-			Event:     "approved",
-			Request:   *testutil.NewRequest(),
-			Timestamp: time.Now().UTC(),
+	outbox := &testutil.MockOutboxStore{
+		MarkFailedFunc: func(ctx context.Context, id uuid.UUID, attempts int, lastError string) error {
+			return nil
 		},
-		request: *testutil.NewRequest(),
 	}
 
-	dispatcher.deliver(context.Background(), job)
+	dispatcher := NewDispatcher(outbox, audits, Config{
+		Timeout:    5 * time.Second,
+		MaxRetries: 1,
+		RetryDelay: time.Millisecond,
+	})
+
+	entry := model.OutboxEntry{
+		ID:         uuid.New(),
+		RequestID:  uuid.New(),
+		WebhookURL: server.URL,
+		Payload:    []byte(`{"event":"approved"}`),
+		Attempts:   1, // Already attempted once, max is 1
+		MaxRetries: 1,
+	}
+
+	dispatcher.deliverEntry(context.Background(), entry)
 
 	if auditAction != "webhook_failed" {
 		t.Errorf("audit action = %q, want %q", auditAction, "webhook_failed")
 	}
 }
 
-func TestDispatcher_Deliver_HMAC_Signature(t *testing.T) {
+func TestDispatcher_DeliverEntry_HMAC_Signature(t *testing.T) {
 	var receivedSig string
 	var receivedBody []byte
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -228,25 +277,27 @@ func TestDispatcher_Deliver_HMAC_Signature(t *testing.T) {
 	}))
 	defer server.Close()
 
+	outbox := &testutil.MockOutboxStore{
+		MarkDeliveredFunc: func(ctx context.Context, id uuid.UUID) error { return nil },
+	}
 	audits := &testutil.MockAuditStore{
 		CreateFunc: func(ctx context.Context, log *model.AuditLog) error { return nil },
 	}
 
 	secret := "my-webhook-secret"
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond, "")
+	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second})
 
-	payload := model.WebhookPayload{
-		Event:     "approved",
-		Request:   *testutil.NewRequest(func(r *model.Request) { r.ID = uuid.MustParse("00000000-0000-0000-0000-000000000001") }),
-		Timestamp: time.Now().UTC(),
-	}
-	job := deliveryJob{
-		webhook: model.Webhook{URL: server.URL, Secret: secret},
-		payload: payload,
-		request: *testutil.NewRequest(),
+	payload := []byte(`{"event":"approved","request_id":"00000000-0000-0000-0000-000000000001"}`)
+	entry := model.OutboxEntry{
+		ID:            uuid.New(),
+		RequestID:     uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		WebhookURL:    server.URL,
+		WebhookSecret: secret,
+		Payload:       payload,
+		MaxRetries:    3,
 	}
 
-	dispatcher.deliver(context.Background(), job)
+	dispatcher.deliverEntry(context.Background(), entry)
 
 	if receivedSig == "" {
 		t.Fatal("expected X-Signature-256 header")
@@ -263,7 +314,7 @@ func TestDispatcher_Deliver_HMAC_Signature(t *testing.T) {
 	}
 }
 
-func TestDispatcher_Deliver_NoHMAC_WhenNoSecret(t *testing.T) {
+func TestDispatcher_DeliverEntry_NoHMAC_WhenNoSecret(t *testing.T) {
 	var receivedSig string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedSig = r.Header.Get("X-Signature-256")
@@ -271,26 +322,53 @@ func TestDispatcher_Deliver_NoHMAC_WhenNoSecret(t *testing.T) {
 	}))
 	defer server.Close()
 
+	outbox := &testutil.MockOutboxStore{
+		MarkDeliveredFunc: func(ctx context.Context, id uuid.UUID) error { return nil },
+	}
 	audits := &testutil.MockAuditStore{
 		CreateFunc: func(ctx context.Context, log *model.AuditLog) error { return nil },
 	}
 
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond, "")
+	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second})
 
-	job := deliveryJob{
-		webhook: model.Webhook{URL: server.URL, Secret: ""}, // No secret
-		payload: model.WebhookPayload{
-			Event:     "approved",
-			Request:   *testutil.NewRequest(),
-			Timestamp: time.Now().UTC(),
-		},
-		request: *testutil.NewRequest(),
+	entry := model.OutboxEntry{
+		ID:            uuid.New(),
+		RequestID:     uuid.New(),
+		WebhookURL:    server.URL,
+		WebhookSecret: "", // No secret
+		Payload:       []byte(`{"event":"approved"}`),
+		MaxRetries:    3,
 	}
 
-	dispatcher.deliver(context.Background(), job)
+	dispatcher.deliverEntry(context.Background(), entry)
 
 	if receivedSig != "" {
 		t.Errorf("expected no X-Signature-256 header when secret is empty, got %q", receivedSig)
+	}
+}
+
+func TestDispatcher_Signal_NonBlocking(t *testing.T) {
+	dispatcher := NewDispatcher(&testutil.MockOutboxStore{}, &testutil.MockAuditStore{}, Config{
+		Timeout: 5 * time.Second,
+	})
+
+	// Signal twice — should not block
+	dispatcher.Signal()
+	dispatcher.Signal()
+
+	// Channel should have exactly one signal
+	select {
+	case <-dispatcher.signal:
+		// OK
+	default:
+		t.Error("expected signal in channel")
+	}
+
+	select {
+	case <-dispatcher.signal:
+		t.Error("expected at most one signal in channel")
+	default:
+		// OK — channel is empty after draining
 	}
 }
 

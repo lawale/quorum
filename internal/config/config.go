@@ -107,6 +107,7 @@ type WebhookConfig struct {
 	RetryInterval  time.Duration `yaml:"retry_interval"`
 	Timeout        time.Duration `yaml:"timeout"`
 	CallbackSecret string        `yaml:"callback_secret"`
+	Heartbeat      time.Duration `yaml:"heartbeat"`
 }
 
 type ExpiryConfig struct {
