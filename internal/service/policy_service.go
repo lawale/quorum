@@ -6,15 +6,17 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/display"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
 
 var (
-	ErrPolicyNotFound     = errors.New("policy not found")
-	ErrPolicyTypeConflict = errors.New("a policy for this request type already exists")
-	ErrNoStages           = errors.New("policy must have at least one approval stage")
-	ErrInvalidStageIndex  = errors.New("stage indices must be sequential starting from 0")
+	ErrPolicyNotFound       = errors.New("policy not found")
+	ErrPolicyTypeConflict   = errors.New("a policy for this request type already exists")
+	ErrNoStages             = errors.New("policy must have at least one approval stage")
+	ErrInvalidStageIndex    = errors.New("stage indices must be sequential starting from 0")
+	ErrInvalidDisplayTemplate = errors.New("invalid display template")
 )
 
 type PolicyService struct {
@@ -34,23 +36,36 @@ func (s *PolicyService) Create(ctx context.Context, policy *model.Policy) error 
 		return ErrPolicyTypeConflict
 	}
 
-	// Validate and default stages
-	if len(policy.Stages) == 0 {
-		return ErrNoStages
+	if err := validateAndDefaultStages(policy.Stages); err != nil {
+		return err
 	}
-	for i := range policy.Stages {
-		if policy.Stages[i].Index != i {
-			return fmt.Errorf("%w: expected %d, got %d", ErrInvalidStageIndex, i, policy.Stages[i].Index)
-		}
-		if policy.Stages[i].RequiredApprovals < 1 {
-			policy.Stages[i].RequiredApprovals = 1
-		}
-		if policy.Stages[i].RejectionPolicy == "" {
-			policy.Stages[i].RejectionPolicy = model.RejectionPolicyAny
-		}
+
+	if err := display.ValidateTemplate(policy.DisplayTemplate); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidDisplayTemplate, err.Error())
 	}
 
 	return s.policies.Create(ctx, policy)
+}
+
+// validateAndDefaultStages validates stage ordering and applies defaults
+// for required_approvals and rejection_policy. It is called on both
+// Create and Update to prevent policies from entering an invalid state.
+func validateAndDefaultStages(stages []model.ApprovalStage) error {
+	if len(stages) == 0 {
+		return ErrNoStages
+	}
+	for i := range stages {
+		if stages[i].Index != i {
+			return fmt.Errorf("%w: expected %d, got %d", ErrInvalidStageIndex, i, stages[i].Index)
+		}
+		if stages[i].RequiredApprovals < 1 {
+			stages[i].RequiredApprovals = 1
+		}
+		if stages[i].RejectionPolicy == "" {
+			stages[i].RejectionPolicy = model.RejectionPolicyAny
+		}
+	}
+	return nil
 }
 
 func (s *PolicyService) GetByID(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
@@ -86,6 +101,14 @@ func (s *PolicyService) Update(ctx context.Context, policy *model.Policy) error 
 	}
 	if existing == nil {
 		return ErrPolicyNotFound
+	}
+
+	if err := validateAndDefaultStages(policy.Stages); err != nil {
+		return err
+	}
+
+	if err := display.ValidateTemplate(policy.DisplayTemplate); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidDisplayTemplate, err.Error())
 	}
 
 	return s.policies.Update(ctx, policy)

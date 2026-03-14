@@ -321,7 +321,7 @@ See [`config.example.yaml`](config.example.yaml) for all available options.
 | `server.host` | `0.0.0.0` | Listen address |
 | `server.port` | `8080` | Listen port |
 | `database.driver` | `postgres` | `postgres` or `mssql` |
-| `auth.mode` | `trust` | `trust`, `verify`, or `custom` |
+| `auth.mode` | `trust` | `trust` (planned: `verify`, `custom`) |
 | `webhook.max_retries` | `3` | Max webhook delivery attempts |
 | `webhook.timeout` | `10s` | HTTP timeout per delivery attempt |
 | `expiry.check_interval` | `1m` | How often to check for expired requests |
@@ -331,11 +331,11 @@ See [`config.example.yaml`](config.example.yaml) for all available options.
 
 ### Authentication Modes
 
-Quorum supports three authentication modes, configured via `auth.mode`:
+Quorum supports pluggable authentication modes, configured via `auth.mode`:
 
 - **`trust`** — Reads user identity from request headers (`X-User-ID`, `X-User-Roles`). Suitable when Quorum sits behind a trusted gateway or service mesh that sets these headers.
-- **`verify`** — Validates JWT tokens against a JWKS endpoint. Extracts user ID and roles from configurable claims.
-- **`custom`** — Delegates authentication to an external HTTP endpoint.
+- **`verify`** *(planned)* — Will validate JWT tokens against a JWKS endpoint, extracting user ID and roles from configurable claims.
+- **`custom`** *(planned)* — Will delegate authentication to an external HTTP endpoint.
 
 ### Database Support
 

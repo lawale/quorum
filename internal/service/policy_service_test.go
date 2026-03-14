@@ -232,6 +232,83 @@ func TestPolicyList_Success(t *testing.T) {
 	}
 }
 
+func TestPolicyUpdate_NoStages_Error(t *testing.T) {
+	existing := testutil.NewPolicy()
+	policies := &testutil.MockPolicyStore{
+		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
+			return existing, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	updated := testutil.NewPolicy(func(p *model.Policy) {
+		p.ID = existing.ID
+		p.Stages = nil
+	})
+	err := svc.Update(context.Background(), updated)
+	if !errors.Is(err, ErrNoStages) {
+		t.Fatalf("expected ErrNoStages, got: %v", err)
+	}
+}
+
+func TestPolicyUpdate_InvalidStageIndex_Error(t *testing.T) {
+	existing := testutil.NewPolicy()
+	policies := &testutil.MockPolicyStore{
+		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
+			return existing, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	updated := testutil.NewPolicy(func(p *model.Policy) {
+		p.ID = existing.ID
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			{Index: 5, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+		}
+	})
+	err := svc.Update(context.Background(), updated)
+	if !errors.Is(err, ErrInvalidStageIndex) {
+		t.Fatalf("expected ErrInvalidStageIndex, got: %v", err)
+	}
+}
+
+func TestPolicyUpdate_InvalidDisplayTemplate_Error(t *testing.T) {
+	existing := testutil.NewPolicy()
+	policies := &testutil.MockPolicyStore{
+		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
+			return existing, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	updated := testutil.NewPolicy(func(p *model.Policy) {
+		p.ID = existing.ID
+		p.DisplayTemplate = []byte(`{"fields": [{"label": "", "path": "x"}]}`)
+	})
+	err := svc.Update(context.Background(), updated)
+	if !errors.Is(err, ErrInvalidDisplayTemplate) {
+		t.Fatalf("expected ErrInvalidDisplayTemplate, got: %v", err)
+	}
+}
+
+func TestPolicyCreate_InvalidDisplayTemplate_Error(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.DisplayTemplate = []byte(`{"fields": [{"label": "X", "path": "x", "format": "bogus"}]}`)
+	})
+	err := svc.Create(context.Background(), policy)
+	if !errors.Is(err, ErrInvalidDisplayTemplate) {
+		t.Fatalf("expected ErrInvalidDisplayTemplate, got: %v", err)
+	}
+}
+
 func TestPolicyUpdate_Success(t *testing.T) {
 	existing := testutil.NewPolicy()
 	policies := &testutil.MockPolicyStore{

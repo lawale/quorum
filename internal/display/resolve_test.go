@@ -226,6 +226,107 @@ func TestResolve_Formatters(t *testing.T) {
 	}
 }
 
+func TestValidateTemplate_Valid(t *testing.T) {
+	tmpl := json.RawMessage(`{
+		"title": "Wire Transfer - {{amount | currency}}",
+		"fields": [
+			{"label": "From", "path": "source_account_id"},
+			{"label": "Amount", "path": "amount", "format": "currency"}
+		]
+	}`)
+
+	if err := ValidateTemplate(tmpl); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateTemplate_NilOrEmpty(t *testing.T) {
+	if err := ValidateTemplate(nil); err != nil {
+		t.Fatalf("nil template should be valid, got: %v", err)
+	}
+	if err := ValidateTemplate(json.RawMessage(`null`)); err != nil {
+		t.Fatalf("null template should be valid, got: %v", err)
+	}
+}
+
+func TestValidateTemplate_InvalidJSON(t *testing.T) {
+	err := ValidateTemplate(json.RawMessage(`{not json}`))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestValidateTemplate_EmptyContent(t *testing.T) {
+	err := ValidateTemplate(json.RawMessage(`{"fields": []}`))
+	if err == nil {
+		t.Fatal("expected error for empty template")
+	}
+}
+
+func TestValidateTemplate_MissingLabel(t *testing.T) {
+	err := ValidateTemplate(json.RawMessage(`{
+		"fields": [{"label": "", "path": "amount"}]
+	}`))
+	if err == nil {
+		t.Fatal("expected error for missing label")
+	}
+}
+
+func TestValidateTemplate_MissingPath(t *testing.T) {
+	err := ValidateTemplate(json.RawMessage(`{
+		"fields": [{"label": "Amount", "path": ""}]
+	}`))
+	if err == nil {
+		t.Fatal("expected error for missing path")
+	}
+}
+
+func TestValidateTemplate_UnknownFormat(t *testing.T) {
+	err := ValidateTemplate(json.RawMessage(`{
+		"fields": [{"label": "Amount", "path": "amount", "format": "bogus"}]
+	}`))
+	if err == nil {
+		t.Fatal("expected error for unknown format")
+	}
+}
+
+func TestValidateTemplate_ValidFormats(t *testing.T) {
+	for _, format := range []string{"currency", "date", "number", "truncate"} {
+		tmpl := json.RawMessage(`{
+			"fields": [{"label": "X", "path": "x", "format": "` + format + `"}]
+		}`)
+		if err := ValidateTemplate(tmpl); err != nil {
+			t.Errorf("format %q should be valid, got: %v", format, err)
+		}
+	}
+}
+
+func TestValidateTemplate_ItemsMissingPath(t *testing.T) {
+	err := ValidateTemplate(json.RawMessage(`{
+		"title": "Test",
+		"fields": [],
+		"items": {"path": "", "label_path": "name", "fields": [{"label": "X", "path": "x"}]}
+	}`))
+	if err == nil {
+		t.Fatal("expected error for items missing path")
+	}
+}
+
+func TestValidateTemplate_ItemsFieldValidation(t *testing.T) {
+	err := ValidateTemplate(json.RawMessage(`{
+		"title": "Test",
+		"fields": [],
+		"items": {
+			"path": "profiles",
+			"label_path": "name",
+			"fields": [{"label": "", "path": "email"}]
+		}
+	}`))
+	if err == nil {
+		t.Fatal("expected error for items field missing label")
+	}
+}
+
 func TestResolve_TitleInterpolation(t *testing.T) {
 	tmpl := json.RawMessage(`{
 		"title": "{{type}} - {{amount | currency}} from {{source}}",

@@ -52,7 +52,58 @@ type ResolvedItem struct {
 	Fields []ResolvedField `json:"fields"`
 }
 
-var placeholderRe = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+var (
+	placeholderRe    = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+	validFormatters  = map[string]bool{"currency": true, "date": true, "number": true, "truncate": true}
+)
+
+// ValidateTemplate checks that a display template has a valid structure.
+// It should be called at policy create/update time to reject malformed templates early.
+func ValidateTemplate(raw json.RawMessage) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+
+	var t Template
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return fmt.Errorf("invalid display_template JSON: %w", err)
+	}
+
+	if t.Title == "" && len(t.Fields) == 0 && t.Items == nil {
+		return fmt.Errorf("display_template must have at least a title, fields, or items")
+	}
+
+	for i, f := range t.Fields {
+		if f.Label == "" {
+			return fmt.Errorf("display_template fields[%d]: label is required", i)
+		}
+		if f.Path == "" {
+			return fmt.Errorf("display_template fields[%d]: path is required", i)
+		}
+		if f.Format != "" && !validFormatters[f.Format] {
+			return fmt.Errorf("display_template fields[%d]: unknown format %q (valid: currency, date, number, truncate)", i, f.Format)
+		}
+	}
+
+	if t.Items != nil {
+		if t.Items.Path == "" {
+			return fmt.Errorf("display_template items: path is required")
+		}
+		for i, f := range t.Items.Fields {
+			if f.Label == "" {
+				return fmt.Errorf("display_template items.fields[%d]: label is required", i)
+			}
+			if f.Path == "" {
+				return fmt.Errorf("display_template items.fields[%d]: path is required", i)
+			}
+			if f.Format != "" && !validFormatters[f.Format] {
+				return fmt.Errorf("display_template items.fields[%d]: unknown format %q (valid: currency, date, number, truncate)", i, f.Format)
+			}
+		}
+	}
+
+	return nil
+}
 
 // Resolve applies a display template to a payload and returns the resolved output.
 // If the template is nil or empty, it returns nil.
