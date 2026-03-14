@@ -21,7 +21,7 @@ func NewAuditStore(db *DB) *AuditStore {
 
 func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 	query := `
-		INSERT INTO audit_logs (id, request_id, action, actor_id, details, created_at)
+		INSERT INTO [quorum].[audit_logs] (id, request_id, action, actor_id, details, created_at)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6)`
 
 	if log.ID == uuid.Nil {
@@ -42,7 +42,7 @@ func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 func (s *AuditStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.AuditLog, error) {
 	query := `
 		SELECT id, request_id, action, actor_id, details, created_at
-		FROM audit_logs WHERE request_id = @p1 ORDER BY created_at ASC`
+		FROM [quorum].[audit_logs] WHERE request_id = @p1 ORDER BY created_at ASC`
 
 	rows, err := s.db.Pool.QueryContext(ctx, query, requestID)
 	if err != nil {

@@ -1,5 +1,5 @@
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='requests' AND xtype='U')
-CREATE TABLE requests (
+IF OBJECT_ID('[quorum].[requests]', 'U') IS NULL
+CREATE TABLE [quorum].[requests] (
    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
    idempotency_key NVARCHAR(255) UNIQUE,
    type NVARCHAR(255) NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE requests (
    updated_at DATETIMEOFFSET NOT NULL DEFAULT GETUTCDATE()
 );
 
-CREATE INDEX idx_requests_status ON requests (status);
-CREATE INDEX idx_requests_type ON requests (type);
-CREATE INDEX idx_requests_maker_id ON requests (maker_id);
-CREATE INDEX idx_requests_fingerprint ON requests (type, fingerprint) WHERE status = 'pending';
+CREATE INDEX idx_requests_status ON [quorum].[requests] (status);
+CREATE INDEX idx_requests_type ON [quorum].[requests] (type);
+CREATE INDEX idx_requests_maker_id ON [quorum].[requests] (maker_id);
+CREATE INDEX idx_requests_fingerprint ON [quorum].[requests] (type, fingerprint) WHERE status = 'pending';

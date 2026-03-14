@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS policies (
+CREATE TABLE IF NOT EXISTS quorum.policies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     request_type VARCHAR(255) NOT NULL UNIQUE,
@@ -12,4 +12,4 @@ CREATE TABLE IF NOT EXISTS policies (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_policies_request_type ON policies (request_type);
+CREATE INDEX idx_policies_request_type ON quorum.policies (request_type);

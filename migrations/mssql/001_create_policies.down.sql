@@ -1,1 +1,1 @@
-IF OBJECT_ID('policies', 'U') IS NOT NULL DROP TABLE policies;
+IF OBJECT_ID('[quorum].[policies]', 'U') IS NOT NULL DROP TABLE [quorum].[policies];

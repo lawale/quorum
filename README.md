@@ -109,10 +109,11 @@ cp config.example.yaml config.yaml
 ### 3. Run Migrations
 
 ```bash
-# PostgreSQL
-migrate -path migrations/postgres -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" up
+# PostgreSQL — create the quorum schema, then run migrations
+psql "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" -c "CREATE SCHEMA IF NOT EXISTS quorum;"
+migrate -path migrations/postgres -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable&search_path=quorum" up
 
-# SQL Server
+# SQL Server (schema is created automatically by migration 001)
 migrate -path migrations/mssql -database "sqlserver://sa:Password@localhost:1433?database=quorum" up
 ```
 
@@ -346,6 +347,8 @@ database:
     encrypt: "disable"
     TrustServerCertificate: "true"
 ```
+
+**Schema isolation:** Quorum creates all its tables in a dedicated `quorum` schema, so it can safely share a database with your application without table name conflicts. The schema must be created before running migrations (see [Run Migrations](#3-run-migrations) or `make migrate-up`).
 
 Migrations are in `migrations/postgres/` and `migrations/mssql/` respectively.
 

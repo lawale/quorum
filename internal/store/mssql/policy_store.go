@@ -23,7 +23,7 @@ func NewPolicyStore(db *DB) *PolicyStore {
 
 func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	query := `
-		INSERT INTO policies (` + policyColumns + `)
+		INSERT INTO [quorum].[policies] (` + policyColumns + `)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9)`
 
 	now := time.Now().UTC()
@@ -61,15 +61,15 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 }
 
 func (s *PolicyStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
-	return s.scanPolicy(ctx, "SELECT "+policyColumns+" FROM policies WHERE id = @p1", id)
+	return s.scanPolicy(ctx, "SELECT "+policyColumns+" FROM [quorum].[policies] WHERE id = @p1", id)
 }
 
 func (s *PolicyStore) GetByRequestType(ctx context.Context, requestType string) (*model.Policy, error) {
-	return s.scanPolicy(ctx, "SELECT "+policyColumns+" FROM policies WHERE request_type = @p1", requestType)
+	return s.scanPolicy(ctx, "SELECT "+policyColumns+" FROM [quorum].[policies] WHERE request_type = @p1", requestType)
 }
 
 func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
-	query := `SELECT ` + policyColumns + ` FROM policies ORDER BY created_at DESC`
+	query := `SELECT ` + policyColumns + ` FROM [quorum].[policies] ORDER BY created_at DESC`
 
 	rows, err := s.db.Pool.QueryContext(ctx, query)
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
 
 func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 	query := `
-		UPDATE policies SET name = @p1, stages = @p2, identity_fields = @p3,
+		UPDATE [quorum].[policies] SET name = @p1, stages = @p2, identity_fields = @p3,
 		permission_check_url = @p4, auto_expire_duration = @p5, updated_at = @p6
 		WHERE id = @p7`
 
@@ -125,7 +125,7 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 }
 
 func (s *PolicyStore) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.Pool.ExecContext(ctx, "DELETE FROM policies WHERE id = @p1", id)
+	_, err := s.db.Pool.ExecContext(ctx, "DELETE FROM [quorum].[policies] WHERE id = @p1", id)
 	if err != nil {
 		return fmt.Errorf("deleting policy: %w", err)
 	}

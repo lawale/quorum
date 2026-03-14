@@ -1,1 +1,1 @@
-IF OBJECT_ID('approvals', 'U') IS NOT NULL DROP TABLE approvals;
+IF OBJECT_ID('[quorum].[approvals]', 'U') IS NOT NULL DROP TABLE [quorum].[approvals];

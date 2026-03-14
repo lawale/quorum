@@ -1,4 +1,4 @@
-CREATE TABLE operators (
+CREATE TABLE [quorum].[operators] (
     id UNIQUEIDENTIFIER PRIMARY KEY,
     username NVARCHAR(255) NOT NULL,
     password_hash NVARCHAR(255) NOT NULL,

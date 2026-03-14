@@ -22,7 +22,7 @@ func NewOperatorStore(db *DB) *OperatorStore {
 
 func (s *OperatorStore) Create(ctx context.Context, operator *model.Operator) error {
 	query := `
-		INSERT INTO operators (` + operatorColumns + `)
+		INSERT INTO [quorum].[operators] (` + operatorColumns + `)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)`
 
 	now := time.Now().UTC()
@@ -44,17 +44,17 @@ func (s *OperatorStore) Create(ctx context.Context, operator *model.Operator) er
 }
 
 func (s *OperatorStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Operator, error) {
-	query := `SELECT ` + operatorColumns + ` FROM operators WHERE id = @p1`
+	query := `SELECT ` + operatorColumns + ` FROM [quorum].[operators] WHERE id = @p1`
 	return s.scanOne(ctx, query, id)
 }
 
 func (s *OperatorStore) GetByUsername(ctx context.Context, username string) (*model.Operator, error) {
-	query := `SELECT ` + operatorColumns + ` FROM operators WHERE username = @p1`
+	query := `SELECT ` + operatorColumns + ` FROM [quorum].[operators] WHERE username = @p1`
 	return s.scanOne(ctx, query, username)
 }
 
 func (s *OperatorStore) List(ctx context.Context) ([]model.Operator, error) {
-	query := `SELECT ` + operatorColumns + ` FROM operators ORDER BY created_at ASC`
+	query := `SELECT ` + operatorColumns + ` FROM [quorum].[operators] ORDER BY created_at ASC`
 
 	rows, err := s.db.Pool.QueryContext(ctx, query)
 	if err != nil {
@@ -79,7 +79,7 @@ func (s *OperatorStore) List(ctx context.Context) ([]model.Operator, error) {
 
 func (s *OperatorStore) Update(ctx context.Context, operator *model.Operator) error {
 	query := `
-		UPDATE operators SET username = @p1, password_hash = @p2, display_name = @p3,
+		UPDATE [quorum].[operators] SET username = @p1, password_hash = @p2, display_name = @p3,
 		must_change_password = @p4, updated_at = @p5
 		WHERE id = @p6`
 
@@ -97,7 +97,7 @@ func (s *OperatorStore) Update(ctx context.Context, operator *model.Operator) er
 }
 
 func (s *OperatorStore) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.Pool.ExecContext(ctx, "DELETE FROM operators WHERE id = @p1", id)
+	_, err := s.db.Pool.ExecContext(ctx, "DELETE FROM [quorum].[operators] WHERE id = @p1", id)
 	if err != nil {
 		return fmt.Errorf("deleting operator: %w", err)
 	}
@@ -106,7 +106,7 @@ func (s *OperatorStore) Delete(ctx context.Context, id uuid.UUID) error {
 
 func (s *OperatorStore) Count(ctx context.Context) (int, error) {
 	var count int
-	err := s.db.Pool.QueryRowContext(ctx, "SELECT COUNT(*) FROM operators").Scan(&count)
+	err := s.db.Pool.QueryRowContext(ctx, "SELECT COUNT(*) FROM [quorum].[operators]").Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("counting operators: %w", err)
 	}

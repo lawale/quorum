@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS webhooks (
+CREATE TABLE IF NOT EXISTS quorum.webhooks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     url VARCHAR(2048) NOT NULL,
     events JSONB NOT NULL,
@@ -8,5 +8,5 @@ CREATE TABLE IF NOT EXISTS webhooks (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_webhooks_active ON webhooks (active) WHERE active = true;
-CREATE INDEX idx_webhooks_request_type ON webhooks (request_type);
+CREATE INDEX idx_webhooks_active ON quorum.webhooks (active) WHERE active = true;
+CREATE INDEX idx_webhooks_request_type ON quorum.webhooks (request_type);

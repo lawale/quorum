@@ -1,7 +1,7 @@
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='approvals' AND xtype='U')
-CREATE TABLE approvals (
+IF OBJECT_ID('[quorum].[approvals]', 'U') IS NULL
+CREATE TABLE [quorum].[approvals] (
    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-   request_id UNIQUEIDENTIFIER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+   request_id UNIQUEIDENTIFIER NOT NULL REFERENCES [quorum].[requests](id) ON DELETE CASCADE,
    checker_id NVARCHAR(255) NOT NULL,
    decision NVARCHAR(50) NOT NULL,
    comment NVARCHAR(MAX),
@@ -10,4 +10,4 @@ CREATE TABLE approvals (
    UNIQUE (request_id, checker_id)
 );
 
-CREATE INDEX idx_approvals_request_id ON approvals (request_id);
+CREATE INDEX idx_approvals_request_id ON [quorum].[approvals] (request_id);

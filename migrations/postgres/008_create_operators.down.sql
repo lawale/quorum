@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS operators;
+DROP TABLE IF EXISTS quorum.operators;

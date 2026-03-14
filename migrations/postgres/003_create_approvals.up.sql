@@ -1,6 +1,6 @@
-CREATE TABLE IF NOT EXISTS approvals (
+CREATE TABLE IF NOT EXISTS quorum.approvals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+    request_id UUID NOT NULL REFERENCES quorum.requests(id) ON DELETE CASCADE,
     checker_id VARCHAR(255) NOT NULL,
     decision VARCHAR(50) NOT NULL,
     comment TEXT,
@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS approvals (
     UNIQUE (request_id, checker_id)
 );
 
-CREATE INDEX idx_approvals_request_id ON approvals (request_id);
+CREATE INDEX idx_approvals_request_id ON quorum.approvals (request_id);

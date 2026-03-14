@@ -25,7 +25,7 @@ func NewRequestStore(db *DB) *RequestStore {
 
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
-		INSERT INTO requests (` + requestColumns + `)
+		INSERT INTO [quorum].[requests] (` + requestColumns + `)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14)`
 
 	now := time.Now().UTC()
@@ -56,17 +56,17 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 }
 
 func (s *RequestStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Request, error) {
-	query := `SELECT ` + requestColumns + ` FROM requests WHERE id = @p1`
+	query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WHERE id = @p1`
 	return s.scanOne(ctx, query, id)
 }
 
 func (s *RequestStore) GetByIdempotencyKey(ctx context.Context, key string) (*model.Request, error) {
-	query := `SELECT ` + requestColumns + ` FROM requests WHERE idempotency_key = @p1`
+	query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WHERE idempotency_key = @p1`
 	return s.scanOne(ctx, query, key)
 }
 
 func (s *RequestStore) FindPendingByFingerprint(ctx context.Context, reqType string, fingerprint string) (*model.Request, error) {
-	query := `SELECT TOP 1 ` + requestColumns + ` FROM requests WHERE type = @p1 AND fingerprint = @p2 AND status = 'pending'`
+	query := `SELECT TOP 1 ` + requestColumns + ` FROM [quorum].[requests] WHERE type = @p1 AND fingerprint = @p2 AND status = 'pending'`
 	return s.scanOne(ctx, query, reqType, fingerprint)
 }
 
@@ -97,7 +97,7 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 	}
 
 	// Count total
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM requests %s", where)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM [quorum].[requests] %s", where)
 	var total int
 	if err := s.db.Pool.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("counting requests: %w", err)
@@ -113,7 +113,7 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 	offset := (filter.Page - 1) * filter.PerPage
 
 	query := fmt.Sprintf(
-		`SELECT `+requestColumns+` FROM requests %s ORDER BY created_at DESC OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY`,
+		`SELECT `+requestColumns+` FROM [quorum].[requests] %s ORDER BY created_at DESC OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY`,
 		where, argIdx, argIdx+1,
 	)
 	args = append(args, offset, filter.PerPage)
@@ -122,7 +122,7 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 }
 
 func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {
-	query := `UPDATE requests SET status = @p1, updated_at = @p2 WHERE id = @p3`
+	query := `UPDATE [quorum].[requests] SET status = @p1, updated_at = @p2 WHERE id = @p3`
 	_, err := s.db.Pool.ExecContext(ctx, query, status, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("updating request status: %w", err)
@@ -131,7 +131,7 @@ func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status mo
 }
 
 func (s *RequestStore) UpdateStageAndStatus(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
-	query := `UPDATE requests SET current_stage = @p1, status = @p2, updated_at = @p3 WHERE id = @p4`
+	query := `UPDATE [quorum].[requests] SET current_stage = @p1, status = @p2, updated_at = @p3 WHERE id = @p4`
 	_, err := s.db.Pool.ExecContext(ctx, query, stage, status, time.Now().UTC(), id)
 	if err != nil {
 		return fmt.Errorf("updating request stage and status: %w", err)
@@ -140,7 +140,7 @@ func (s *RequestStore) UpdateStageAndStatus(ctx context.Context, id uuid.UUID, s
 }
 
 func (s *RequestStore) ListExpired(ctx context.Context) ([]model.Request, error) {
-	query := `SELECT ` + requestColumns + ` FROM requests WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= GETUTCDATE()`
+	query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at <= GETUTCDATE()`
 	requests, _, err := s.scanMany(ctx, query)
 	return requests, err
 }

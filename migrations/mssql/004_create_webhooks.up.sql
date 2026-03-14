@@ -1,5 +1,5 @@
-IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='webhooks' AND xtype='U')
-CREATE TABLE webhooks (
+IF OBJECT_ID('[quorum].[webhooks]', 'U') IS NULL
+CREATE TABLE [quorum].[webhooks] (
    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
    url NVARCHAR(2048) NOT NULL,
    events NVARCHAR(MAX) NOT NULL,
@@ -9,5 +9,5 @@ CREATE TABLE webhooks (
    created_at DATETIMEOFFSET NOT NULL DEFAULT GETUTCDATE()
 );
 
-CREATE INDEX idx_webhooks_active ON webhooks (active) WHERE active = 1;
-CREATE INDEX idx_webhooks_request_type ON webhooks (request_type);
+CREATE INDEX idx_webhooks_active ON [quorum].[webhooks] (active) WHERE active = 1;
+CREATE INDEX idx_webhooks_request_type ON [quorum].[webhooks] (request_type);

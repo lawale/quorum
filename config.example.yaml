@@ -8,7 +8,7 @@ database:
   port: 5432
   user: "quorum"
   password: "quorum"
-  name: "quorum"
+  name: "quorum"                 # tables are created in a dedicated 'quorum' schema
   max_open_conns: 25
   max_idle_conns: 5
   params:                      # driver-specific connection params

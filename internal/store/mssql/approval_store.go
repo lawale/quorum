@@ -20,7 +20,7 @@ func NewApprovalStore(db *DB) *ApprovalStore {
 
 func (s *ApprovalStore) Create(ctx context.Context, approval *model.Approval) error {
 	query := `
-		INSERT INTO approvals (id, request_id, checker_id, decision, stage_index, comment, created_at)
+		INSERT INTO [quorum].[approvals] (id, request_id, checker_id, decision, stage_index, comment, created_at)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)`
 
 	if approval.ID == uuid.Nil {
@@ -42,7 +42,7 @@ func (s *ApprovalStore) Create(ctx context.Context, approval *model.Approval) er
 func (s *ApprovalStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error) {
 	query := `
 		SELECT id, request_id, checker_id, decision, stage_index, comment, created_at
-		FROM approvals WHERE request_id = @p1 ORDER BY created_at ASC`
+		FROM [quorum].[approvals] WHERE request_id = @p1 ORDER BY created_at ASC`
 
 	rows, err := s.db.Pool.QueryContext(ctx, query, requestID)
 	if err != nil {
@@ -63,7 +63,7 @@ func (s *ApprovalStore) ListByRequestID(ctx context.Context, requestID uuid.UUID
 }
 
 func (s *ApprovalStore) CountByDecisionAndStage(ctx context.Context, requestID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-	query := `SELECT COUNT(*) FROM approvals WHERE request_id = @p1 AND decision = @p2 AND stage_index = @p3`
+	query := `SELECT COUNT(*) FROM [quorum].[approvals] WHERE request_id = @p1 AND decision = @p2 AND stage_index = @p3`
 
 	var count int
 	err := s.db.Pool.QueryRowContext(ctx, query, requestID, decision, stageIndex).Scan(&count)
@@ -78,7 +78,7 @@ func (s *ApprovalStore) CountByDecisionAndStage(ctx context.Context, requestID u
 }
 
 func (s *ApprovalStore) ExistsByCheckerAndStage(ctx context.Context, requestID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
-	query := `SELECT CASE WHEN EXISTS(SELECT 1 FROM approvals WHERE request_id = @p1 AND checker_id = @p2 AND stage_index = @p3) THEN 1 ELSE 0 END`
+	query := `SELECT CASE WHEN EXISTS(SELECT 1 FROM [quorum].[approvals] WHERE request_id = @p1 AND checker_id = @p2 AND stage_index = @p3) THEN 1 ELSE 0 END`
 
 	var exists int
 	err := s.db.Pool.QueryRowContext(ctx, query, requestID, checkerID, stageIndex).Scan(&exists)

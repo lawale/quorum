@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS policies;
+DROP TABLE IF EXISTS quorum.policies;

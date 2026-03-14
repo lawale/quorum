@@ -20,7 +20,7 @@ func NewWebhookStore(db *DB) *WebhookStore {
 
 func (s *WebhookStore) Create(ctx context.Context, webhook *model.Webhook) error {
 	query := `
-		INSERT INTO webhooks (id, url, events, secret, request_type, active, created_at)
+		INSERT INTO [quorum].[webhooks] (id, url, events, secret, request_type, active, created_at)
 		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)`
 
 	if webhook.ID == uuid.Nil {
@@ -48,7 +48,7 @@ func (s *WebhookStore) Create(ctx context.Context, webhook *model.Webhook) error
 }
 
 func (s *WebhookStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Webhook, error) {
-	query := `SELECT id, url, events, secret, request_type, active, created_at FROM webhooks WHERE id = @p1`
+	query := `SELECT id, url, events, secret, request_type, active, created_at FROM [quorum].[webhooks] WHERE id = @p1`
 
 	w := &model.Webhook{}
 	var eventsJSON string
@@ -70,7 +70,7 @@ func (s *WebhookStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Webhoo
 }
 
 func (s *WebhookStore) List(ctx context.Context) ([]model.Webhook, error) {
-	query := `SELECT id, url, events, secret, request_type, active, created_at FROM webhooks ORDER BY created_at DESC`
+	query := `SELECT id, url, events, secret, request_type, active, created_at FROM [quorum].[webhooks] ORDER BY created_at DESC`
 
 	rows, err := s.db.Pool.QueryContext(ctx, query)
 	if err != nil {
@@ -97,7 +97,7 @@ func (s *WebhookStore) List(ctx context.Context) ([]model.Webhook, error) {
 func (s *WebhookStore) ListByEventAndType(ctx context.Context, event string, requestType string) ([]model.Webhook, error) {
 	query := `
 		SELECT id, url, events, secret, request_type, active, created_at
-		FROM webhooks
+		FROM [quorum].[webhooks]
 		WHERE active = 1 AND EXISTS (
 			SELECT 1 FROM OPENJSON(events) AS j WHERE j.value = @p1
 		)
@@ -126,7 +126,7 @@ func (s *WebhookStore) ListByEventAndType(ctx context.Context, event string, req
 }
 
 func (s *WebhookStore) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.db.Pool.ExecContext(ctx, "DELETE FROM webhooks WHERE id = @p1", id)
+	_, err := s.db.Pool.ExecContext(ctx, "DELETE FROM [quorum].[webhooks] WHERE id = @p1", id)
 	if err != nil {
 		return fmt.Errorf("deleting webhook: %w", err)
 	}

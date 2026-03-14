@@ -1,1 +1,1 @@
-IF OBJECT_ID('webhooks', 'U') IS NOT NULL DROP TABLE webhooks;
+IF OBJECT_ID('[quorum].[webhooks]', 'U') IS NOT NULL DROP TABLE [quorum].[webhooks];

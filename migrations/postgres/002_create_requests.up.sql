@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS requests (
+CREATE TABLE IF NOT EXISTS quorum.requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     idempotency_key VARCHAR(255) UNIQUE,
     type VARCHAR(255) NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS requests (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_requests_status ON requests (status);
-CREATE INDEX idx_requests_type ON requests (type);
-CREATE INDEX idx_requests_maker_id ON requests (maker_id);
-CREATE INDEX idx_requests_fingerprint ON requests (type, fingerprint) WHERE status = 'pending';
+CREATE INDEX idx_requests_status ON quorum.requests (status);
+CREATE INDEX idx_requests_type ON quorum.requests (type);
+CREATE INDEX idx_requests_maker_id ON quorum.requests (maker_id);
+CREATE INDEX idx_requests_fingerprint ON quorum.requests (type, fingerprint) WHERE status = 'pending';

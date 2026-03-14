@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -20,6 +21,11 @@ func New(ctx context.Context, dsn string, maxOpen, maxIdle int) (*DB, error) {
 
 	config.MaxConns = int32(maxOpen)
 	config.MinConns = int32(maxIdle)
+
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET search_path TO quorum, public")
+		return err
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
