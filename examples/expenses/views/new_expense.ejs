@@ -1,0 +1,69 @@
+<%- include('layout', { title: 'New Expense', body: `
+
+<div class="max-w-2xl mx-auto">
+  <div class="mb-8">
+    <a href="/" class="text-sm text-emerald-600 hover:text-emerald-700 font-medium">&larr; Back to Dashboard</a>
+    <h1 class="mt-3 text-2xl font-bold text-gray-900">Submit New Expense</h1>
+    <p class="mt-1 text-sm text-gray-500">Fill out the form below. Your expense will be submitted for manager approval.</p>
+  </div>
+
+  ${error ? `
+  <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+    <div class="flex items-center">
+      <svg class="h-5 w-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <p class="text-sm text-red-700">${error}</p>
+    </div>
+  </div>
+  ` : ''}
+
+  <form method="POST" action="/expense/new" class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-6">
+
+    <div>
+      <label for="employeeName" class="block text-sm font-medium text-gray-700 mb-1">Employee Name</label>
+      <input type="text" id="employeeName" name="employeeName" required
+        placeholder="e.g. Jane Smith"
+        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm" />
+      <p class="mt-1 text-xs text-gray-400">This will be used as your user identity for the approval request.</p>
+    </div>
+
+    <div>
+      <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">Amount ($)</label>
+      <input type="number" id="amount" name="amount" required min="0.01" step="0.01"
+        placeholder="0.00"
+        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm" />
+    </div>
+
+    <div>
+      <label for="category" class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+      <select id="category" name="category" required
+        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm bg-white">
+        <option value="">Select a category...</option>
+        <option value="Travel">Travel</option>
+        <option value="Software">Software</option>
+        <option value="Equipment">Equipment</option>
+        <option value="Meals">Meals</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+
+    <div>
+      <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+      <textarea id="description" name="description" rows="3"
+        placeholder="Provide details about this expense..."
+        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-sm"></textarea>
+    </div>
+
+    <div class="pt-2">
+      <button type="submit"
+        class="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors shadow-sm">
+        Submit for Approval
+      </button>
+    </div>
+
+  </form>
+</div>
+
+` }) %>

@@ -1,0 +1,135 @@
+<%- include('layout', { title: 'Expense #' + expense.id.slice(0, 8), body: `
+
+<div class="max-w-3xl mx-auto">
+  <div class="mb-8">
+    <a href="/" class="text-sm text-emerald-600 hover:text-emerald-700 font-medium">&larr; Back to Dashboard</a>
+  </div>
+
+  <!-- Expense header -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+    <div class="flex items-start justify-between">
+      <div>
+        <p class="text-sm text-gray-500 font-mono">Expense #${expense.id.slice(0, 8)}</p>
+        <p class="mt-2 text-3xl font-bold text-gray-900">$${expense.amount.toFixed(2)}</p>
+        <p class="mt-1 text-lg text-gray-700">${expense.employeeName}</p>
+      </div>
+      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold
+        ${expense.status === 'approved' ? 'bg-green-100 text-green-800' :
+          expense.status === 'rejected' ? 'bg-red-100 text-red-800' :
+          expense.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+          expense.status === 'cancelled' ? 'bg-gray-100 text-gray-600' :
+          expense.status === 'expired' ? 'bg-orange-100 text-orange-800' :
+          'bg-red-50 text-red-600'}">
+        ${expense.status === 'approved' ? '&#10003; Approved' :
+          expense.status === 'rejected' ? '&#10007; Rejected' :
+          expense.status === 'pending' ? '&#9679; Pending Approval' :
+          expense.status === 'cancelled' ? '&#9679; Cancelled' :
+          expense.status === 'expired' ? '&#9679; Expired' :
+          '&#9679; ' + expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
+      </span>
+    </div>
+
+    <div class="mt-6 grid grid-cols-2 gap-4">
+      <div class="bg-gray-50 rounded-lg p-4">
+        <p class="text-xs text-gray-500 uppercase tracking-wide font-medium">Category</p>
+        <p class="mt-1 text-sm font-medium text-gray-900">${expense.category}</p>
+      </div>
+      <div class="bg-gray-50 rounded-lg p-4">
+        <p class="text-xs text-gray-500 uppercase tracking-wide font-medium">Submitted</p>
+        <p class="mt-1 text-sm font-medium text-gray-900">${new Date(expense.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+      </div>
+    </div>
+
+    ${expense.description ? `
+    <div class="mt-4">
+      <p class="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1">Description</p>
+      <p class="text-sm text-gray-700">${expense.description}</p>
+    </div>
+    ` : ''}
+
+    ${expense.quorumRequestId ? `
+    <div class="mt-4 pt-4 border-t border-gray-100">
+      <p class="text-xs text-gray-400">Quorum Request ID: <span class="font-mono">${expense.quorumRequestId}</span></p>
+    </div>
+    ` : ''}
+  </div>
+
+  <!-- Approval Timeline -->
+  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+    <h2 class="text-lg font-semibold text-gray-900 mb-4">Approval Timeline</h2>
+
+    <div class="flow-root">
+      <ul class="-mb-4">
+        <!-- Submission event -->
+        <li class="pb-4">
+          <div class="relative flex space-x-3">
+            <div>
+              <span class="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center ring-4 ring-white">
+                <svg class="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              </span>
+            </div>
+            <div class="flex-1 min-w-0 pt-1">
+              <p class="text-sm text-gray-900 font-medium">Expense submitted by ${expense.employeeName}</p>
+              <p class="text-xs text-gray-500 mt-0.5">${new Date(expense.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+          </div>
+        </li>
+
+        ${expense.approvals && expense.approvals.length > 0 ? expense.approvals.map(approval => `
+        <li class="pb-4">
+          <div class="relative flex space-x-3">
+            <div>
+              <span class="h-8 w-8 rounded-full flex items-center justify-center ring-4 ring-white
+                ${approval.decision === 'approved' ? 'bg-green-100' : 'bg-red-100'}">
+                ${approval.decision === 'approved'
+                  ? '<svg class="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>'
+                  : '<svg class="h-4 w-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>'}
+              </span>
+            </div>
+            <div class="flex-1 min-w-0 pt-1">
+              <p class="text-sm text-gray-900 font-medium">
+                ${approval.decision === 'approved' ? 'Approved' : 'Rejected'} by
+                <span class="font-semibold">${approval.checker_id}</span>
+              </p>
+              ${approval.comment ? `<p class="text-sm text-gray-600 mt-1">&ldquo;${approval.comment}&rdquo;</p>` : ''}
+              <p class="text-xs text-gray-500 mt-0.5">${new Date(approval.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+          </div>
+        </li>
+        `).join('') : `
+        ${expense.status === 'pending' ? `
+        <li class="pb-4">
+          <div class="relative flex space-x-3">
+            <div>
+              <span class="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center ring-4 ring-white">
+                <svg class="h-4 w-4 text-yellow-600 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="4" />
+                </svg>
+              </span>
+            </div>
+            <div class="flex-1 min-w-0 pt-1">
+              <p class="text-sm text-gray-600">Waiting for manager approval...</p>
+              <p class="text-xs text-gray-400 mt-0.5">A manager or admin needs to review this expense.</p>
+            </div>
+          </div>
+        </li>
+        ` : ''}
+        `}
+      </ul>
+    </div>
+  </div>
+
+  ${expense.status === 'pending' ? `
+  <div class="mt-6 text-center">
+    <p class="text-xs text-gray-400">This page polls Quorum for the latest status on each load.</p>
+    <button onclick="window.location.reload()"
+      class="mt-2 text-sm text-emerald-600 hover:text-emerald-700 font-medium">
+      Refresh Status
+    </button>
+  </div>
+  ` : ''}
+</div>
+
+` }) %>
