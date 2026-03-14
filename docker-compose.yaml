@@ -60,6 +60,64 @@ services:
   #     timeout: 5s
   #     retries: 10
 
+  # ---- Seed data (run once then exit) ----
+  seed:
+    image: curlimages/curl:latest
+    depends_on:
+      server:
+        condition: service_started
+    volumes:
+      - ./scripts/seed.sh:/seed.sh:ro
+    entrypoint: ["sh", "/seed.sh"]
+    environment:
+      QUORUM_API_URL: http://server:8080
+    profiles:
+      - seed
+      - demo
+
+  # ---- Sample consumer apps ----
+  banking:
+    build: examples/banking
+    ports:
+      - "3001:3001"
+    environment:
+      QUORUM_API_URL: http://server:8080
+      SELF_URL: http://banking:3001
+      WEBHOOK_SECRET: banking-webhook-secret
+    depends_on:
+      server:
+        condition: service_started
+    profiles:
+      - demo
+
+  expenses:
+    build: examples/expenses
+    ports:
+      - "3002:3002"
+    environment:
+      QUORUM_API_URL: http://server:8080
+      SELF_URL: http://expenses:3002
+      WEBHOOK_SECRET: expenses-webhook-secret
+    depends_on:
+      server:
+        condition: service_started
+    profiles:
+      - demo
+
+  access-portal:
+    build: examples/access-portal
+    ports:
+      - "3003:3003"
+    environment:
+      QUORUM_API_URL: http://server:8080
+      SELF_URL: http://access-portal:3003
+      WEBHOOK_SECRET: access-webhook-secret
+    depends_on:
+      server:
+        condition: service_started
+    profiles:
+      - demo
+
 volumes:
   pgdata:
   # mssqldata:

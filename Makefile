@@ -1,6 +1,7 @@
 .PHONY: build run test lint migrate-up migrate-down docker-up docker-down clean \
        console-deps console-build console-dev build-console \
-       embed-deps embed-build embed-dev build-embed build-all
+       embed-deps embed-build embed-dev build-embed build-all \
+       seed demo
 
 BINARY_NAME=quorum
 BUILD_DIR=bin
@@ -56,6 +57,12 @@ build-embed: embed-build
 
 build-all: console-build embed-build
 	go build -tags "console,embed" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+
+seed:
+	sh scripts/seed.sh
+
+demo:
+	docker compose --profile demo up --build
 
 clean:
 	rm -rf $(BUILD_DIR)
