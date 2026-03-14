@@ -19,13 +19,14 @@ import (
 )
 
 type Dispatcher struct {
-	webhooks   store.WebhookStore
-	audits     store.AuditStore
-	client     *http.Client
-	maxRetries int
-	retryDelay time.Duration
-	queue      chan deliveryJob
-	metrics    *metrics.Metrics
+	webhooks       store.WebhookStore
+	audits         store.AuditStore
+	client         *http.Client
+	maxRetries     int
+	retryDelay     time.Duration
+	callbackSecret string
+	queue          chan deliveryJob
+	metrics        *metrics.Metrics
 }
 
 // SetMetrics sets the optional Prometheus metrics collector.
@@ -39,14 +40,15 @@ type deliveryJob struct {
 	request model.Request
 }
 
-func NewDispatcher(webhooks store.WebhookStore, audits store.AuditStore, timeout time.Duration, maxRetries int, retryDelay time.Duration) *Dispatcher {
+func NewDispatcher(webhooks store.WebhookStore, audits store.AuditStore, timeout time.Duration, maxRetries int, retryDelay time.Duration, callbackSecret string) *Dispatcher {
 	return &Dispatcher{
-		webhooks:   webhooks,
-		audits:     audits,
-		client:     &http.Client{Timeout: timeout},
-		maxRetries: maxRetries,
-		retryDelay: retryDelay,
-		queue:      make(chan deliveryJob, 100),
+		webhooks:       webhooks,
+		audits:         audits,
+		client:         &http.Client{Timeout: timeout},
+		maxRetries:     maxRetries,
+		retryDelay:     retryDelay,
+		callbackSecret: callbackSecret,
+		queue:          make(chan deliveryJob, 100),
 	}
 }
 
@@ -90,7 +92,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req *model.Request, approvals
 	if req.CallbackURL != nil && *req.CallbackURL != "" {
 		callbackWebhook := model.Webhook{
 			URL:    *req.CallbackURL,
-			Secret: "", // No HMAC for per-request callbacks
+			Secret: d.callbackSecret,
 		}
 		d.queue <- deliveryJob{webhook: callbackWebhook, payload: payload, request: *req}
 	}

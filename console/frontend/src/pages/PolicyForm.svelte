@@ -12,6 +12,8 @@
   let identityFields = $state('');
   let autoExpireDuration = $state('');
   let permissionCheckUrl = $state('');
+  let displayTemplateJson = $state('');
+  let displayTemplateError = $state('');
   let isLoading = $state(!!id);
   let submitting = $state(false);
   let error = $state('');
@@ -31,6 +33,7 @@
       identityFields = (p.identity_fields || []).join(', ');
       autoExpireDuration = p.auto_expire_duration || '';
       permissionCheckUrl = p.permission_check_url || '';
+      displayTemplateJson = p.display_template ? JSON.stringify(p.display_template, null, 2) : '';
     } catch { addToast('Failed to load policy', 'error'); window.location.hash = '#/policies'; }
     finally { isLoading = false; }
   }
@@ -58,6 +61,16 @@
     }
     if (autoExpireDuration) payload.auto_expire_duration = autoExpireDuration;
     if (permissionCheckUrl) payload.permission_check_url = permissionCheckUrl;
+    if (displayTemplateJson.trim()) {
+      try {
+        payload.display_template = JSON.parse(displayTemplateJson);
+        displayTemplateError = '';
+      } catch {
+        displayTemplateError = 'Invalid JSON';
+        submitting = false;
+        return;
+      }
+    }
 
     try {
       if (isEdit && id) {
@@ -152,6 +165,22 @@
       <div>
         <label for="permUrl" class="block text-sm font-medium text-gray-700 mb-1">Permission Check URL <span class="text-gray-400">(optional)</span></label>
         <input id="permUrl" type="url" bind:value={permissionCheckUrl} placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+      </div>
+
+      <div>
+        <label for="displayTemplate" class="block text-sm font-medium text-gray-700 mb-1">Display Template <span class="text-gray-400">(optional JSON)</span></label>
+        <textarea
+          id="displayTemplate"
+          bind:value={displayTemplateJson}
+          oninput={() => displayTemplateError = ''}
+          rows="6"
+          placeholder="See docs for template format"
+          class="w-full px-3 py-2 border rounded-md shadow-sm font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 {displayTemplateError ? 'border-red-300' : 'border-gray-300'}"
+        ></textarea>
+        {#if displayTemplateError}
+          <p class="mt-1 text-xs text-red-600">{displayTemplateError}</p>
+        {/if}
+        <p class="mt-1 text-xs text-gray-400">Maps payload fields to human-readable labels for reviewers. Formatters: currency, date, number, truncate.</p>
       </div>
 
       <div class="flex items-center gap-3 pt-4 border-t border-gray-200">

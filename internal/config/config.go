@@ -103,9 +103,10 @@ type CustomConfig struct {
 }
 
 type WebhookConfig struct {
-	MaxRetries    int           `yaml:"max_retries"`
-	RetryInterval time.Duration `yaml:"retry_interval"`
-	Timeout       time.Duration `yaml:"timeout"`
+	MaxRetries     int           `yaml:"max_retries"`
+	RetryInterval  time.Duration `yaml:"retry_interval"`
+	Timeout        time.Duration `yaml:"timeout"`
+	CallbackSecret string        `yaml:"callback_secret"`
 }
 
 type ExpiryConfig struct {

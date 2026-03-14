@@ -72,7 +72,7 @@ func main() {
 	webhookService := service.NewWebhookService(stores.Webhooks)
 
 	// Webhook dispatcher
-	dispatcher := webhook.NewDispatcher(stores.Webhooks, stores.Audits, cfg.Webhook.Timeout, cfg.Webhook.MaxRetries, cfg.Webhook.RetryInterval)
+	dispatcher := webhook.NewDispatcher(stores.Webhooks, stores.Audits, cfg.Webhook.Timeout, cfg.Webhook.MaxRetries, cfg.Webhook.RetryInterval, cfg.Webhook.CallbackSecret)
 	requestService.SetOnResolve(dispatcher.Dispatch)
 
 	// Expiry worker

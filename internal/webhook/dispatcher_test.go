@@ -22,7 +22,7 @@ func TestDispatcher_Dispatch_QueuesMatchingWebhooks(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond)
+	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond, "")
 	req := testutil.NewRequest(func(r *model.Request) { r.Status = model.StatusApproved })
 
 	dispatcher.Dispatch(context.Background(), req, nil)
@@ -40,7 +40,7 @@ func TestDispatcher_Dispatch_IncludesCallbackURL(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond)
+	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond, "")
 	req := testutil.NewRequest(func(r *model.Request) {
 		r.Status = model.StatusApproved
 		r.CallbackURL = testutil.StringPtr("https://example.com/callback")
@@ -54,6 +54,32 @@ func TestDispatcher_Dispatch_IncludesCallbackURL(t *testing.T) {
 	}
 }
 
+func TestDispatcher_Dispatch_CallbackURL_Signed(t *testing.T) {
+	webhooks := &testutil.MockWebhookStore{
+		ListByEventAndTypeFunc: func(ctx context.Context, event, rt string) ([]model.Webhook, error) {
+			return nil, nil
+		},
+	}
+
+	callbackSecret := "my-callback-secret"
+	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond, callbackSecret)
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.Status = model.StatusApproved
+		r.CallbackURL = testutil.StringPtr("https://example.com/callback")
+	})
+
+	dispatcher.Dispatch(context.Background(), req, nil)
+
+	if len(dispatcher.queue) != 1 {
+		t.Fatalf("queue length = %d, want 1", len(dispatcher.queue))
+	}
+
+	job := <-dispatcher.queue
+	if job.webhook.Secret != callbackSecret {
+		t.Errorf("callback webhook secret = %q, want %q", job.webhook.Secret, callbackSecret)
+	}
+}
+
 func TestDispatcher_Dispatch_NoCallbackURL(t *testing.T) {
 	webhooks := &testutil.MockWebhookStore{
 		ListByEventAndTypeFunc: func(ctx context.Context, event, rt string) ([]model.Webhook, error) {
@@ -61,7 +87,7 @@ func TestDispatcher_Dispatch_NoCallbackURL(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond)
+	dispatcher := NewDispatcher(webhooks, &testutil.MockAuditStore{}, 5*time.Second, 0, time.Millisecond, "")
 	req := testutil.NewRequest(func(r *model.Request) {
 		r.Status = model.StatusApproved
 		r.CallbackURL = nil
@@ -88,7 +114,7 @@ func TestDispatcher_Deliver_Success(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond)
+	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond, "")
 
 	job := deliveryJob{
 		webhook: model.Webhook{URL: server.URL, Secret: "test-secret"},
@@ -131,7 +157,7 @@ func TestDispatcher_Deliver_RetryOnFailure(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 2, time.Millisecond)
+	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 2, time.Millisecond, "")
 
 	job := deliveryJob{
 		webhook: model.Webhook{URL: server.URL, Secret: "test"},
@@ -171,7 +197,7 @@ func TestDispatcher_Deliver_ExhaustsRetries(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 1, time.Millisecond)
+	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 1, time.Millisecond, "")
 
 	job := deliveryJob{
 		webhook: model.Webhook{URL: server.URL, Secret: "test"},
@@ -207,7 +233,7 @@ func TestDispatcher_Deliver_HMAC_Signature(t *testing.T) {
 	}
 
 	secret := "my-webhook-secret"
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond)
+	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond, "")
 
 	payload := model.WebhookPayload{
 		Event:     "approved",
@@ -249,7 +275,7 @@ func TestDispatcher_Deliver_NoHMAC_WhenNoSecret(t *testing.T) {
 		CreateFunc: func(ctx context.Context, log *model.AuditLog) error { return nil },
 	}
 
-	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond)
+	dispatcher := NewDispatcher(&testutil.MockWebhookStore{}, audits, 5*time.Second, 0, time.Millisecond, "")
 
 	job := deliveryJob{
 		webhook: model.Webhook{URL: server.URL, Secret: ""}, // No secret

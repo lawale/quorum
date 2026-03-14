@@ -475,8 +475,12 @@ func resolveDisplayTemplate(req *model.Request, policy *model.Policy) {
 	}
 
 	resolved, err := display.Resolve(policy.DisplayTemplate, req.Payload)
-	if err != nil || resolved == nil {
-		return // resolution failed — degrade gracefully, don't block request creation
+	if err != nil {
+		slog.Warn("display template resolution failed", "error", err, "policy_id", policy.ID, "request_type", req.Type)
+		return // degrade gracefully — don't block request creation
+	}
+	if resolved == nil {
+		return
 	}
 
 	// Merge resolved display into metadata

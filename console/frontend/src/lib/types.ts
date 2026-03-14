@@ -26,6 +26,7 @@ export interface Policy {
   identity_fields?: string[];
   permission_check_url?: string;
   auto_expire_duration?: string;
+  display_template?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

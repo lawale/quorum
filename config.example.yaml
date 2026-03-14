@@ -40,6 +40,7 @@ webhook:
   max_retries: 3
   retry_interval: "5s"
   timeout: "10s"
+  callback_secret: ""              # HMAC secret for per-request callback_url signatures; leave empty to skip signing
 
 expiry:
   check_interval: "1m"
