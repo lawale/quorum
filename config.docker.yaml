@@ -1,0 +1,19 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+database:
+  driver: "postgres"
+  host: "postgres"
+  port: 5432
+  user: "quorum"
+  password: "quorum"
+  name: "quorum"
+  params:
+    sslmode: "disable"
+
+auth:
+  mode: "trust"
+
+console:
+  enabled: true

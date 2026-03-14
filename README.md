@@ -15,7 +15,7 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat&logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![Svelte](https://img.shields.io/badge/Svelte-FF3E00?style=flat&logo=svelte&logoColor=white)](https://svelte.dev/)
 
-[Quick Start](#quick-start) • [Key Features](#-key-features) • [Why Quorum?](#-why-quorum) • [Documentation](#documentation) • [Community & Support](#-community--support)
+[Quick Start](#quick-start) • [Full Stack Local Setup](#running-the-full-stack-locally) • [Key Features](#-key-features) • [Why Quorum?](#-why-quorum) • [Documentation](#documentation) • [Community & Support](#-community--support)
 
 ---
 
@@ -126,6 +126,88 @@ migrate -path migrations/mssql -database "sqlserver://sa:Password@localhost:1433
 ```
 
 The API is now live at `http://localhost:8080`. See the [API reference](#api-at-a-glance) below for your first request.
+
+---
+
+## Running the Full Stack Locally
+
+The Quick Start above builds Quorum as a headless API server. To run the complete stack — admin console, embeddable widgets, and a local database — follow these steps.
+
+### Prerequisites
+
+- Go 1.24+
+- Node.js 22+
+- Docker (for PostgreSQL)
+- [`golang-migrate`](https://github.com/golang-migrate/migrate) CLI
+
+### 1. Start PostgreSQL
+
+```bash
+docker compose up -d postgres
+```
+
+This starts a PostgreSQL 16 container with a `quorum` database and creates the `quorum` schema automatically. The database is available at `localhost:5432` with credentials `quorum:quorum`.
+
+### 2. Run Migrations
+
+```bash
+make migrate-up
+```
+
+### 3. Build with Console and Widgets
+
+```bash
+make build-all
+```
+
+This installs frontend dependencies, builds the console and widget bundles, and compiles the Go binary with both embedded.
+
+### 4. Configure
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+Edit `config.yaml` and enable the console:
+
+```yaml
+console:
+  enabled: true
+```
+
+### 5. Start the Server
+
+```bash
+./bin/quorum -config config.yaml
+```
+
+Once running, the following endpoints are available:
+
+| Endpoint | Description |
+|----------|-------------|
+| `http://localhost:8080/api/v1/` | REST API |
+| `http://localhost:8080/console/` | Admin console |
+| `http://localhost:8080/assets/embed.js` | Widget bundle |
+| `http://localhost:8080/health` | Health check |
+
+On first visit to the console you'll be prompted to create an admin operator.
+
+### Frontend Development
+
+To work on the console or widget frontends with hot reload, run the Go server and the Vite dev server side by side:
+
+```bash
+# Terminal 1 — API server (API-only binary is fine here)
+make build && ./bin/quorum -config config.yaml
+
+# Terminal 2 — Console dev server (proxies /api to localhost:8080)
+make console-dev
+
+# Terminal 3 — Widget dev server
+make embed-dev
+```
+
+The console dev server runs at `http://localhost:5173/console/` with hot module replacement.
 
 ---
 
@@ -523,15 +605,34 @@ A configurable heartbeat (default 30s) acts as a safety net, even if a signal is
 
 ### Docker
 
+**Docker Compose (recommended)** — starts PostgreSQL, runs migrations, and launches Quorum with the admin console and widgets in one command:
+
 ```bash
-# Standard build (no console)
+docker compose up
+```
+
+The console is available at `http://localhost:8080/console/` once the server is ready.
+
+To start only the database (useful during local development):
+
+```bash
+docker compose up -d postgres
+```
+
+**Manual Docker builds:**
+
+```bash
+# API only (no console, no widgets)
 docker build -t quorum .
 
 # With admin console
 docker build -f Dockerfile.console -t quorum-console .
 
+# With admin console and embeddable widgets
+docker build -f Dockerfile.all -t quorum-all .
+
 # Run
-docker run -p 8080:8080 -v /path/to/config.yaml:/etc/quorum/config.yaml quorum
+docker run -p 8080:8080 -v /path/to/config.yaml:/etc/quorum/config.yaml quorum-all
 ```
 
 ---
@@ -569,10 +670,13 @@ make build-all
 | `build-console` | Build console frontend + Go binary with console |
 | `build-embed` | Build widget frontend + Go binary with embeddable widgets |
 | `build-all` | Build both frontends + Go binary with console and widgets |
+| `run` | Build and start the server |
 | `test` | Run all tests with race detector |
 | `lint` | Run golangci-lint |
 | `migrate-up` | Run PostgreSQL migrations |
 | `migrate-down` | Roll back one PostgreSQL migration |
+| `docker-up` | Start all services with docker compose |
+| `docker-down` | Stop all docker compose services |
 | `console-dev` | Start the console Svelte dev server |
 | `embed-dev` | Start the widgets Svelte dev server |
 | `clean` | Remove build artifacts |

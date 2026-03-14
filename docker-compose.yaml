@@ -9,26 +9,41 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quorum"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  server:
-    build: .
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./config.example.yaml:/etc/quorum/config.yaml:ro
+  migrate:
+    image: migrate/migrate:v4.18.1
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      - MC_DB_HOST=postgres
+    volumes:
+      - ./migrations/postgres:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://quorum:quorum@postgres:5432/quorum?sslmode=disable&search_path=quorum"
+      - "up"
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.all
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.docker.yaml:/etc/quorum/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   # Uncomment to use MSSQL instead of Postgres.
-  # Set database.driver to "mssql" in your config.yaml.
+  # Set database.driver to "mssql" in config.docker.yaml.
   # mssql:
   #   image: mcr.microsoft.com/mssql/server:2022-latest
   #   environment:
