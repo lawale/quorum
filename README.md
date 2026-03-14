@@ -394,11 +394,35 @@ make build-all
 
 The bundle is served at `/assets/embed.js` with CORS headers, so you can load it from any origin.
 
-**Usage:**
+**Option 1: Script tag** — load from your Quorum server:
 
 ```html
 <script src="https://your-quorum-host/assets/embed.js"></script>
+```
 
+**Option 2: npm** — bundle into your own build:
+
+```bash
+npm install @quorum/embed
+```
+
+```typescript
+// Registers all three custom elements
+import '@quorum/embed';
+
+// Optionally use the API client directly
+import { createClient } from '@quorum/embed';
+
+const client = createClient({
+  apiUrl: 'https://your-quorum-host',
+  token: 'Bearer ...',
+});
+const request = await client.getRequest('uuid-here');
+```
+
+**Usage:**
+
+```html
 <!-- Show approval details with approve/reject actions -->
 <quorum-approval-panel
   request-id="uuid-here"

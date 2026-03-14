@@ -1,12 +1,38 @@
 {
   "name": "@quorum/embed",
   "version": "0.0.1",
-  "private": true,
+  "description": "Embeddable Web Components for the Quorum approval engine",
   "type": "module",
+  "main": "dist/index.mjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./embed": "./dist/embed.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && tsc --project tsconfig.build.json",
     "preview": "vite preview"
+  },
+  "keywords": [
+    "quorum",
+    "approval",
+    "maker-checker",
+    "web-components",
+    "embed"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lawale/quorum",
+    "directory": "widgets/frontend"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
