@@ -1,6 +1,6 @@
 <script lang="ts">
   import { policies as policiesApi } from '../lib/api';
-  import { addToast } from '../lib/stores';
+  import { addToast, selectedTenant } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import EmptyState from '../components/EmptyState.svelte';
@@ -8,6 +8,10 @@
 
   let items: Policy[] = $state([]);
   let isLoading = $state(true);
+
+  // Re-fetch when tenant selection changes
+  let currentTenant = $state('');
+  selectedTenant.subscribe((v) => { currentTenant = v; loadPolicies(); });
 
   $effect(() => { loadPolicies(); });
 
@@ -48,6 +52,7 @@
         <thead class="bg-gray-50">
           <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Request Type</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stages</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
@@ -60,6 +65,7 @@
               <td class="px-6 py-4 text-sm font-medium text-gray-900">
                 <a href="#/policies/{policy.id}" class="text-indigo-600 hover:text-indigo-800">{policy.name}</a>
               </td>
+              <td class="px-6 py-4 text-sm text-gray-500"><code class="bg-gray-100 px-2 py-0.5 rounded text-xs">{policy.tenant_id}</code></td>
               <td class="px-6 py-4 text-sm text-gray-500"><code class="bg-gray-100 px-2 py-0.5 rounded text-xs">{policy.request_type}</code></td>
               <td class="px-6 py-4 text-sm text-gray-500">{policy.stages.length} stage{policy.stages.length !== 1 ? 's' : ''}</td>
               <td class="px-6 py-4 text-sm text-gray-500">{formatDate(policy.created_at)}</td>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { policies as policiesApi, webhooks as webhooksApi, requests as requestsApi } from '../lib/api';
+  import { selectedTenant } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import StatusBadge from '../components/StatusBadge.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
@@ -13,6 +14,10 @@
   let recentRequests: Request[] = $state([]);
   let policies: Policy[] = $state([]);
   let webhooks: Webhook[] = $state([]);
+
+  // Re-fetch when tenant selection changes
+  let currentTenant = $state('');
+  selectedTenant.subscribe((v) => { currentTenant = v; loadDashboard(); });
 
   $effect(() => {
     loadDashboard();

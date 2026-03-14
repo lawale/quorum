@@ -3,6 +3,7 @@ import type { Request, Policy, AuditLog, PaginatedResponse, ListResponse } from 
 export interface ClientConfig {
   apiUrl: string;
   token?: string;
+  tenantId?: string;
   authHeaders?: Record<string, string>;
 }
 
@@ -18,7 +19,7 @@ export interface QuorumClient {
 }
 
 export function createClient(config: ClientConfig): QuorumClient {
-  const { apiUrl, token, authHeaders } = config;
+  const { apiUrl, token, tenantId, authHeaders } = config;
   const base = apiUrl.replace(/\/+$/, '') + '/api/v1';
 
   function headers(): Record<string, string> {
@@ -27,6 +28,9 @@ export function createClient(config: ClientConfig): QuorumClient {
       Object.assign(h, authHeaders);
     } else if (token) {
       h['Authorization'] = `Bearer ${token}`;
+    }
+    if (tenantId) {
+      h['X-Tenant-ID'] = tenantId;
     }
     return h;
   }

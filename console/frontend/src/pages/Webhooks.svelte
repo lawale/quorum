@@ -1,6 +1,6 @@
 <script lang="ts">
   import { webhooks as webhooksApi } from '../lib/api';
-  import { addToast } from '../lib/stores';
+  import { addToast, selectedTenant } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import EmptyState from '../components/EmptyState.svelte';
@@ -8,6 +8,10 @@
 
   let items: Webhook[] = $state([]);
   let isLoading = $state(true);
+
+  // Re-fetch when tenant selection changes
+  let currentTenant = $state('');
+  selectedTenant.subscribe((v) => { currentTenant = v; loadWebhooks(); });
 
   $effect(() => { loadWebhooks(); });
 
@@ -48,6 +52,7 @@
         <thead class="bg-gray-50">
           <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Events</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type Filter</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
@@ -58,6 +63,7 @@
           {#each items as webhook}
             <tr class="hover:bg-gray-50">
               <td class="px-6 py-4 text-sm text-gray-900 font-mono text-xs">{webhook.url}</td>
+              <td class="px-6 py-4 text-sm text-gray-500"><code class="bg-gray-100 px-2 py-0.5 rounded text-xs">{webhook.tenant_id}</code></td>
               <td class="px-6 py-4 text-sm text-gray-500">
                 {#each webhook.events as event}
                   <span class="inline-flex mr-1 mb-1 px-2 py-0.5 bg-gray-100 rounded text-xs">{event}</span>

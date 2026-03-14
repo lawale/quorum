@@ -1,5 +1,13 @@
 // --- Models ---
 
+export interface Tenant {
+  id: string;
+  slug: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Operator {
   id: string;
   username: string;
@@ -20,6 +28,7 @@ export interface ApprovalStage {
 
 export interface Policy {
   id: string;
+  tenant_id: string;
   name: string;
   request_type: string;
   stages: ApprovalStage[];
@@ -33,6 +42,7 @@ export interface Policy {
 
 export interface Webhook {
   id: string;
+  tenant_id: string;
   url: string;
   events: string[];
   secret: string;
@@ -53,6 +63,7 @@ export interface Approval {
 
 export interface Request {
   id: string;
+  tenant_id: string;
   type: string;
   payload: Record<string, unknown>;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';
@@ -69,6 +80,7 @@ export interface Request {
 
 export interface AuditLog {
   id: string;
+  tenant_id: string;
   request_id: string;
   action: string;
   actor_id: string;

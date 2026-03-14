@@ -1,5 +1,6 @@
 export interface Request {
   id: string;
+  tenant_id: string;
   type: string;
   payload: Record<string, unknown>;
   status: RequestStatus;
@@ -28,6 +29,7 @@ export interface Approval {
 
 export interface Policy {
   id: string;
+  tenant_id: string;
   name: string;
   request_type: string;
   stages: ApprovalStage[];
@@ -49,6 +51,7 @@ export interface ApprovalStage {
 
 export interface AuditLog {
   id: string;
+  tenant_id: string;
   request_id: string;
   action: string;
   actor_id: string;

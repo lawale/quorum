@@ -10,11 +10,13 @@
     'request-id': requestId = '',
     'api-url': apiUrl = '',
     token = '',
+    'tenant-id': tenantId = '',
     'auth-headers': authHeadersStr = '',
   }: {
     'request-id'?: string;
     'api-url'?: string;
     token?: string;
+    'tenant-id'?: string;
     'auth-headers'?: string;
   } = $props();
 
@@ -29,7 +31,7 @@
     if (authHeadersStr) {
       try { authHeaders = JSON.parse(authHeadersStr); } catch {}
     }
-    return createClient({ apiUrl, token: token || undefined, authHeaders });
+    return createClient({ apiUrl, token: token || undefined, tenantId: tenantId || undefined, authHeaders });
   }
 
   async function load() {

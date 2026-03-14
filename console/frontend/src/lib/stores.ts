@@ -1,8 +1,12 @@
 import { writable } from 'svelte/store';
-import type { Operator } from './types';
+import type { Operator, Tenant } from './types';
 
 // Current authenticated operator
 export const currentUser = writable<Operator | null>(null);
+
+// Tenant selection
+export const selectedTenant = writable<string>('');
+export const availableTenants = writable<Tenant[]>([]);
 
 // Toast notifications
 export interface Toast {

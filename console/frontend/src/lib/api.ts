@@ -1,7 +1,10 @@
 import { getToken, clearToken } from './auth';
+import { get } from 'svelte/store';
+import { selectedTenant } from './stores';
 import type {
   AuthResponse,
   Operator,
+  Tenant,
   Policy,
   Webhook,
   Request,
@@ -52,6 +55,26 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+// Helper: append tenant_id query param if a tenant is selected
+function withTenant(path: string): string {
+  const tenant = get(selectedTenant);
+  if (!tenant) return path;
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}tenant_id=${encodeURIComponent(tenant)}`;
+}
+
+// --- Tenants ---
+
+export const tenants = {
+  list: () => request<ListResponse<Tenant>>('/tenants'),
+  create: (slug: string, name: string) =>
+    request<Tenant>('/tenants', {
+      method: 'POST',
+      body: JSON.stringify({ slug, name }),
+    }),
+  delete: (id: string) => request<void>(`/tenants/${id}`, { method: 'DELETE' }),
+};
+
 // --- Auth ---
 
 export const auth = {
@@ -89,10 +112,10 @@ export const operators = {
 // --- Policies ---
 
 export const policies = {
-  list: () => request<ListResponse<Policy>>('/policies'),
+  list: () => request<ListResponse<Policy>>(withTenant('/policies')),
   get: (id: string) => request<Policy>(`/policies/${id}`),
   create: (policy: Partial<Policy>) =>
-    request<Policy>('/policies', {
+    request<Policy>(withTenant('/policies'), {
       method: 'POST',
       body: JSON.stringify(policy),
     }),
@@ -107,9 +130,9 @@ export const policies = {
 // --- Webhooks ---
 
 export const webhooks = {
-  list: () => request<ListResponse<Webhook>>('/webhooks'),
+  list: () => request<ListResponse<Webhook>>(withTenant('/webhooks')),
   create: (webhook: Partial<Webhook>) =>
-    request<Webhook>('/webhooks', {
+    request<Webhook>(withTenant('/webhooks'), {
       method: 'POST',
       body: JSON.stringify(webhook),
     }),
@@ -126,7 +149,7 @@ export const requests = {
     if (params?.status) query.set('status', params.status);
     if (params?.type) query.set('type', params.type);
     const qs = query.toString();
-    return request<PaginatedListResponse<Request>>(`/requests${qs ? '?' + qs : ''}`);
+    return request<PaginatedListResponse<Request>>(withTenant(`/requests${qs ? '?' + qs : ''}`));
   },
   get: (id: string) => request<Request>(`/requests/${id}`),
   audit: (id: string) => request<ListResponse<AuditLog>>(`/requests/${id}/audit`),

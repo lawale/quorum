@@ -1,6 +1,6 @@
 <script lang="ts">
   import { requests as requestsApi } from '../lib/api';
-  import { addToast } from '../lib/stores';
+  import { addToast, selectedTenant } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import StatusBadge from '../components/StatusBadge.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
@@ -16,6 +16,10 @@
   let typeFilter = $state('');
 
   let totalPages = $derived(Math.ceil(total / perPage));
+
+  // Re-fetch when tenant selection changes
+  let currentTenant = $state('');
+  selectedTenant.subscribe((v) => { currentTenant = v; page = 1; loadRequests(); });
 
   $effect(() => {
     loadRequests();
@@ -105,6 +109,7 @@
         <thead class="bg-gray-50">
           <tr>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Maker</th>
@@ -119,6 +124,7 @@
               <td class="px-6 py-4 text-sm font-mono text-xs text-gray-900">
                 <a href="#/requests/{req.id}" class="text-indigo-600 hover:text-indigo-800" title={req.id}>{truncateId(req.id)}</a>
               </td>
+              <td class="px-6 py-4 text-sm text-gray-500"><code class="bg-gray-100 px-2 py-0.5 rounded text-xs">{req.tenant_id}</code></td>
               <td class="px-6 py-4 text-sm text-gray-900">{req.type}</td>
               <td class="px-6 py-4 text-sm"><StatusBadge status={req.status} /></td>
               <td class="px-6 py-4 text-sm text-gray-500">{req.maker_id}</td>

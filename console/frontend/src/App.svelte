@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { auth as authApi } from './lib/api';
+  import { auth as authApi, tenants as tenantsApi } from './lib/api';
   import { isAuthenticated, getStoredOperator, clearToken } from './lib/auth';
-  import { currentUser } from './lib/stores';
+  import { currentUser, availableTenants } from './lib/stores';
   import { operators } from './lib/api';
   import Layout from './components/Layout.svelte';
   import Login from './pages/Login.svelte';
@@ -15,6 +15,7 @@
   import RequestDetail from './pages/RequestDetail.svelte';
   import AuditLogs from './pages/AuditLogs.svelte';
   import Operators from './pages/Operators.svelte';
+  import Tenants from './pages/Tenants.svelte';
 
   type AppState = 'loading' | 'setup' | 'login' | 'app';
 
@@ -54,6 +55,13 @@
       try {
         const op = await operators.me();
         currentUser.set(op);
+        // Fetch available tenants for sidebar selector
+        try {
+          const tenantsRes = await tenantsApi.list();
+          availableTenants.set(tenantsRes.data || []);
+        } catch {
+          // Non-critical — sidebar will just not show tenant selector
+        }
         state = 'app';
       } catch {
         clearToken();
@@ -127,6 +135,8 @@
         <RequestDetail id={route.params.id} />
       {:else if route.path === 'audit'}
         <AuditLogs />
+      {:else if route.path === 'tenants'}
+        <Tenants />
       {:else if route.path === 'operators'}
         <Operators />
       {:else}
