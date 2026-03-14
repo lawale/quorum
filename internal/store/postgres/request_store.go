@@ -61,6 +61,11 @@ func (s *RequestStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Reques
 	return s.scanOne(ctx, query, id)
 }
 
+func (s *RequestStore) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+	query := `SELECT ` + requestColumns + ` FROM requests WHERE id = $1 FOR UPDATE`
+	return s.scanOne(ctx, query, id)
+}
+
 func (s *RequestStore) GetByIdempotencyKey(ctx context.Context, key string) (*model.Request, error) {
 	query := `SELECT ` + requestColumns + ` FROM requests WHERE idempotency_key = $1`
 	return s.scanOne(ctx, query, key)
@@ -116,7 +121,11 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 	query := fmt.Sprintf(`SELECT `+requestColumns+` FROM requests %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
 	args = append(args, filter.PerPage, offset)
 
-	return s.scanMany(ctx, query, args...)
+	requests, _, err := s.scanMany(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	return requests, total, nil
 }
 
 func (s *RequestStore) UpdateStatus(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {

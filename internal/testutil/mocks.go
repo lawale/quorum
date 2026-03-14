@@ -15,6 +15,7 @@ import (
 type MockRequestStore struct {
 	CreateFunc                   func(ctx context.Context, req *model.Request) error
 	GetByIDFunc                  func(ctx context.Context, id uuid.UUID) (*model.Request, error)
+	GetByIDForUpdateFunc         func(ctx context.Context, id uuid.UUID) (*model.Request, error)
 	GetByIdempotencyKeyFunc      func(ctx context.Context, key string) (*model.Request, error)
 	FindPendingByFingerprintFunc func(ctx context.Context, reqType string, fingerprint string) (*model.Request, error)
 	ListFunc                     func(ctx context.Context, filter store.RequestFilter) ([]model.Request, int, error)
@@ -35,6 +36,18 @@ func (m *MockRequestStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Re
 		return m.GetByIDFunc(ctx, id)
 	}
 	panic("MockRequestStore.GetByID not set up")
+}
+
+func (m *MockRequestStore) GetByIDForUpdate(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+	if m.GetByIDForUpdateFunc != nil {
+		return m.GetByIDForUpdateFunc(ctx, id)
+	}
+	// Fall back to GetByIDFunc if ForUpdate variant is not explicitly set.
+	// This allows existing tests that don't care about locking to work unchanged.
+	if m.GetByIDFunc != nil {
+		return m.GetByIDFunc(ctx, id)
+	}
+	panic("MockRequestStore.GetByIDForUpdate not set up")
 }
 
 func (m *MockRequestStore) GetByIdempotencyKey(ctx context.Context, key string) (*model.Request, error) {
@@ -294,7 +307,7 @@ func (m *MockOperatorStore) Count(ctx context.Context) (int, error) {
 // MockOutboxStore implements store.OutboxStore with configurable function fields.
 type MockOutboxStore struct {
 	CreateBatchFunc     func(ctx context.Context, entries []model.OutboxEntry) error
-	ClaimBatchFunc     func(ctx context.Context, limit int) ([]model.OutboxEntry, error)
+	ClaimBatchFunc      func(ctx context.Context, limit int) ([]model.OutboxEntry, error)
 	MarkDeliveredFunc   func(ctx context.Context, id uuid.UUID) error
 	MarkRetryFunc       func(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error
 	MarkFailedFunc      func(ctx context.Context, id uuid.UUID, attempts int, lastError string) error

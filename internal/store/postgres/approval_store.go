@@ -8,7 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type ApprovalStore struct {
@@ -34,6 +36,10 @@ func (s *ApprovalStore) Create(ctx context.Context, approval *model.Approval) er
 		approval.Decision, approval.StageIndex, approval.Comment, approval.CreatedAt,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return store.ErrDuplicateApproval
+		}
 		return fmt.Errorf("inserting approval: %w", err)
 	}
 

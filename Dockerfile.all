@@ -17,7 +17,7 @@ COPY widgets/frontend/ ./
 RUN npm run build
 
 # Stage 3: Build the Go binary with console + widgets
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 COPY go.mod go.sum ./

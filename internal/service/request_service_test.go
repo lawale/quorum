@@ -691,9 +691,21 @@ func TestApprove_WebhookDispatch_CalledOnTerminal(t *testing.T) {
 	signalCalled := false
 	svc.SetWebhookDispatch(
 		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			// Inside the tx, counts reflect the just-inserted vote.
+			txApprovals := &testutil.MockApprovalStore{
+				CreateFunc:                  approvalStore.CreateFunc,
+				ListByRequestIDFunc:         approvalStore.ListByRequestIDFunc,
+				ExistsByCheckerAndStageFunc: approvalStore.ExistsByCheckerAndStageFunc,
+				CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
+					if decision == model.DecisionApproved {
+						return 1, nil // 1 approved vote (just inserted)
+					}
+					return 0, nil
+				},
+			}
 			txStores := &store.Stores{
 				Requests:  requestStore,
-				Approvals: approvalStore,
+				Approvals: txApprovals,
 				Outbox:    &testutil.MockOutboxStore{},
 				Webhooks:  &testutil.MockWebhookStore{},
 			}
@@ -725,20 +737,27 @@ func TestApprove_WebhookDispatch_NotCalledWhenPending(t *testing.T) {
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
-	// Override: 1 existing approval + this vote = 2, need 3 → still pending
-	approvalStore.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-		if decision == model.DecisionApproved {
-			return 1, nil
-		}
-		return 0, nil
-	}
-
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
 
 	enqueueCalled := false
 	svc.SetWebhookDispatch(
 		func(ctx context.Context, fn func(tx *store.Stores) error) error {
-			return fn(&store.Stores{Requests: requestStore})
+			// Inside the tx, counts reflect: 1 existing + 1 just inserted = 2, need 3 → still pending
+			txApprovals := &testutil.MockApprovalStore{
+				CreateFunc:                  approvalStore.CreateFunc,
+				ListByRequestIDFunc:         approvalStore.ListByRequestIDFunc,
+				ExistsByCheckerAndStageFunc: approvalStore.ExistsByCheckerAndStageFunc,
+				CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
+					if decision == model.DecisionApproved {
+						return 2, nil // 2 approved (1 existing + 1 just inserted), need 3
+					}
+					return 0, nil
+				},
+			}
+			return fn(&store.Stores{
+				Requests:  requestStore,
+				Approvals: txApprovals,
+			})
 		},
 		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
 			enqueueCalled = true
@@ -1127,9 +1146,21 @@ func TestApprove_ConcurrentTerminal_ReturnsNotPending(t *testing.T) {
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
 	svc.SetWebhookDispatch(
 		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			// Inside the tx, count reflects the just-inserted vote.
+			txApprovals := &testutil.MockApprovalStore{
+				CreateFunc:                  approvalStore.CreateFunc,
+				ListByRequestIDFunc:         approvalStore.ListByRequestIDFunc,
+				ExistsByCheckerAndStageFunc: approvalStore.ExistsByCheckerAndStageFunc,
+				CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
+					if decision == model.DecisionApproved {
+						return 1, nil // 1 approved (just inserted) → triggers terminal path
+					}
+					return 0, nil
+				},
+			}
 			return fn(&store.Stores{
 				Requests:  requestStore,
-				Approvals: approvalStore,
+				Approvals: txApprovals,
 				Outbox:    &testutil.MockOutboxStore{},
 				Webhooks:  &testutil.MockWebhookStore{},
 			})
@@ -1169,6 +1200,9 @@ func TestApprove_StageAdvance_Atomic(t *testing.T) {
 		func(ctx context.Context, fn func(tx *store.Stores) error) error {
 			txStores := &store.Stores{
 				Requests: &testutil.MockRequestStore{
+					GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+						return req, nil
+					},
 					UpdateStageAndStatusFunc: func(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error {
 						txStageUpdated = true
 						return nil
@@ -1178,6 +1212,12 @@ func TestApprove_StageAdvance_Atomic(t *testing.T) {
 					CreateFunc: func(ctx context.Context, approval *model.Approval) error {
 						txApprovalCreated = true
 						return nil
+					},
+					CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
+						if decision == model.DecisionApproved {
+							return 1, nil // 1 approved (just inserted) → meets stage 0 threshold
+						}
+						return 0, nil
 					},
 				},
 			}

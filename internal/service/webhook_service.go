@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
@@ -26,6 +27,19 @@ func (s *WebhookService) Create(ctx context.Context, webhook *model.Webhook) err
 	if webhook.URL == "" {
 		return errors.New("webhook URL is required")
 	}
+
+	// Validate that the URL is well-formed and uses http or https.
+	parsed, err := url.Parse(webhook.URL)
+	if err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("webhook URL must use http or https scheme")
+	}
+	if parsed.Host == "" {
+		return errors.New("webhook URL must have a host")
+	}
+
 	if len(webhook.Events) == 0 {
 		return errors.New("at least one event is required")
 	}

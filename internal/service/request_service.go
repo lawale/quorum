@@ -191,7 +191,10 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 	}
 
 	req.Status = model.StatusCancelled
-	approvals, _ := s.approvals.ListByRequestID(ctx, requestID)
+	approvals, err := s.approvals.ListByRequestID(ctx, requestID)
+	if err != nil {
+		return nil, fmt.Errorf("loading approvals for cancel callback: %w", err)
+	}
 
 	if s.runInTx != nil && s.enqueueWebhooks != nil {
 		err := s.runInTx(ctx, func(txStores *store.Stores) error {
@@ -304,28 +307,6 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		}
 	}
 
-	// Read current approval/rejection counts BEFORE writing the approval vote.
-	// This lets us predict the outcome and choose the right atomicity strategy.
-	approvalCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, req.CurrentStage)
-	if err != nil {
-		return nil, err
-	}
-	rejectionCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, req.CurrentStage)
-	if err != nil {
-		return nil, err
-	}
-
-	// Predict the outcome after this vote is recorded
-	predictedApprovals := approvalCount
-	predictedRejections := rejectionCount
-	if decision == model.DecisionApproved {
-		predictedApprovals++
-	} else {
-		predictedRejections++
-	}
-
-	newStatus, newStage := evaluateWithCounts(predictedApprovals, predictedRejections, req.CurrentStage, policy)
-
 	approval := &model.Approval{
 		RequestID:  requestID,
 		CheckerID:  checkerID,
@@ -334,18 +315,42 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		Comment:    comment,
 	}
 
-	// Determine whether we need a transaction: any state change (terminal status,
-	// stage advance) requires atomicity with the approval write.
-	needsTx := newStatus != nil || newStage != nil
+	var newStatus *model.RequestStatus
+	var newStage *int
 
-	if s.runInTx != nil && needsTx {
-		// Atomic path: approval + state change (+ optional outbox) in a single tx.
-		// The CAS guard on UpdateStatus / UpdateStageAndStatus prevents duplicate
-		// terminal transitions when two checkers race.
+	if s.runInTx != nil {
+		// Transactional path: lock the request row, insert vote, count inside
+		// the transaction, and apply any resulting state change atomically.
+		// The FOR UPDATE lock serializes concurrent decisions on the same
+		// request, preventing missed stage advances and post-terminal votes.
 		err := s.runInTx(ctx, func(txStores *store.Stores) error {
+			// Lock the request row to serialize concurrent decision processing
+			lockedReq, lockErr := txStores.Requests.GetByIDForUpdate(ctx, requestID)
+			if lockErr != nil {
+				return lockErr
+			}
+			if lockedReq == nil || lockedReq.Status != model.StatusPending {
+				return store.ErrStatusConflict
+			}
+			// Use the locked version's stage — it may have advanced since our
+			// initial read above.
+			approval.StageIndex = lockedReq.CurrentStage
+
 			if err := txStores.Approvals.Create(ctx, approval); err != nil {
 				return fmt.Errorf("recording decision: %w", err)
 			}
+
+			// Count votes inside the transaction where we hold the lock
+			approvalCount, err := txStores.Approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, lockedReq.CurrentStage)
+			if err != nil {
+				return err
+			}
+			rejectionCount, err := txStores.Approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, lockedReq.CurrentStage)
+			if err != nil {
+				return err
+			}
+
+			newStatus, newStage = evaluateWithCounts(approvalCount, rejectionCount, lockedReq.CurrentStage, policy)
 
 			if newStatus != nil {
 				// Terminal status (approved or rejected)
@@ -353,7 +358,10 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 					return err
 				}
 				if s.enqueueWebhooks != nil {
-					resolveApprovals, _ := txStores.Approvals.ListByRequestID(ctx, requestID)
+					resolveApprovals, err := txStores.Approvals.ListByRequestID(ctx, requestID)
+					if err != nil {
+						return fmt.Errorf("loading approvals for callback: %w", err)
+					}
 					req.Status = *newStatus
 					req.Approvals = resolveApprovals
 					return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, resolveApprovals)
@@ -369,6 +377,9 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		if err != nil {
 			if errors.Is(err, store.ErrStatusConflict) {
 				return nil, ErrRequestNotPending
+			}
+			if errors.Is(err, store.ErrDuplicateApproval) {
+				return nil, ErrAlreadyActioned
 			}
 			return nil, err
 		}
@@ -392,8 +403,32 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
 		}
 	} else {
-		// Fallback: no transaction available or no state change needed
+		// Fallback: no transaction support. Pre-read counts and predict outcome.
+		// This path is inherently racy under concurrency but provides a working
+		// single-instance fallback.
+		approvalCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, req.CurrentStage)
+		if err != nil {
+			return nil, err
+		}
+		rejectionCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, req.CurrentStage)
+		if err != nil {
+			return nil, err
+		}
+
+		predictedApprovals := approvalCount
+		predictedRejections := rejectionCount
+		if decision == model.DecisionApproved {
+			predictedApprovals++
+		} else {
+			predictedRejections++
+		}
+
+		newStatus, newStage = evaluateWithCounts(predictedApprovals, predictedRejections, req.CurrentStage, policy)
+
 		if err := s.approvals.Create(ctx, approval); err != nil {
+			if errors.Is(err, store.ErrDuplicateApproval) {
+				return nil, ErrAlreadyActioned
+			}
 			return nil, fmt.Errorf("recording decision: %w", err)
 		}
 

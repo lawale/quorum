@@ -14,6 +14,11 @@ import (
 // guard, preventing double terminal transitions from concurrent approvers.
 var ErrStatusConflict = errors.New("request status has already changed")
 
+// ErrDuplicateApproval is returned by ApprovalStore.Create when a unique
+// constraint violation occurs (same checker + request + stage). This maps to
+// the service-level ErrAlreadyActioned for proper HTTP 409 responses.
+var ErrDuplicateApproval = errors.New("checker has already acted on this request at this stage")
+
 type RequestFilter struct {
 	Status  *model.RequestStatus
 	Type    *string
@@ -25,6 +30,9 @@ type RequestFilter struct {
 type RequestStore interface {
 	Create(ctx context.Context, req *model.Request) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Request, error)
+	// GetByIDForUpdate acquires a row-level lock on the request, serializing
+	// concurrent decision operations within a transaction.
+	GetByIDForUpdate(ctx context.Context, id uuid.UUID) (*model.Request, error)
 	GetByIdempotencyKey(ctx context.Context, key string) (*model.Request, error)
 	FindPendingByFingerprint(ctx context.Context, reqType string, fingerprint string) (*model.Request, error)
 	List(ctx context.Context, filter RequestFilter) ([]model.Request, int, error)

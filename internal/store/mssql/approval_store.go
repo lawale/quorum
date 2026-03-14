@@ -3,11 +3,14 @@ package mssql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type ApprovalStore struct {
@@ -33,10 +36,28 @@ func (s *ApprovalStore) Create(ctx context.Context, approval *model.Approval) er
 		approval.Decision, approval.StageIndex, approval.Comment, approval.CreatedAt,
 	)
 	if err != nil {
+		if isDuplicateKeyError(err) {
+			return store.ErrDuplicateApproval
+		}
 		return fmt.Errorf("inserting approval: %w", err)
 	}
 
 	return nil
+}
+
+// isDuplicateKeyError returns true for MSSQL unique constraint violations
+// (error numbers 2627 and 2601).
+func isDuplicateKeyError(err error) bool {
+	// go-mssqldb wraps errors; check the message for the SQL Server error numbers
+	// as a portable fallback.
+	var unwrapped interface{ SQLErrorNumber() int32 }
+	if errors.As(err, &unwrapped) {
+		num := unwrapped.SQLErrorNumber()
+		return num == 2627 || num == 2601
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Violation of UNIQUE KEY constraint") ||
+		strings.Contains(msg, "Cannot insert duplicate key")
 }
 
 func (s *ApprovalStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error) {

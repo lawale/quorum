@@ -211,6 +211,7 @@ func (d *Dispatcher) deliverEntry(ctx context.Context, entry model.OutboxEntry) 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, entry.WebhookURL, bytes.NewReader(entry.Payload))
 	if err != nil {
 		slog.Error("failed to create webhook request", "error", err, "url", entry.WebhookURL)
+		d.handleFailure(ctx, entry, fmt.Sprintf("invalid request URL: %s", err))
 		return
 	}
 
