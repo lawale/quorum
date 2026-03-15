@@ -41,7 +41,11 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.webhookService.Create(r.Context(), webhook); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		if errors.Is(err, service.ErrWebhookValidation) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeServerError(w, r, err, "failed to create webhook")
 		return
 	}
 
@@ -51,7 +55,7 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
 	webhooks, err := h.webhookService.List(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list webhooks")
+		writeServerError(w, r, err, "failed to list webhooks")
 		return
 	}
 
@@ -70,7 +74,7 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to delete webhook")
+		writeServerError(w, r, err, "failed to delete webhook")
 		return
 	}
 

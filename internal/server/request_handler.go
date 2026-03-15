@@ -3,7 +3,9 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -12,6 +14,8 @@ import (
 	"github.com/lawale/quorum/internal/service"
 	"github.com/lawale/quorum/internal/store"
 )
+
+const maxPerPage = 100
 
 type RequestHandler struct {
 	requestService *service.RequestService
@@ -71,7 +75,7 @@ func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, service.ErrMissingIdentityFields):
 			writeError(w, http.StatusBadRequest, err.Error())
 		default:
-			writeError(w, http.StatusInternalServerError, "failed to create request")
+			writeServerError(w, r, err, "failed to create request")
 		}
 		return
 	}
@@ -92,7 +96,7 @@ func (h *RequestHandler) Get(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to get request")
+		writeServerError(w, r, err, "failed to get request")
 		return
 	}
 
@@ -100,13 +104,22 @@ func (h *RequestHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RequestHandler) List(w http.ResponseWriter, r *http.Request) {
+	perPage := intParam(r, "per_page", 20)
+	if perPage > maxPerPage {
+		perPage = maxPerPage
+	}
+
 	filter := store.RequestFilter{
 		Page:    intParam(r, "page", 1),
-		PerPage: intParam(r, "per_page", 20),
+		PerPage: perPage,
 	}
 
 	if s := r.URL.Query().Get("status"); s != "" {
 		status := model.RequestStatus(s)
+		if !isValidStatus(status) {
+			writeError(w, http.StatusBadRequest, "invalid status filter: must be one of pending, approved, rejected, cancelled, expired")
+			return
+		}
 		filter.Status = &status
 	}
 	if t := r.URL.Query().Get("type"); t != "" {
@@ -118,7 +131,7 @@ func (h *RequestHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	requests, total, err := h.requestService.List(r.Context(), filter)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list requests")
+		writeServerError(w, r, err, "failed to list requests")
 		return
 	}
 
@@ -149,8 +162,11 @@ func (h *RequestHandler) handleDecision(w http.ResponseWriter, r *http.Request, 
 	}
 
 	var body decisionBody
-	if r.Body != nil {
-		json.NewDecoder(r.Body).Decode(&body)
+	if r.Body != nil && r.Body != http.NoBody {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
 	}
 
 	checkerID := auth.UserIDFromContext(r.Context())
@@ -180,7 +196,7 @@ func (h *RequestHandler) handleDecision(w http.ResponseWriter, r *http.Request, 
 		case errors.Is(err, auth.ErrPermissionDenied):
 			writeError(w, http.StatusForbidden, err.Error())
 		default:
-			writeError(w, http.StatusInternalServerError, "failed to process decision")
+			writeServerError(w, r, err, "failed to process decision")
 		}
 		return
 	}
@@ -204,7 +220,7 @@ func (h *RequestHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, service.ErrRequestNotPending):
 			writeError(w, http.StatusConflict, err.Error())
 		default:
-			writeError(w, http.StatusInternalServerError, "failed to cancel request")
+			writeServerError(w, r, err, "failed to cancel request")
 		}
 		return
 	}
@@ -212,50 +228,22 @@ func (h *RequestHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (h *RequestHandler) Audit(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request ID")
-		return
-	}
-
-	// Verify request exists
-	_, err = h.requestService.GetByID(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, service.ErrRequestNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "failed to get request")
-		return
-	}
-
-	// The audit store is accessed through the service layer, but for now
-	// we return it as part of a dedicated endpoint. We need to expose
-	// audit listing through the request service.
-	writeJSON(w, http.StatusOK, map[string]string{"message": "audit endpoint"})
-}
-
 func intParam(r *http.Request, key string, defaultVal int) int {
 	s := r.URL.Query().Get(key)
 	if s == "" {
 		return defaultVal
 	}
-	var v int
-	if _, err := parseIntFromString(s, &v); err != nil {
+	v, err := strconv.Atoi(s)
+	if err != nil || v < 1 {
 		return defaultVal
 	}
 	return v
 }
 
-func parseIntFromString(s string, v *int) (bool, error) {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return false, errors.New("not a number")
-		}
-		n = n*10 + int(c-'0')
+func isValidStatus(s model.RequestStatus) bool {
+	switch s {
+	case model.StatusPending, model.StatusApproved, model.StatusRejected, model.StatusCancelled, model.StatusExpired:
+		return true
 	}
-	*v = n
-	return true, nil
+	return false
 }

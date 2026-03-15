@@ -18,6 +18,7 @@ var (
 	ErrNoStages               = errors.New("policy must have at least one approval stage")
 	ErrInvalidStageIndex      = errors.New("stage indices must be sequential starting from 0")
 	ErrInvalidDisplayTemplate = errors.New("invalid display template")
+	ErrThresholdNoMaxCheckers = errors.New("max_checkers is required when rejection_policy is 'threshold'")
 )
 
 type PolicyService struct {
@@ -68,6 +69,9 @@ func validateAndDefaultStages(stages []model.ApprovalStage) error {
 		}
 		if stages[i].RejectionPolicy == "" {
 			stages[i].RejectionPolicy = model.RejectionPolicyAny
+		}
+		if stages[i].RejectionPolicy == model.RejectionPolicyThreshold && stages[i].MaxCheckers == nil {
+			return fmt.Errorf("%w (stage %d)", ErrThresholdNoMaxCheckers, i)
 		}
 	}
 	return nil

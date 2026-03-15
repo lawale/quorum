@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type WebhookStore struct {
@@ -29,9 +30,7 @@ func (s *WebhookStore) Create(ctx context.Context, webhook *model.Webhook) error
 	}
 	webhook.TenantID = auth.TenantIDFromContext(ctx)
 	webhook.CreatedAt = time.Now().UTC()
-	if !webhook.Active {
-		webhook.Active = true
-	}
+	webhook.Active = true
 
 	eventsJSON, err := marshalJSON(webhook.Events)
 	if err != nil {
@@ -161,16 +160,19 @@ func (s *WebhookStore) ListByEventAndType(ctx context.Context, event string, req
 
 func (s *WebhookStore) Delete(ctx context.Context, id uuid.UUID) error {
 	tenantID := auth.TenantIDFromContext(ctx)
+	var result sql.Result
+	var err error
 	if tenantID != "" {
-		_, err := s.db.Pool.ExecContext(ctx, "DELETE FROM [quorum].[webhooks] WHERE id = @p1 AND tenant_id = @p2", id, tenantID)
-		if err != nil {
-			return fmt.Errorf("deleting webhook: %w", err)
-		}
-		return nil
+		result, err = s.db.Pool.ExecContext(ctx, "DELETE FROM [quorum].[webhooks] WHERE id = @p1 AND tenant_id = @p2", id, tenantID)
+	} else {
+		result, err = s.db.Pool.ExecContext(ctx, "DELETE FROM [quorum].[webhooks] WHERE id = @p1", id)
 	}
-	_, err := s.db.Pool.ExecContext(ctx, "DELETE FROM [quorum].[webhooks] WHERE id = @p1", id)
 	if err != nil {
 		return fmt.Errorf("deleting webhook: %w", err)
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return store.ErrNotFound
 	}
 	return nil
 }

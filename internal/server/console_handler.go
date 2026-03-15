@@ -61,7 +61,7 @@ func (h *ConsoleHandler) Setup(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "setup has already been completed")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to complete setup")
+		writeServerError(w, r, err, "failed to complete setup")
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *ConsoleHandler) Login(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "invalid username or password")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to login")
+		writeServerError(w, r, err, "failed to login")
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *ConsoleHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *ConsoleHandler) NeedsSetup(w http.ResponseWriter, r *http.Request) {
 	needs, err := h.operatorService.NeedsSetup(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to check setup status")
+		writeServerError(w, r, err, "failed to check setup status")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (h *ConsoleHandler) Me(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "operator not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to get operator")
+		writeServerError(w, r, err, "failed to get operator")
 		return
 	}
 
@@ -163,7 +163,7 @@ func (h *ConsoleHandler) ChangePassword(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusNotFound, "operator not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to change password")
+		writeServerError(w, r, err, "failed to change password")
 		return
 	}
 
@@ -174,7 +174,7 @@ func (h *ConsoleHandler) ChangePassword(w http.ResponseWriter, r *http.Request) 
 func (h *ConsoleHandler) ListOperators(w http.ResponseWriter, r *http.Request) {
 	operators, err := h.operatorService.ListOperators(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list operators")
+		writeServerError(w, r, err, "failed to list operators")
 		return
 	}
 
@@ -200,7 +200,7 @@ func (h *ConsoleHandler) CreateOperator(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusConflict, "username already exists")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to create operator")
+		writeServerError(w, r, err, "failed to create operator")
 		return
 	}
 
@@ -234,7 +234,7 @@ func (h *ConsoleHandler) DeleteOperator(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusNotFound, "operator not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to delete operator")
+		writeServerError(w, r, err, "failed to delete operator")
 		return
 	}
 
@@ -252,7 +252,7 @@ type createTenantBody struct {
 func (h *ConsoleHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
 	tenants, err := h.tenantService.List(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list tenants")
+		writeServerError(w, r, err, "failed to list tenants")
 		return
 	}
 
@@ -282,7 +282,7 @@ func (h *ConsoleHandler) CreateTenant(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "a tenant with this slug already exists")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to create tenant")
+		writeServerError(w, r, err, "failed to create tenant")
 		return
 	}
 
@@ -306,7 +306,7 @@ func (h *ConsoleHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "cannot delete the default tenant")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to delete tenant")
+		writeServerError(w, r, err, "failed to delete tenant")
 		return
 	}
 

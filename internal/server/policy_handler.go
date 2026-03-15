@@ -94,11 +94,11 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) {
+		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to create policy")
+		writeServerError(w, r, err, "failed to create policy")
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *PolicyHandler) Get(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to get policy")
+		writeServerError(w, r, err, "failed to get policy")
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *PolicyHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 	policies, err := h.policyService.List(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list policies")
+		writeServerError(w, r, err, "failed to list policies")
 		return
 	}
 
@@ -157,7 +157,7 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to get policy")
+		writeServerError(w, r, err, "failed to get policy")
 		return
 	}
 
@@ -203,11 +203,11 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.policyService.Update(r.Context(), existing); err != nil {
-		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) {
+		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to update policy")
+		writeServerError(w, r, err, "failed to update policy")
 		return
 	}
 
@@ -226,7 +226,7 @@ func (h *PolicyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to delete policy")
+		writeServerError(w, r, err, "failed to delete policy")
 		return
 	}
 

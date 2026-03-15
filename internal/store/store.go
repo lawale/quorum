@@ -19,6 +19,11 @@ var ErrStatusConflict = errors.New("request status has already changed")
 // the service-level ErrAlreadyActioned for proper HTTP 409 responses.
 var ErrDuplicateApproval = errors.New("checker has already acted on this request at this stage")
 
+// ErrNotFound is returned by Delete operations when the target row does not
+// exist (or was already deleted between a service-layer existence check and
+// the actual DELETE statement).
+var ErrNotFound = errors.New("record not found")
+
 type RequestFilter struct {
 	TenantID *string
 	Status   *model.RequestStatus

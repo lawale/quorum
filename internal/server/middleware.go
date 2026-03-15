@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -31,11 +32,16 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		wrapped := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(wrapped, r)
 
-		slog.Info("request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", wrapped.status,
-			"duration", time.Since(start).String(),
+		duration := time.Since(start)
+		level := slog.LevelInfo
+		if wrapped.status >= 500 {
+			level = slog.LevelError
+		} else if wrapped.status >= 400 {
+			level = slog.LevelWarn
+		}
+
+		slog.Log(r.Context(), level,
+			fmt.Sprintf("%s %s %d %s", r.Method, r.URL.Path, wrapped.status, duration),
 			"user_id", auth.UserIDFromContext(r.Context()),
 			"tenant_id", auth.TenantIDFromContext(r.Context()),
 		)
@@ -52,6 +58,20 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
+// Flush implements http.Flusher by delegating to the wrapped ResponseWriter
+// if it supports flushing (e.g. for streaming or SSE).
+func (w *statusWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap returns the underlying ResponseWriter so that middleware further
+// up the chain can access optional interfaces via http.ResponseController.
+func (w *statusWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -60,6 +80,21 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// writeServerError logs the actual error with request context before returning
+// a generic error message to the client. Use this instead of writeError for all
+// 5xx responses so the root cause is always visible in logs.
+func writeServerError(w http.ResponseWriter, r *http.Request, err error, message string) {
+	slog.Error(message,
+		"error", err,
+		"method", r.Method,
+		"path", r.URL.Path,
+		"query", r.URL.RawQuery,
+		"user_id", auth.UserIDFromContext(r.Context()),
+		"tenant_id", auth.TenantIDFromContext(r.Context()),
+	)
+	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": message})
 }
 
 // tenantValidationMiddleware verifies the tenant from the request context is a
@@ -81,14 +116,21 @@ func tenantValidationMiddleware(tenants *service.TenantService) func(http.Handle
 
 // consoleTenantMiddleware reads an optional ?tenant_id= query parameter and
 // injects it into the request context. This allows console operators to filter
-// data by tenant without requiring an X-Tenant-ID header.
-func consoleTenantMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		if tenantID != "" {
-			ctx := auth.WithTenantID(r.Context(), tenantID)
-			r = r.WithContext(ctx)
-		}
-		next.ServeHTTP(w, r)
-	})
+// data by tenant without requiring an X-Tenant-ID header. If the tenant is
+// provided, it is validated against the registered tenant cache.
+func consoleTenantMiddleware(tenants *service.TenantService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tenantID := r.URL.Query().Get("tenant_id")
+			if tenantID != "" {
+				if tenants != nil && !tenants.IsRegistered(tenantID) {
+					writeError(w, http.StatusBadRequest, "unknown tenant: "+tenantID)
+					return
+				}
+				ctx := auth.WithTenantID(r.Context(), tenantID)
+				r = r.WithContext(ctx)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

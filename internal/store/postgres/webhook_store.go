@@ -8,8 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type WebhookStore struct {
@@ -32,9 +34,7 @@ func (s *WebhookStore) Create(ctx context.Context, webhook *model.Webhook) error
 		webhook.TenantID = auth.TenantIDFromContext(ctx)
 	}
 	webhook.CreatedAt = time.Now().UTC()
-	if !webhook.Active {
-		webhook.Active = true
-	}
+	webhook.Active = true
 
 	eventsJSON, err := marshalJSON(webhook.Events)
 	if err != nil {
@@ -157,18 +157,20 @@ func (s *WebhookStore) ListByEventAndType(ctx context.Context, event string, req
 
 func (s *WebhookStore) Delete(ctx context.Context, id uuid.UUID) error {
 	query := "DELETE FROM webhooks WHERE id = $1"
+	var tag pgconn.CommandTag
+	var err error
 	tenant := auth.TenantIDFromContext(ctx)
 	if tenant != "" {
 		query += " AND tenant_id = $2"
-		_, err := s.db.Pool.Exec(ctx, query, id, tenant)
-		if err != nil {
-			return fmt.Errorf("deleting webhook: %w", err)
-		}
-		return nil
+		tag, err = s.db.Pool.Exec(ctx, query, id, tenant)
+	} else {
+		tag, err = s.db.Pool.Exec(ctx, query, id)
 	}
-	_, err := s.db.Pool.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("deleting webhook: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return store.ErrNotFound
 	}
 	return nil
 }

@@ -132,7 +132,7 @@ func (s *Server) setupRoutes() {
 				// Data endpoints — reuse existing handlers via JWT auth
 				// consoleTenantMiddleware injects optional ?tenant_id= into context
 				r.Group(func(r chi.Router) {
-					r.Use(consoleTenantMiddleware)
+					r.Use(consoleTenantMiddleware(s.tenantService))
 
 					r.Get("/policies", s.policyHandler.List)
 					r.Post("/policies", s.policyHandler.Create)
@@ -201,7 +201,7 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 
 	logs, err := s.auditStore.ListByRequestID(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to get audit logs")
+		writeServerError(w, r, err, "failed to get audit logs")
 		return
 	}
 

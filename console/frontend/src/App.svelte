@@ -63,6 +63,10 @@
           // Non-critical — sidebar will just not show tenant selector
         }
         state = 'app';
+        // Redirect away from login hash so the app layout renders
+        if (window.location.hash === '#/login' || window.location.hash === '') {
+          window.location.hash = '#/';
+        }
       } catch {
         clearToken();
         state = 'login';
@@ -114,7 +118,7 @@
   </div>
 {:else if state === 'setup'}
   <Setup onSuccess={() => init()} />
-{:else if state === 'login' || hash === '#/login'}
+{:else if state === 'login'}
   <Login onSuccess={() => init()} />
 {:else}
   <Layout>

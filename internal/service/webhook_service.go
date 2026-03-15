@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	ErrWebhookNotFound = errors.New("webhook not found")
+	ErrWebhookNotFound   = errors.New("webhook not found")
+	ErrWebhookValidation = errors.New("webhook validation error")
 )
 
 type WebhookService struct {
@@ -30,26 +31,26 @@ func (s *WebhookService) Create(ctx context.Context, webhook *model.Webhook) err
 	}
 
 	if webhook.URL == "" {
-		return errors.New("webhook URL is required")
+		return fmt.Errorf("%w: webhook URL is required", ErrWebhookValidation)
 	}
 
 	// Validate that the URL is well-formed and uses http or https.
 	parsed, err := url.Parse(webhook.URL)
 	if err != nil {
-		return fmt.Errorf("invalid webhook URL: %w", err)
+		return fmt.Errorf("%w: invalid webhook URL: %s", ErrWebhookValidation, err)
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return errors.New("webhook URL must use http or https scheme")
+		return fmt.Errorf("%w: webhook URL must use http or https scheme", ErrWebhookValidation)
 	}
 	if parsed.Host == "" {
-		return errors.New("webhook URL must have a host")
+		return fmt.Errorf("%w: webhook URL must have a host", ErrWebhookValidation)
 	}
 
 	if len(webhook.Events) == 0 {
-		return errors.New("at least one event is required")
+		return fmt.Errorf("%w: at least one event is required", ErrWebhookValidation)
 	}
 	if webhook.Secret == "" {
-		return errors.New("webhook secret is required")
+		return fmt.Errorf("%w: webhook secret is required", ErrWebhookValidation)
 	}
 
 	return s.webhooks.Create(ctx, webhook)

@@ -9,8 +9,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type PolicyStore struct {
@@ -46,15 +48,9 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 		return fmt.Errorf("marshaling identity fields: %w", err)
 	}
 
-	var autoExpire *string
-	if policy.AutoExpireDuration != nil {
-		s := policy.AutoExpireDuration.String()
-		autoExpire = &s
-	}
-
 	_, err = s.db.Pool.Exec(ctx, query,
 		policy.ID, policy.TenantID, policy.Name, policy.RequestType, stagesJSON,
-		identityFieldsJSON, policy.PermissionCheckURL, autoExpire, policy.DisplayTemplate, policy.CreatedAt, policy.UpdatedAt,
+		identityFieldsJSON, policy.PermissionCheckURL, policy.AutoExpireDuration, policy.DisplayTemplate, policy.CreatedAt, policy.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting policy: %w", err)
@@ -131,15 +127,9 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 		return fmt.Errorf("marshaling identity fields: %w", err)
 	}
 
-	var autoExpire *string
-	if policy.AutoExpireDuration != nil {
-		s := policy.AutoExpireDuration.String()
-		autoExpire = &s
-	}
-
 	args := []any{
 		policy.Name, stagesJSON, identityFieldsJSON,
-		policy.PermissionCheckURL, autoExpire, policy.DisplayTemplate, policy.UpdatedAt, policy.ID,
+		policy.PermissionCheckURL, policy.AutoExpireDuration, policy.DisplayTemplate, policy.UpdatedAt, policy.ID,
 	}
 
 	tenant := auth.TenantIDFromContext(ctx)
@@ -158,18 +148,20 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 
 func (s *PolicyStore) Delete(ctx context.Context, id uuid.UUID) error {
 	query := "DELETE FROM policies WHERE id = $1"
+	var tag pgconn.CommandTag
+	var err error
 	tenant := auth.TenantIDFromContext(ctx)
 	if tenant != "" {
 		query += " AND tenant_id = $2"
-		_, err := s.db.Pool.Exec(ctx, query, id, tenant)
-		if err != nil {
-			return fmt.Errorf("deleting policy: %w", err)
-		}
-		return nil
+		tag, err = s.db.Pool.Exec(ctx, query, id, tenant)
+	} else {
+		tag, err = s.db.Pool.Exec(ctx, query, id)
 	}
-	_, err := s.db.Pool.Exec(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("deleting policy: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return store.ErrNotFound
 	}
 	return nil
 }
@@ -193,7 +185,7 @@ type scannable interface {
 func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 	p := &model.Policy{}
 	var stagesJSON, identityFieldsJSON []byte
-	var autoExpire *string
+	var autoExpire *time.Duration
 
 	err := row.Scan(
 		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
@@ -214,13 +206,7 @@ func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 		}
 	}
 
-	if autoExpire != nil {
-		d, err := time.ParseDuration(*autoExpire)
-		if err != nil {
-			return nil, fmt.Errorf("parsing auto expire duration: %w", err)
-		}
-		p.AutoExpireDuration = &d
-	}
+	p.AutoExpireDuration = autoExpire
 
 	return p, nil
 }
@@ -228,7 +214,7 @@ func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 func (s *PolicyStore) scanPolicyRow(rows pgx.Rows) (*model.Policy, error) {
 	p := &model.Policy{}
 	var stagesJSON, identityFieldsJSON []byte
-	var autoExpire *string
+	var autoExpire *time.Duration
 
 	err := rows.Scan(
 		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
@@ -249,13 +235,7 @@ func (s *PolicyStore) scanPolicyRow(rows pgx.Rows) (*model.Policy, error) {
 		}
 	}
 
-	if autoExpire != nil {
-		d, err := time.ParseDuration(*autoExpire)
-		if err != nil {
-			return nil, fmt.Errorf("parsing auto expire duration: %w", err)
-		}
-		p.AutoExpireDuration = &d
-	}
+	p.AutoExpireDuration = autoExpire
 
 	return p, nil
 }

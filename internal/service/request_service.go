@@ -569,7 +569,8 @@ func validateCheckerRoles(stage *model.ApprovalStage, checkerRoles []string) err
 
 	var allowedRoles []string
 	if err := json.Unmarshal(stage.AllowedCheckerRoles, &allowedRoles); err != nil {
-		return nil // If we can't parse, skip validation
+		slog.Error("failed to parse allowed_checker_roles", "error", err, "stage_index", stage.Index)
+		return fmt.Errorf("invalid allowed_checker_roles configuration: %w", err)
 	}
 
 	if len(allowedRoles) == 0 {
