@@ -95,6 +95,15 @@ type OperatorStore interface {
 	Count(ctx context.Context) (int, error)
 }
 
+// OutboxFilter specifies criteria for listing outbox entries.
+type OutboxFilter struct {
+	TenantID  *string
+	Status    *string
+	RequestID *uuid.UUID
+	Page      int
+	PerPage   int
+}
+
 // OutboxStore manages durable webhook delivery entries.
 type OutboxStore interface {
 	CreateBatch(ctx context.Context, entries []model.OutboxEntry) error
@@ -106,6 +115,17 @@ type OutboxStore interface {
 	MarkRetry(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error
 	MarkFailed(ctx context.Context, id uuid.UUID, attempts int, lastError string) error
 	DeleteDelivered(ctx context.Context, olderThan time.Time) (int64, error)
+
+	// List returns paginated outbox entries filtered by status, request ID, and tenant.
+	List(ctx context.Context, filter OutboxFilter) ([]model.OutboxEntry, int, error)
+	// CountByStatus returns a count of entries grouped by status, optionally scoped to a tenant.
+	CountByStatus(ctx context.Context, tenantID *string) (map[string]int, error)
+	// GetByID fetches a single outbox entry.
+	GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error)
+	// ResetForRetry resets a single failed entry to pending for re-delivery.
+	ResetForRetry(ctx context.Context, id uuid.UUID) error
+	// ResetAllFailedForRequest resets all failed entries for a given request ID.
+	ResetAllFailedForRequest(ctx context.Context, requestID uuid.UUID) (int64, error)
 }
 
 // Stores bundles every store interface and a Close function for the underlying connection.

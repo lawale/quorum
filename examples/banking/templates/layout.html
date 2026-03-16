@@ -28,7 +28,8 @@
                         <a href="/transfer/new" class="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-100">New Transfer</a>
                     </div>
                 </div>
-                <div class="flex items-center">
+                <div class="flex items-center space-x-3">
+                    <div id="profile-switcher"></div>
                     <span class="text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">Powered by Quorum</span>
                 </div>
             </div>
@@ -50,6 +51,89 @@
             </p>
         </div>
     </footer>
+
+    <script>
+    // ---- Profile Switcher (demo only) ----
+    function initProfileSwitcher(appId, profiles, opts) {
+        opts = opts || {};
+        var key = 'quorum-demo-profile-' + appId;
+        var dark = !!opts.dark;
+        var accent = opts.accent || '#3b82f6';
+        var accentLight = opts.accentLight || '#dbeafe';
+        var accentText = opts.accentText || '#1e40af';
+
+        // Read saved profile
+        var savedId = localStorage.getItem(key);
+        var current = profiles[0];
+        for (var i = 0; i < profiles.length; i++) {
+            if (profiles[i].id === savedId) { current = profiles[i]; break; }
+        }
+        window.__quorumProfile = current;
+
+        var container = document.getElementById('profile-switcher');
+        if (!container) return;
+
+        var btnBg = dark ? 'rgba(255,255,255,0.1)' : '#f9fafb';
+        var btnBorder = dark ? 'rgba(255,255,255,0.2)' : '#e5e7eb';
+        var btnText = dark ? '#f3f4f6' : '#374151';
+        var menuBg = '#ffffff';
+
+        container.innerHTML =
+            '<div style="position:relative">' +
+                '<button id="ps-btn" style="display:flex;align-items:center;gap:8px;padding:4px 10px 4px 4px;border-radius:8px;border:1px solid ' + btnBorder + ';background:' + btnBg + ';cursor:pointer;font-size:13px;color:' + btnText + '">' +
+                    '<span style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px;background:' + accentLight + ';color:' + accentText + '">' +
+                        current.name.charAt(0) +
+                    '</span>' +
+                    '<span style="font-weight:500">' + current.name + '</span>' +
+                    '<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:' + accentLight + ';color:' + accentText + '">' + current.badge + '</span>' +
+                    '<svg width="12" height="12" viewBox="0 0 12 12" style="opacity:0.5"><path d="M3 5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>' +
+                '</button>' +
+                '<div id="ps-menu" style="display:none;position:absolute;right:0;top:100%;margin-top:6px;width:240px;background:' + menuBg + ';border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 25px rgba(0,0,0,0.12);z-index:50;padding:4px;overflow:hidden">' +
+                    profileItems(profiles, current, accent, accentLight, accentText) +
+                '</div>' +
+            '</div>';
+
+        var btn = document.getElementById('ps-btn');
+        var menu = document.getElementById('ps-menu');
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+        document.addEventListener('click', function() { menu.style.display = 'none'; });
+
+        menu.addEventListener('click', function(e) {
+            var target = e.target.closest('[data-profile-id]');
+            if (!target) return;
+            var id = target.getAttribute('data-profile-id');
+            if (id !== current.id) {
+                localStorage.setItem(key, id);
+                window.location.reload();
+            }
+        });
+
+        function profileItems(profiles, current, accent, accentLight, accentText) {
+            var html = '<div style="padding:6px 10px 4px;font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em">Switch Profile</div>';
+            for (var i = 0; i < profiles.length; i++) {
+                var p = profiles[i];
+                var isActive = p.id === current.id;
+                var bg = isActive ? accentLight : 'transparent';
+                html += '<button data-profile-id="' + p.id + '" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border:none;background:' + bg + ';cursor:pointer;font-size:13px;border-radius:6px;text-align:left;color:#374151">' +
+                    '<span style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px;flex-shrink:0;background:' + (isActive ? accent : '#f3f4f6') + ';color:' + (isActive ? '#fff' : '#6b7280') + '">' + p.name.charAt(0) + '</span>' +
+                    '<span style="flex:1;font-weight:500">' + p.name + '</span>' +
+                    '<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:' + (isActive ? accent : '#f3f4f6') + ';color:' + (isActive ? '#fff' : '#6b7280') + '">' + p.badge + '</span>' +
+                '</button>';
+            }
+            return html;
+        }
+    }
+
+    initProfileSwitcher('banking', [
+        { id: 'bob', name: 'Bob', userId: 'bob', roles: 'employee', badge: 'Maker' },
+        { id: 'manager-maria', name: 'Manager Maria', userId: 'manager-maria', roles: 'manager', badge: 'Stage 1' },
+        { id: 'compliance-carl', name: 'Compliance Carl', userId: 'compliance-carl', roles: 'compliance_officer', badge: 'Stage 2' },
+        { id: 'admin', name: 'Admin', userId: 'admin', roles: 'admin', badge: 'All Stages' }
+    ], { accent: '#2563eb', accentLight: '#dbeafe', accentText: '#1e40af' });
+    </script>
 
     {{block "scripts" .}}{{end}}
 </body>

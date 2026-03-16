@@ -44,89 +44,16 @@ func TestDispatcher_Enqueue_WritesMatchingWebhooks(t *testing.T) {
 	}
 }
 
-func TestDispatcher_Enqueue_IncludesCallbackURL(t *testing.T) {
-	webhooks := &testutil.MockWebhookStore{
-		ListByEventAndTypeFunc: func(ctx context.Context, event, rt string) ([]model.Webhook, error) {
-			return []model.Webhook{*testutil.NewWebhook()}, nil
-		},
-	}
-
-	var createdEntries []model.OutboxEntry
-	outbox := &testutil.MockOutboxStore{
-		CreateBatchFunc: func(ctx context.Context, entries []model.OutboxEntry) error {
-			createdEntries = entries
-			return nil
-		},
-	}
-
-	dispatcher := NewDispatcher(&testutil.MockOutboxStore{}, &testutil.MockAuditStore{}, Config{
-		Timeout: 5 * time.Second,
-	})
-
-	req := testutil.NewRequest(func(r *model.Request) {
-		r.Status = model.StatusApproved
-		r.CallbackURL = testutil.StringPtr("https://example.com/callback")
-	})
-
-	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	// 1 from matching webhook + 1 from callback URL
-	if len(createdEntries) != 2 {
-		t.Errorf("expected 2 outbox entries (1 webhook + 1 callback), got %d", len(createdEntries))
-	}
-}
-
-func TestDispatcher_Enqueue_CallbackURL_Signed(t *testing.T) {
+func TestDispatcher_Enqueue_NoMatchingWebhooks(t *testing.T) {
 	webhooks := &testutil.MockWebhookStore{
 		ListByEventAndTypeFunc: func(ctx context.Context, event, rt string) ([]model.Webhook, error) {
 			return nil, nil
 		},
 	}
 
-	var createdEntries []model.OutboxEntry
 	outbox := &testutil.MockOutboxStore{
 		CreateBatchFunc: func(ctx context.Context, entries []model.OutboxEntry) error {
-			createdEntries = entries
-			return nil
-		},
-	}
-
-	callbackSecret := "my-callback-secret"
-	dispatcher := NewDispatcher(&testutil.MockOutboxStore{}, &testutil.MockAuditStore{}, Config{
-		Timeout:        5 * time.Second,
-		CallbackSecret: callbackSecret,
-	})
-
-	req := testutil.NewRequest(func(r *model.Request) {
-		r.Status = model.StatusApproved
-		r.CallbackURL = testutil.StringPtr("https://example.com/callback")
-	})
-
-	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(createdEntries) != 1 {
-		t.Fatalf("expected 1 outbox entry, got %d", len(createdEntries))
-	}
-	if createdEntries[0].WebhookSecret != callbackSecret {
-		t.Errorf("callback webhook secret = %q, want %q", createdEntries[0].WebhookSecret, callbackSecret)
-	}
-}
-
-func TestDispatcher_Enqueue_NoCallbackURL(t *testing.T) {
-	webhooks := &testutil.MockWebhookStore{
-		ListByEventAndTypeFunc: func(ctx context.Context, event, rt string) ([]model.Webhook, error) {
-			return []model.Webhook{*testutil.NewWebhook()}, nil
-		},
-	}
-
-	var createdEntries []model.OutboxEntry
-	outbox := &testutil.MockOutboxStore{
-		CreateBatchFunc: func(ctx context.Context, entries []model.OutboxEntry) error {
-			createdEntries = entries
+			t.Fatal("CreateBatch should not be called when there are no entries")
 			return nil
 		},
 	}
@@ -137,15 +64,11 @@ func TestDispatcher_Enqueue_NoCallbackURL(t *testing.T) {
 
 	req := testutil.NewRequest(func(r *model.Request) {
 		r.Status = model.StatusApproved
-		r.CallbackURL = nil
 	})
 
 	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(createdEntries) != 1 {
-		t.Errorf("expected 1 outbox entry (no callback), got %d", len(createdEntries))
 	}
 }
 
@@ -214,6 +137,7 @@ func TestDispatcher_DeliverEntry_FailureSchedulesRetry(t *testing.T) {
 		Payload:    []byte(`{"event":"approved"}`),
 		Attempts:   0,
 		MaxRetries: 3,
+		CreatedAt:  time.Now(),
 	}
 
 	dispatcher.deliverEntry(context.Background(), entry)
@@ -392,5 +316,115 @@ func TestComputeHMAC_DifferentSecrets(t *testing.T) {
 
 	if sig1 == sig2 {
 		t.Error("HMAC should differ for different secrets")
+	}
+}
+
+func TestComputeBackoff_ExponentialGrowth(t *testing.T) {
+	d := &Dispatcher{
+		retryDelay:    30 * time.Second,
+		maxRetryDelay: time.Hour,
+	}
+
+	// Check that delays roughly double (within jitter tolerance)
+	prev := time.Duration(0)
+	for attempt := 1; attempt <= 6; attempt++ {
+		delay := d.computeBackoff(attempt)
+		if attempt > 1 && delay < prev/2 {
+			t.Errorf("attempt %d: delay %v should be roughly 2x previous %v", attempt, delay, prev)
+		}
+		prev = delay
+	}
+}
+
+func TestComputeBackoff_CapsAtMaxDelay(t *testing.T) {
+	d := &Dispatcher{
+		retryDelay:    30 * time.Second,
+		maxRetryDelay: 5 * time.Minute,
+	}
+
+	// With base=30s and cap=5m, after a few attempts the delay should cap
+	for attempt := 1; attempt <= 20; attempt++ {
+		delay := d.computeBackoff(attempt)
+		// With 20% jitter, the max is 5m + 20% = 6m
+		maxWithJitter := d.maxRetryDelay + d.maxRetryDelay/5
+		if delay > maxWithJitter {
+			t.Errorf("attempt %d: delay %v exceeds max %v (with jitter tolerance %v)", attempt, delay, d.maxRetryDelay, maxWithJitter)
+		}
+	}
+}
+
+func TestHandleFailure_RetryWindowExpired(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	var failedCalled bool
+	outbox := &testutil.MockOutboxStore{
+		MarkFailedFunc: func(ctx context.Context, id uuid.UUID, attempts int, lastError string) error {
+			failedCalled = true
+			return nil
+		},
+	}
+	audits := &testutil.MockAuditStore{
+		CreateFunc: func(ctx context.Context, log *model.AuditLog) error { return nil },
+	}
+
+	d := NewDispatcher(outbox, audits, Config{
+		Timeout:     5 * time.Second,
+		MaxRetries:  20,
+		RetryDelay:  30 * time.Second,
+		RetryWindow: time.Hour, // 1h window
+	})
+
+	// Entry created 2 hours ago — window should be expired
+	entry := model.OutboxEntry{
+		ID:         uuid.New(),
+		RequestID:  uuid.New(),
+		WebhookURL: server.URL,
+		Payload:    []byte(`{"event":"approved"}`),
+		Attempts:   2, // Only 2 attempts, well under max of 20
+		MaxRetries: 20,
+		CreatedAt:  time.Now().Add(-2 * time.Hour),
+	}
+
+	d.handleFailure(context.Background(), entry, "test error")
+
+	if !failedCalled {
+		t.Error("expected MarkFailed to be called when retry window expired")
+	}
+}
+
+func TestHandleFailure_WithinWindow_SchedulesRetry(t *testing.T) {
+	var retryCalled bool
+	outbox := &testutil.MockOutboxStore{
+		MarkRetryFunc: func(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error {
+			retryCalled = true
+			return nil
+		},
+	}
+
+	d := NewDispatcher(outbox, &testutil.MockAuditStore{}, Config{
+		Timeout:     5 * time.Second,
+		MaxRetries:  20,
+		RetryDelay:  time.Millisecond,
+		RetryWindow: 72 * time.Hour,
+	})
+
+	// Entry created 1 hour ago — well within the 72h window
+	entry := model.OutboxEntry{
+		ID:         uuid.New(),
+		RequestID:  uuid.New(),
+		WebhookURL: "http://localhost:9999",
+		Payload:    []byte(`{"event":"approved"}`),
+		Attempts:   2,
+		MaxRetries: 20,
+		CreatedAt:  time.Now().Add(-1 * time.Hour),
+	}
+
+	d.handleFailure(context.Background(), entry, "test error")
+
+	if !retryCalled {
+		t.Error("expected MarkRetry to be called when within retry window")
 	}
 }

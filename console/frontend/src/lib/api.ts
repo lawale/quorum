@@ -9,6 +9,8 @@ import type {
   Webhook,
   Request,
   AuditLog,
+  OutboxEntry,
+  DeliveryStats,
   ListResponse,
   PaginatedListResponse,
   SetupStatusResponse,
@@ -153,6 +155,25 @@ export const requests = {
   },
   get: (id: string) => request<Request>(`/requests/${id}`),
   audit: (id: string) => request<ListResponse<AuditLog>>(`/requests/${id}/audit`),
+};
+
+// --- Deliveries ---
+
+export const deliveries = {
+  list: (params?: { page?: number; per_page?: number; status?: string; request_id?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.per_page) query.set('per_page', String(params.per_page));
+    if (params?.status) query.set('status', params.status);
+    if (params?.request_id) query.set('request_id', params.request_id);
+    const qs = query.toString();
+    return request<PaginatedListResponse<OutboxEntry>>(withTenant(`/deliveries${qs ? '?' + qs : ''}`));
+  },
+  stats: () => request<DeliveryStats>(withTenant('/deliveries/stats')),
+  retry: (id: string) =>
+    request<{ status: string }>(`/deliveries/${id}/retry`, { method: 'POST' }),
+  retryAllForRequest: (requestId: string) =>
+    request<{ reset: number }>(`/requests/${requestId}/retry-deliveries`, { method: 'POST' }),
 };
 
 export { ApiError };

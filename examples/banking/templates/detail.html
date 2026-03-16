@@ -54,8 +54,8 @@
             request-id="{{.Transfer.QuorumRequestID}}"
             api-url="{{.QuorumURL}}"
             tenant-id="banking"
-            auth-headers='{"X-User-Id": "{{.Transfer.FromUser}}"}'
-            poll-interval="5000">
+            poll-interval="5000"
+            suppress-errors="true">
         </quorum-approval-panel>
     </div>
     {{end}}
@@ -64,14 +64,47 @@
 
 {{define "scripts"}}
 {{if .Transfer.QuorumRequestID}}
+<script>
+    (function() {
+        var p = window.__quorumProfile;
+        if (p) {
+            var headers = JSON.stringify({ 'X-User-Id': p.userId, 'X-User-Roles': p.roles });
+            document.querySelector('quorum-approval-panel')?.setAttribute('auth-headers', headers);
+        }
+    })();
+</script>
 <script src="{{.QuorumURL}}/assets/embed.js"></script>
 <script>
-    document.querySelector('quorum-approval-panel')?.addEventListener('quorum:approved', function() {
+    var panel = document.querySelector('quorum-approval-panel');
+    panel?.addEventListener('quorum:approved', function() {
         setTimeout(function() { window.location.reload(); }, 1000);
     });
-    document.querySelector('quorum-approval-panel')?.addEventListener('quorum:rejected', function() {
+    panel?.addEventListener('quorum:rejected', function() {
         setTimeout(function() { window.location.reload(); }, 1000);
     });
+    panel?.addEventListener('quorum:error', function(e) {
+        var msg = e.detail && e.detail.message ? e.detail.message : 'An error occurred';
+        showToast(msg);
+    });
+
+    function showToast(message) {
+        var existing = document.getElementById('quorum-toast');
+        if (existing) existing.remove();
+        var toast = document.createElement('div');
+        toast.id = 'quorum-toast';
+        toast.style.cssText = 'position:fixed;top:24px;right:24px;z-index:9999;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:500;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;box-shadow:0 4px 12px rgba(0,0,0,0.1);transform:translateY(-8px);opacity:0;transition:all 0.3s ease';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        requestAnimationFrame(function() {
+            toast.style.transform = 'translateY(0)';
+            toast.style.opacity = '1';
+        });
+        setTimeout(function() {
+            toast.style.transform = 'translateY(-8px)';
+            toast.style.opacity = '0';
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 4000);
+    }
 </script>
 {{end}}
 {{end}}

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -25,9 +26,10 @@ type Dispatcher struct {
 	outbox          store.OutboxStore
 	audits          store.AuditStore
 	client          *http.Client
-	callbackSecret  string
 	maxRetries      int
 	retryDelay      time.Duration
+	retryWindow     time.Duration
+	maxRetryDelay   time.Duration
 	heartbeat       time.Duration
 	batchSize       int
 	retentionPeriod time.Duration
@@ -45,7 +47,8 @@ type Config struct {
 	Timeout         time.Duration
 	MaxRetries      int
 	RetryDelay      time.Duration
-	CallbackSecret  string
+	RetryWindow     time.Duration // max duration to keep retrying from first attempt; 0 = no window limit
+	MaxRetryDelay   time.Duration // cap on individual retry delay; 0 = no cap
 	Heartbeat       time.Duration
 	BatchSize       int
 	RetentionPeriod time.Duration // how long to keep delivered entries; 0 = never clean up
@@ -60,13 +63,22 @@ func NewDispatcher(outbox store.OutboxStore, audits store.AuditStore, cfg Config
 	if batchSize == 0 {
 		batchSize = 50
 	}
+	retryWindow := cfg.RetryWindow
+	if retryWindow == 0 {
+		retryWindow = 72 * time.Hour
+	}
+	maxRetryDelay := cfg.MaxRetryDelay
+	if maxRetryDelay == 0 {
+		maxRetryDelay = time.Hour
+	}
 	return &Dispatcher{
 		outbox:          outbox,
 		audits:          audits,
 		client:          &http.Client{Timeout: cfg.Timeout},
-		callbackSecret:  cfg.CallbackSecret,
 		maxRetries:      cfg.MaxRetries,
 		retryDelay:      cfg.RetryDelay,
+		retryWindow:     retryWindow,
+		maxRetryDelay:   maxRetryDelay,
 		heartbeat:       heartbeat,
 		batchSize:       batchSize,
 		retentionPeriod: cfg.RetentionPeriod,
@@ -105,17 +117,6 @@ func (d *Dispatcher) Enqueue(ctx context.Context, outbox store.OutboxStore, webh
 			RequestID:     req.ID,
 			WebhookURL:    wh.URL,
 			WebhookSecret: wh.Secret,
-			Payload:       payloadJSON,
-			MaxRetries:    d.maxRetries,
-		})
-	}
-
-	// Also enqueue delivery to the request's callback URL if set
-	if req.CallbackURL != nil && *req.CallbackURL != "" {
-		entries = append(entries, model.OutboxEntry{
-			RequestID:     req.ID,
-			WebhookURL:    *req.CallbackURL,
-			WebhookSecret: d.callbackSecret,
 			Payload:       payloadJSON,
 			MaxRetries:    d.maxRetries,
 		})
@@ -251,23 +252,60 @@ func (d *Dispatcher) deliverEntry(ctx context.Context, entry model.OutboxEntry) 
 func (d *Dispatcher) handleFailure(ctx context.Context, entry model.OutboxEntry, errMsg string) {
 	attempts := entry.Attempts + 1
 
-	if attempts > entry.MaxRetries {
+	windowExpired := d.retryWindow > 0 && time.Since(entry.CreatedAt) >= d.retryWindow
+	if attempts > entry.MaxRetries || windowExpired {
 		if err := d.outbox.MarkFailed(ctx, entry.ID, attempts, errMsg); err != nil {
 			slog.Error("failed to mark outbox entry failed", "error", err, "entry_id", entry.ID)
 		}
+		reason := "retries exhausted"
+		if windowExpired {
+			reason = "retry window expired"
+		}
 		d.auditWebhook(ctx, entry.RequestID, "webhook_failed", entry.WebhookURL)
-		slog.Error("webhook delivery exhausted retries", "url", entry.WebhookURL, "request_id", entry.RequestID, "error", errMsg)
+		slog.Error("webhook delivery failed permanently", "url", entry.WebhookURL, "request_id", entry.RequestID, "reason", reason, "attempts", attempts, "error", errMsg)
 		if d.metrics != nil {
 			d.metrics.WebhookDeliveriesTotal.WithLabelValues("failure").Inc()
 		}
 		return
 	}
 
-	nextRetry := time.Now().Add(d.retryDelay * time.Duration(attempts))
+	backoff := d.computeBackoff(attempts)
+	nextRetry := time.Now().Add(backoff)
 	if err := d.outbox.MarkRetry(ctx, entry.ID, attempts, errMsg, nextRetry); err != nil {
 		slog.Error("failed to schedule outbox entry retry", "error", err, "entry_id", entry.ID)
 	}
-	slog.Warn("webhook delivery failed, scheduling retry", "url", entry.WebhookURL, "attempt", attempts, "next_retry", nextRetry, "error", errMsg)
+	slog.Warn("webhook delivery failed, scheduling retry", "url", entry.WebhookURL, "attempt", attempts, "next_retry", nextRetry, "backoff", backoff, "error", errMsg)
+}
+
+// computeBackoff returns an exponential backoff duration with jitter.
+// Formula: base * 2^(attempts-1), capped at maxRetryDelay, with +/-20% jitter.
+func (d *Dispatcher) computeBackoff(attempts int) time.Duration {
+	if attempts < 1 {
+		attempts = 1
+	}
+	// Exponential: base * 2^(attempts-1), cap the shift to avoid overflow
+	shift := attempts - 1
+	if shift > 30 {
+		shift = 30
+	}
+	delay := d.retryDelay * time.Duration(1<<uint(shift))
+
+	// Cap at maxRetryDelay
+	if d.maxRetryDelay > 0 && delay > d.maxRetryDelay {
+		delay = d.maxRetryDelay
+	}
+
+	// Add +/-20% jitter to avoid thundering herd
+	if delay > 0 {
+		jitter := time.Duration(rand.Int63n(int64(delay) / 5))
+		if rand.Intn(2) == 0 {
+			delay += jitter
+		} else {
+			delay -= jitter
+		}
+	}
+
+	return delay
 }
 
 func (d *Dispatcher) auditWebhook(ctx context.Context, requestID uuid.UUID, action string, url string) {

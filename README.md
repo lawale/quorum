@@ -601,8 +601,6 @@ A configurable heartbeat (default 30s) acts as a safety net, even if a signal is
 
 **Webhook signature:** Every webhook request includes an `X-Signature-256` header containing `sha256=<hex>`, computed using HMAC-SHA256 with the webhook's secret. Verify this on your end to ensure the request came from Quorum.
 
-**Per-request callback URLs:** Requests can include an optional `callback_url`. This is delivered alongside any matching global webhooks, signed with the server-wide `callback_secret` from config.
-
 ### Docker
 
 **Docker Compose (recommended)** — starts PostgreSQL, runs migrations, and launches Quorum with the admin console and widgets in one command:

@@ -16,6 +16,7 @@
   import AuditLogs from './pages/AuditLogs.svelte';
   import Operators from './pages/Operators.svelte';
   import Tenants from './pages/Tenants.svelte';
+  import Deliveries from './pages/Deliveries.svelte';
 
   type AppState = 'loading' | 'setup' | 'login' | 'app';
 
@@ -135,6 +136,8 @@
         <WebhookForm />
       {:else if route.path === 'requests'}
         <Requests />
+      {:else if route.path === 'deliveries'}
+        <Deliveries />
       {:else if route.path === 'request-detail'}
         <RequestDetail id={route.params.id} />
       {:else if route.path === 'audit'}

@@ -16,6 +16,7 @@
     'tenant-id': tenantId = '',
     'auth-headers': authHeadersStr = '',
     'poll-interval': pollIntervalStr = '30000',
+    'suppress-errors': suppressErrorsStr,
   }: {
     'request-id'?: string;
     'api-url'?: string;
@@ -23,7 +24,12 @@
     'tenant-id'?: string;
     'auth-headers'?: string;
     'poll-interval'?: string;
+    'suppress-errors'?: string;
   } = $props();
+
+  // Any presence of the attribute suppresses inline errors, unless explicitly "false".
+  // Bare attribute → "", explicit value → "true"/"false"/etc, absent → undefined.
+  let suppressErrors = $derived(suppressErrorsStr !== undefined && suppressErrorsStr !== 'false');
 
   let req: Request | null = $state(null);
   let policy: Policy | null = $state(null);
@@ -65,7 +71,7 @@
       policy = await client.getPolicyByType(req.type);
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Failed to load';
-      dispatch('quorum:error', { message: error, status: e instanceof ApiError ? e.status : 0 });
+      dispatch('quorum:error', { action: 'load', message: error, status: e instanceof ApiError ? e.status : 0 });
     } finally {
       loading = false;
     }
@@ -88,7 +94,7 @@
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : 'Action failed';
       error = msg;
-      dispatch('quorum:error', { message: msg, status: e instanceof ApiError ? e.status : 0 });
+      dispatch('quorum:error', { action, message: msg, status: e instanceof ApiError ? e.status : 0 });
     } finally {
       actionLoading = false;
     }
@@ -111,7 +117,7 @@
 <div class="panel">
   {#if loading && !req}
     <div class="loading">Loading request...</div>
-  {:else if error && !req}
+  {:else if error && !req && !suppressErrors}
     <div class="error-box">{error}</div>
   {:else if req}
     <!-- Header -->
@@ -213,7 +219,7 @@
     <!-- Actions -->
     {#if req.status === 'pending'}
       <div class="actions">
-        {#if error}
+        {#if error && !suppressErrors}
           <div class="action-error">{error}</div>
         {/if}
         <textarea

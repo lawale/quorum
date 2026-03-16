@@ -306,12 +306,17 @@ func (m *MockOperatorStore) Count(ctx context.Context) (int, error) {
 
 // MockOutboxStore implements store.OutboxStore with configurable function fields.
 type MockOutboxStore struct {
-	CreateBatchFunc     func(ctx context.Context, entries []model.OutboxEntry) error
-	ClaimBatchFunc      func(ctx context.Context, limit int) ([]model.OutboxEntry, error)
-	MarkDeliveredFunc   func(ctx context.Context, id uuid.UUID) error
-	MarkRetryFunc       func(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error
-	MarkFailedFunc      func(ctx context.Context, id uuid.UUID, attempts int, lastError string) error
-	DeleteDeliveredFunc func(ctx context.Context, olderThan time.Time) (int64, error)
+	CreateBatchFunc              func(ctx context.Context, entries []model.OutboxEntry) error
+	ClaimBatchFunc               func(ctx context.Context, limit int) ([]model.OutboxEntry, error)
+	MarkDeliveredFunc            func(ctx context.Context, id uuid.UUID) error
+	MarkRetryFunc                func(ctx context.Context, id uuid.UUID, attempts int, lastError string, nextRetryAt time.Time) error
+	MarkFailedFunc               func(ctx context.Context, id uuid.UUID, attempts int, lastError string) error
+	DeleteDeliveredFunc          func(ctx context.Context, olderThan time.Time) (int64, error)
+	ListFunc                     func(ctx context.Context, filter store.OutboxFilter) ([]model.OutboxEntry, int, error)
+	CountByStatusFunc            func(ctx context.Context, tenantID *string) (map[string]int, error)
+	GetByIDFunc                  func(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error)
+	ResetForRetryFunc            func(ctx context.Context, id uuid.UUID) error
+	ResetAllFailedForRequestFunc func(ctx context.Context, requestID uuid.UUID) (int64, error)
 }
 
 func (m *MockOutboxStore) CreateBatch(ctx context.Context, entries []model.OutboxEntry) error {
@@ -352,6 +357,41 @@ func (m *MockOutboxStore) MarkFailed(ctx context.Context, id uuid.UUID, attempts
 func (m *MockOutboxStore) DeleteDelivered(ctx context.Context, olderThan time.Time) (int64, error) {
 	if m.DeleteDeliveredFunc != nil {
 		return m.DeleteDeliveredFunc(ctx, olderThan)
+	}
+	return 0, nil
+}
+
+func (m *MockOutboxStore) List(ctx context.Context, filter store.OutboxFilter) ([]model.OutboxEntry, int, error) {
+	if m.ListFunc != nil {
+		return m.ListFunc(ctx, filter)
+	}
+	return nil, 0, nil
+}
+
+func (m *MockOutboxStore) CountByStatus(ctx context.Context, tenantID *string) (map[string]int, error) {
+	if m.CountByStatusFunc != nil {
+		return m.CountByStatusFunc(ctx, tenantID)
+	}
+	return map[string]int{}, nil
+}
+
+func (m *MockOutboxStore) GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error) {
+	if m.GetByIDFunc != nil {
+		return m.GetByIDFunc(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *MockOutboxStore) ResetForRetry(ctx context.Context, id uuid.UUID) error {
+	if m.ResetForRetryFunc != nil {
+		return m.ResetForRetryFunc(ctx, id)
+	}
+	return nil
+}
+
+func (m *MockOutboxStore) ResetAllFailedForRequest(ctx context.Context, requestID uuid.UUID) (int64, error) {
+	if m.ResetAllFailedForRequestFunc != nil {
+		return m.ResetAllFailedForRequestFunc(ctx, requestID)
 	}
 	return 0, nil
 }

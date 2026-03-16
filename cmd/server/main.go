@@ -81,7 +81,8 @@ func main() {
 		Timeout:         cfg.Webhook.Timeout,
 		MaxRetries:      cfg.Webhook.MaxRetries,
 		RetryDelay:      cfg.Webhook.RetryInterval,
-		CallbackSecret:  cfg.Webhook.CallbackSecret,
+		RetryWindow:     cfg.Webhook.RetryWindow,
+		MaxRetryDelay:   cfg.Webhook.MaxRetryDelay,
 		Heartbeat:       cfg.Webhook.Heartbeat,
 		RetentionPeriod: cfg.Webhook.OutboxRetention,
 	})
@@ -137,6 +138,8 @@ func main() {
 		TenantService:   tenantService,
 		OperatorService: operatorService,
 		AuditStore:      stores.Audits,
+		OutboxStore:     stores.Outbox,
+		SignalWorker:    dispatcher.Signal,
 		AuthProvider:    authProvider,
 		ConsoleEnabled:  cfg.Console.Enabled,
 		ConsoleSPA:      console.Handler(),

@@ -33,7 +33,7 @@ Visit [http://localhost:3001](http://localhost:3001) to use the app.
 ## Flow
 
 1. User creates a wire transfer on the banking app
-2. App submits a `wire_transfer` request to Quorum with a `callback_url`
+2. App submits a `wire_transfer` request to Quorum
 3. A manager approves in the Quorum console (Stage 1)
 4. A compliance officer approves (Stage 2)
 5. Quorum sends a webhook to the banking app

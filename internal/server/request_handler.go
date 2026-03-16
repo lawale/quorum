@@ -28,7 +28,6 @@ func NewRequestHandler(rs *service.RequestService) *RequestHandler {
 type createRequestBody struct {
 	Type              string          `json:"type"`
 	Payload           json.RawMessage `json:"payload"`
-	CallbackURL       *string         `json:"callback_url,omitempty"`
 	EligibleReviewers []string        `json:"eligible_reviewers,omitempty"`
 	Metadata          json.RawMessage `json:"metadata,omitempty"`
 }
@@ -55,7 +54,6 @@ func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Type:              body.Type,
 		Payload:           body.Payload,
 		MakerID:           makerID,
-		CallbackURL:       body.CallbackURL,
 		EligibleReviewers: body.EligibleReviewers,
 		Metadata:          body.Metadata,
 	}

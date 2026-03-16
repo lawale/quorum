@@ -107,8 +107,9 @@ type CustomConfig struct {
 type WebhookConfig struct {
 	MaxRetries      int           `yaml:"max_retries"`
 	RetryInterval   time.Duration `yaml:"retry_interval"`
+	RetryWindow     time.Duration `yaml:"retry_window"`
+	MaxRetryDelay   time.Duration `yaml:"max_retry_delay"`
 	Timeout         time.Duration `yaml:"timeout"`
-	CallbackSecret  string        `yaml:"callback_secret"`
 	Heartbeat       time.Duration `yaml:"heartbeat"`
 	OutboxRetention time.Duration `yaml:"outbox_retention"`
 }
@@ -177,10 +178,16 @@ func setDefaults(cfg *Config) {
 		cfg.Auth.Trust.TenantIDHeader = "X-Tenant-ID"
 	}
 	if cfg.Webhook.MaxRetries == 0 {
-		cfg.Webhook.MaxRetries = 3
+		cfg.Webhook.MaxRetries = 20
 	}
 	if cfg.Webhook.RetryInterval == 0 {
-		cfg.Webhook.RetryInterval = 5 * time.Second
+		cfg.Webhook.RetryInterval = 30 * time.Second
+	}
+	if cfg.Webhook.RetryWindow == 0 {
+		cfg.Webhook.RetryWindow = 72 * time.Hour
+	}
+	if cfg.Webhook.MaxRetryDelay == 0 {
+		cfg.Webhook.MaxRetryDelay = time.Hour
 	}
 	if cfg.Webhook.Timeout == 0 {
 		cfg.Webhook.Timeout = 10 * time.Second

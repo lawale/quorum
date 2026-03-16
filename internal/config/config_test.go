@@ -102,11 +102,17 @@ func TestConfig_SetDefaults(t *testing.T) {
 	if cfg.Auth.Trust.RolesHeader != "X-User-Roles" {
 		t.Errorf("default RolesHeader = %q, want %q", cfg.Auth.Trust.RolesHeader, "X-User-Roles")
 	}
-	if cfg.Webhook.MaxRetries != 3 {
-		t.Errorf("default MaxRetries = %d, want %d", cfg.Webhook.MaxRetries, 3)
+	if cfg.Webhook.MaxRetries != 20 {
+		t.Errorf("default MaxRetries = %d, want %d", cfg.Webhook.MaxRetries, 20)
 	}
-	if cfg.Webhook.RetryInterval != 5*time.Second {
-		t.Errorf("default RetryInterval = %v, want %v", cfg.Webhook.RetryInterval, 5*time.Second)
+	if cfg.Webhook.RetryInterval != 30*time.Second {
+		t.Errorf("default RetryInterval = %v, want %v", cfg.Webhook.RetryInterval, 30*time.Second)
+	}
+	if cfg.Webhook.RetryWindow != 72*time.Hour {
+		t.Errorf("default RetryWindow = %v, want %v", cfg.Webhook.RetryWindow, 72*time.Hour)
+	}
+	if cfg.Webhook.MaxRetryDelay != time.Hour {
+		t.Errorf("default MaxRetryDelay = %v, want %v", cfg.Webhook.MaxRetryDelay, time.Hour)
 	}
 	if cfg.Webhook.Timeout != 10*time.Second {
 		t.Errorf("default Timeout = %v, want %v", cfg.Webhook.Timeout, 10*time.Second)

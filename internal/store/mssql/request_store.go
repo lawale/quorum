@@ -14,7 +14,7 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
+const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
 
 type RequestStore struct {
 	db *DB
@@ -27,7 +27,7 @@ func NewRequestStore(db *DB) *RequestStore {
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
 		INSERT INTO [quorum].[requests] (` + requestColumns + `)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15)`
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14)`
 
 	now := time.Now().UTC()
 	if req.ID == uuid.Nil {
@@ -47,7 +47,7 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 
 	_, err := s.db.Pool.ExecContext(ctx, query,
 		req.ID, req.TenantID, req.IdempotencyKey, req.Type, string(req.Payload), req.Status,
-		req.MakerID, req.CallbackURL, nullableString(eligibleJSON), nullableString(req.Metadata), req.Fingerprint,
+		req.MakerID, nullableString(eligibleJSON), nullableString(req.Metadata), req.Fingerprint,
 		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
 	)
 	if err != nil {
@@ -206,7 +206,7 @@ func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (
 
 	err := s.db.Pool.QueryRowContext(ctx, query, args...).Scan(
 		&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
-		&req.MakerID, &req.CallbackURL, &eligibleJSON, &metadata, &req.Fingerprint,
+		&req.MakerID, &eligibleJSON, &metadata, &req.Fingerprint,
 		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 	)
 	if err != nil {
@@ -246,7 +246,7 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 
 		if err := rows.Scan(
 			&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
-			&req.MakerID, &req.CallbackURL, &eligibleJSON, &metadata, &req.Fingerprint,
+			&req.MakerID, &eligibleJSON, &metadata, &req.Fingerprint,
 			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning request: %w", err)

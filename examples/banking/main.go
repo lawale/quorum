@@ -32,20 +32,23 @@ import (
 // ---------------------------------------------------------------------------
 
 type config struct {
-	QuorumAPIURL  string
-	SelfURL       string
-	WebhookSecret string
-	Port          string
-	DatabaseURL   string
+	QuorumAPIURL    string
+	QuorumPublicURL string // browser-facing URL for the approval widget
+	SelfURL         string
+	WebhookSecret   string
+	Port            string
+	DatabaseURL     string
 }
 
 func loadConfig() config {
+	apiURL := envOr("QUORUM_API_URL", "http://localhost:8080")
 	return config{
-		QuorumAPIURL:  envOr("QUORUM_API_URL", "http://localhost:8080"),
-		SelfURL:       envOr("SELF_URL", "http://localhost:3001"),
-		WebhookSecret: envOr("WEBHOOK_SECRET", "banking-webhook-secret"),
-		Port:          envOr("PORT", "3001"),
-		DatabaseURL:   envOr("DATABASE_URL", "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable"),
+		QuorumAPIURL:    apiURL,
+		QuorumPublicURL: envOr("QUORUM_PUBLIC_URL", apiURL),
+		SelfURL:         envOr("SELF_URL", "http://localhost:3001"),
+		WebhookSecret:   envOr("WEBHOOK_SECRET", "banking-webhook-secret"),
+		Port:            envOr("PORT", "3001"),
+		DatabaseURL:     envOr("DATABASE_URL", "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable"),
 	}
 }
 
@@ -201,27 +204,12 @@ func (s *transferStore) List(ctx context.Context) []*Transfer {
 // ---------------------------------------------------------------------------
 
 type quorumCreateRequest struct {
-	Type        string          `json:"type"`
-	Payload     json.RawMessage `json:"payload"`
-	CallbackURL *string         `json:"callback_url,omitempty"`
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
 }
 
 type quorumCreateResponse struct {
 	ID string `json:"id"`
-}
-
-type quorumPolicyRequest struct {
-	Name            string                `json:"name"`
-	RequestType     string                `json:"request_type"`
-	Stages          []quorumApprovalStage `json:"stages"`
-	DisplayTemplate json.RawMessage       `json:"display_template,omitempty"`
-}
-
-type quorumApprovalStage struct {
-	Index             int    `json:"index"`
-	Name              string `json:"name"`
-	RequiredApprovals int    `json:"required_approvals"`
-	RejectionPolicy   string `json:"rejection_policy"`
 }
 
 type webhookPayload struct {
@@ -274,8 +262,6 @@ func main() {
 		client: &http.Client{Timeout: 10 * time.Second},
 	}
 
-	a.registerPolicy()
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", a.handleDashboard)
 	mux.HandleFunc("GET /transfer/new", a.handleNewTransferForm)
@@ -293,59 +279,6 @@ func main() {
 }
 
 // ---------------------------------------------------------------------------
-// Policy registration
-// ---------------------------------------------------------------------------
-
-func (a *app) registerPolicy() {
-	displayTemplate, _ := json.Marshal(map[string]any{
-		"title":       "Wire Transfer - {{.source_account}}",
-		"description": "Transfer of ${{.amount}} to {{.destination}}",
-		"fields": []map[string]string{
-			{"key": "source_account", "label": "Source Account"},
-			{"key": "amount", "label": "Amount (USD)"},
-			{"key": "destination", "label": "Destination"},
-		},
-	})
-
-	policy := quorumPolicyRequest{
-		Name:        "Wire Transfer Approval",
-		RequestType: "wire_transfer",
-		Stages: []quorumApprovalStage{
-			{Index: 0, Name: "Manager Review", RequiredApprovals: 1, RejectionPolicy: "any"},
-			{Index: 1, Name: "Compliance Check", RequiredApprovals: 1, RejectionPolicy: "any"},
-		},
-		DisplayTemplate: displayTemplate,
-	}
-
-	body, _ := json.Marshal(policy)
-	req, err := http.NewRequest(http.MethodPost, a.cfg.QuorumAPIURL+"/api/v1/policies", bytes.NewReader(body))
-	if err != nil {
-		log.Printf("WARN: failed to build policy request: %v", err)
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-ID", "banking-system")
-	req.Header.Set("X-Tenant-ID", "banking")
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		log.Printf("WARN: failed to register policy with Quorum (will retry on next restart): %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case http.StatusCreated:
-		log.Println("Registered wire_transfer policy with Quorum")
-	case http.StatusConflict:
-		log.Println("wire_transfer policy already exists in Quorum (OK)")
-	default:
-		respBody, _ := io.ReadAll(resp.Body)
-		log.Printf("WARN: unexpected status %d registering policy: %s", resp.StatusCode, string(respBody))
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Route handlers
 // ---------------------------------------------------------------------------
 
@@ -356,7 +289,7 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	data := map[string]any{
 		"Transfers": a.store.List(r.Context()),
-		"QuorumURL": a.cfg.QuorumAPIURL,
+		"QuorumURL": a.cfg.QuorumPublicURL,
 	}
 	a.render(w, "dashboard.html", data)
 }
@@ -442,11 +375,9 @@ func (a *app) submitToQuorum(ctx context.Context, transfer *Transfer) {
 		"destination":       transfer.Destination,
 	})
 
-	callbackURL := a.cfg.SelfURL + "/webhooks/quorum"
 	quorumReq := quorumCreateRequest{
-		Type:        "wire_transfer",
-		Payload:     payload,
-		CallbackURL: &callbackURL,
+		Type:    "wire_transfer",
+		Payload: payload,
 	}
 
 	body, _ := json.Marshal(quorumReq)
@@ -490,7 +421,7 @@ func (a *app) handleTransferDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	data := map[string]any{
 		"Transfer":  transfer,
-		"QuorumURL": a.cfg.QuorumAPIURL,
+		"QuorumURL": a.cfg.QuorumPublicURL,
 	}
 	a.render(w, "detail.html", data)
 }

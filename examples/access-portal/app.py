@@ -23,6 +23,7 @@ from flask import Flask, jsonify, redirect, render_template, request, url_for
 # ---------------------------------------------------------------------------
 
 QUORUM_API_URL = os.environ.get("QUORUM_API_URL", "http://localhost:8080")
+QUORUM_PUBLIC_URL = os.environ.get("QUORUM_PUBLIC_URL", QUORUM_API_URL)
 SELF_URL = os.environ.get("SELF_URL", "http://localhost:3003")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "access-webhook-secret")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://quorum:quorum@localhost:5432/quorum")
@@ -191,43 +192,8 @@ QUORUM_HEADERS = {
 }
 
 
-def register_policy() -> None:
-    """Register the access_request policy with Quorum on startup (idempotent)."""
-    policy = {
-        "name": "System Access Request",
-        "request_type": "access_request",
-        "stages": [
-            {
-                "index": 0,
-                "name": "Security Review",
-                "required_approvals": 2,
-                "max_checkers": 3,
-                "rejection_policy": "threshold",
-                "allowed_checker_roles": ["security"],
-            }
-        ],
-        "auto_expire_duration": "72h",
-    }
-    try:
-        resp = http_client.post(
-            f"{QUORUM_API_URL}/api/v1/policies",
-            json=policy,
-            headers=QUORUM_HEADERS,
-            timeout=10,
-        )
-        if resp.status_code == 201:
-            log.info("Registered access_request policy with Quorum")
-        elif resp.status_code == 409:
-            log.info("access_request policy already exists in Quorum (409 conflict)")
-        else:
-            log.warning("Unexpected response registering policy: %s %s", resp.status_code, resp.text)
-    except Exception as exc:
-        log.error("Failed to register policy with Quorum: %s", exc)
-
-
 def submit_to_quorum(access_req: dict, eligible_reviewers: list[str]) -> str | None:
     """Submit an access request to Quorum and return the Quorum request ID."""
-    callback_url = f"{SELF_URL}/webhooks/quorum"
     body = {
         "type": "access_request",
         "payload": {
@@ -237,7 +203,6 @@ def submit_to_quorum(access_req: dict, eligible_reviewers: list[str]) -> str | N
             "access_level": access_req["access_level"],
             "justification": access_req["justification"],
         },
-        "callback_url": callback_url,
         "eligible_reviewers": eligible_reviewers,
     }
     headers = {
@@ -390,7 +355,7 @@ def request_detail(request_id: str):
     if access_req.get("quorum_request_id"):
         quorum_data = fetch_quorum_request(access_req["quorum_request_id"])
 
-    return render_template("detail.html", access_req=access_req, quorum_data=quorum_data, quorum_url=QUORUM_API_URL)
+    return render_template("detail.html", access_req=access_req, quorum_data=quorum_data, quorum_url=QUORUM_PUBLIC_URL)
 
 
 @app.route("/webhooks/quorum", methods=["POST"])
@@ -442,5 +407,4 @@ if __name__ == "__main__":
     log.info("Quorum API: %s", QUORUM_API_URL)
     log.info("Self URL: %s", SELF_URL)
     init_db()
-    register_policy()
     app.run(host="0.0.0.0", port=PORT, debug=True)

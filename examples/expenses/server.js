@@ -7,6 +7,7 @@ const { Pool } = require("pg");
 // Configuration
 // ---------------------------------------------------------------------------
 const QUORUM_API_URL = process.env.QUORUM_API_URL || "http://localhost:8080";
+const QUORUM_PUBLIC_URL = process.env.QUORUM_PUBLIC_URL || QUORUM_API_URL;
 const SELF_URL = process.env.SELF_URL || "http://localhost:3002";
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "expenses-webhook-secret";
 const DATABASE_URL = process.env.DATABASE_URL || "postgres://quorum:quorum@localhost:5432/quorum";
@@ -152,35 +153,6 @@ async function quorumFetch(urlPath, options = {}) {
   return { status: res.status, data: json, raw: body };
 }
 
-async function registerPolicy() {
-  const policy = {
-    name: "Expense Approval",
-    request_type: "expense_approval",
-    stages: [
-      {
-        index: 0,
-        name: "Manager Approval",
-        required_approvals: 1,
-        allowed_checker_roles: ["manager", "admin"],
-        rejection_policy: "any",
-      },
-    ],
-  };
-
-  const res = await quorumFetch("/api/v1/policies", {
-    method: "POST",
-    body: JSON.stringify(policy),
-  });
-
-  if (res.status === 201) {
-    console.log("[startup] Registered expense_approval policy with Quorum");
-  } else if (res.status === 409) {
-    console.log("[startup] expense_approval policy already exists (409 conflict) - OK");
-  } else {
-    console.error("[startup] Failed to register policy:", res.status, res.raw);
-  }
-}
-
 async function submitRequest(expense, userId) {
   const payload = {
     type: "expense_approval",
@@ -191,7 +163,6 @@ async function submitRequest(expense, userId) {
       category: expense.category,
       description: expense.description,
     },
-    callback_url: `${SELF_URL}/webhooks/quorum`,
   };
 
   const res = await quorumFetch("/api/v1/requests", {
@@ -353,7 +324,7 @@ app.get("/expense/:id", async (req, res) => {
     }
   }
 
-  res.render("detail", { expense, quorumRequest, quorumUrl: QUORUM_API_URL });
+  res.render("detail", { expense, quorumRequest, quorumUrl: QUORUM_PUBLIC_URL });
 });
 
 // ---------------------------------------------------------------------------
@@ -409,17 +380,10 @@ app.post("/webhooks/quorum", async (req, res) => {
     process.exit(1);
   }
 
-  app.listen(PORT, async () => {
+  app.listen(PORT, () => {
     console.log(`Expense Tracker running at http://localhost:${PORT}`);
     console.log(`Quorum API: ${QUORUM_API_URL}`);
     console.log(`Webhook callback: ${SELF_URL}/webhooks/quorum`);
     console.log();
-
-    try {
-      await registerPolicy();
-    } catch (err) {
-      console.error("[startup] Could not reach Quorum API:", err.message);
-      console.error("[startup] Make sure Quorum is running. The app will still work for viewing.");
-    }
   });
 })();

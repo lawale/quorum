@@ -88,6 +88,26 @@ export interface AuditLog {
   created_at: string;
 }
 
+export interface OutboxEntry {
+  id: string;
+  request_id: string;
+  webhook_url: string;
+  status: 'pending' | 'processing' | 'delivered' | 'failed';
+  attempts: number;
+  max_retries: number;
+  last_error?: string;
+  next_retry_at: string;
+  created_at: string;
+  delivered_at?: string;
+}
+
+export interface DeliveryStats {
+  pending: number;
+  processing: number;
+  delivered: number;
+  failed: number;
+}
+
 // --- API Responses ---
 
 export interface AuthResponse {

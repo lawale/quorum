@@ -14,6 +14,7 @@
     { label: 'Policies', href: '#/policies', icon: '📋' },
     { label: 'Webhooks', href: '#/webhooks', icon: '🔗' },
     { label: 'Requests', href: '#/requests', icon: '📨' },
+    { label: 'Deliveries', href: '#/deliveries', icon: '📡' },
     { label: 'Audit Log', href: '#/audit', icon: '📝' },
     { label: 'Tenants', href: '#/tenants', icon: '🏢' },
     { label: 'Operators', href: '#/operators', icon: '👤' },

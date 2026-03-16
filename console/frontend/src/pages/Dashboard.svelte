@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { policies as policiesApi, webhooks as webhooksApi, requests as requestsApi } from '../lib/api';
+  import { policies as policiesApi, webhooks as webhooksApi, requests as requestsApi, deliveries as deliveriesApi } from '../lib/api';
   import { selectedTenant } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import StatusBadge from '../components/StatusBadge.svelte';
@@ -11,6 +11,7 @@
   let webhookCount = $state(0);
   let pendingCount = $state(0);
   let totalRequests = $state(0);
+  let failedDeliveries = $state(0);
   let recentRequests: Request[] = $state([]);
   let policies: Policy[] = $state([]);
   let webhooks: Webhook[] = $state([]);
@@ -26,11 +27,12 @@
   async function loadDashboard() {
     isLoading = true;
     try {
-      const [policiesRes, webhooksRes, pendingRes, allRes] = await Promise.all([
+      const [policiesRes, webhooksRes, pendingRes, allRes, statsRes] = await Promise.all([
         policiesApi.list(),
         webhooksApi.list(),
         requestsApi.list({ page: 1, per_page: 5, status: 'pending' }),
         requestsApi.list({ page: 1, per_page: 5 }),
+        deliveriesApi.stats().catch(() => ({ failed: 0 })),
       ]);
 
       policies = policiesRes.data || [];
@@ -40,6 +42,7 @@
       pendingCount = pendingRes.total ?? 0;
       totalRequests = allRes.total ?? 0;
       recentRequests = allRes.data || [];
+      failedDeliveries = (statsRes as Record<string, number>).failed ?? 0;
     } catch {
       // silently fail — cards show 0
     } finally {
@@ -59,7 +62,7 @@
     <LoadingSpinner />
   {:else}
     <!-- Stats cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
       <a href="#/requests" class="bg-white shadow-sm rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow">
         <p class="text-sm font-medium text-gray-500">Total Requests</p>
         <p class="text-3xl font-bold text-gray-900 mt-1">{totalRequests}</p>
@@ -67,6 +70,10 @@
       <a href="#/requests" class="bg-white shadow-sm rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow">
         <p class="text-sm font-medium text-gray-500">Pending Approval</p>
         <p class="text-3xl font-bold text-yellow-600 mt-1">{pendingCount}</p>
+      </a>
+      <a href="#/deliveries" class="bg-white shadow-sm rounded-lg border {failedDeliveries > 0 ? 'border-red-300' : 'border-gray-200'} p-5 hover:shadow-md transition-shadow">
+        <p class="text-sm font-medium text-gray-500">Failed Deliveries</p>
+        <p class="text-3xl font-bold {failedDeliveries > 0 ? 'text-red-600' : 'text-gray-900'} mt-1">{failedDeliveries}</p>
       </a>
       <a href="#/policies" class="bg-white shadow-sm rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow">
         <p class="text-sm font-medium text-gray-500">Policies</p>

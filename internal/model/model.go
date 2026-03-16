@@ -43,7 +43,6 @@ type Request struct {
 	Payload           json.RawMessage `json:"payload"`
 	Status            RequestStatus   `json:"status"`
 	MakerID           string          `json:"maker_id"`
-	CallbackURL       *string         `json:"callback_url,omitempty"`
 	EligibleReviewers []string        `json:"eligible_reviewers,omitempty"`
 	Metadata          json.RawMessage `json:"metadata,omitempty"`
 	Fingerprint       *string         `json:"fingerprint,omitempty"`

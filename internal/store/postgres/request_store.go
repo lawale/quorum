@@ -15,7 +15,7 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, callback_url, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
+const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
 
 type RequestStore struct {
 	db *DB
@@ -28,7 +28,7 @@ func NewRequestStore(db *DB) *RequestStore {
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
 		INSERT INTO requests (` + requestColumns + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
 
 	now := time.Now().UTC()
 	if req.ID == uuid.Nil {
@@ -50,7 +50,7 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 
 	_, err := s.db.Pool.Exec(ctx, query,
 		req.ID, req.TenantID, req.IdempotencyKey, req.Type, req.Payload, req.Status,
-		req.MakerID, req.CallbackURL, eligibleJSON, req.Metadata, req.Fingerprint,
+		req.MakerID, eligibleJSON, req.Metadata, req.Fingerprint,
 		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
 	)
 	if err != nil {
@@ -207,7 +207,7 @@ func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (
 
 	err := s.db.Pool.QueryRow(ctx, query, args...).Scan(
 		&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
-		&req.MakerID, &req.CallbackURL, &eligibleJSON, &req.Metadata, &req.Fingerprint,
+		&req.MakerID, &eligibleJSON, &req.Metadata, &req.Fingerprint,
 		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 	)
 	if err != nil {
@@ -241,7 +241,7 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 
 		if err := rows.Scan(
 			&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
-			&req.MakerID, &req.CallbackURL, &eligibleJSON, &req.Metadata, &req.Fingerprint,
+			&req.MakerID, &eligibleJSON, &req.Metadata, &req.Fingerprint,
 			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning request: %w", err)

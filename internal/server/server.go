@@ -19,6 +19,7 @@ type Server struct {
 	requestHandler  *RequestHandler
 	policyHandler   *PolicyHandler
 	webhookHandler  *WebhookHandler
+	deliveryHandler *DeliveryHandler
 	consoleHandler  *ConsoleHandler
 	consoleSPA      http.Handler
 	embedHandler    http.Handler
@@ -39,6 +40,8 @@ type Config struct {
 	TenantService   *service.TenantService
 	OperatorService *service.OperatorService
 	AuditStore      store.AuditStore
+	OutboxStore     store.OutboxStore
+	SignalWorker    func()
 	AuthProvider    auth.Provider
 	ConsoleEnabled  bool
 	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
@@ -54,6 +57,7 @@ func New(cfg Config) *Server {
 		requestHandler:  NewRequestHandler(cfg.RequestService),
 		policyHandler:   NewPolicyHandler(cfg.PolicyService),
 		webhookHandler:  NewWebhookHandler(cfg.WebhookService),
+		deliveryHandler: NewDeliveryHandler(cfg.OutboxStore, cfg.SignalWorker),
 		auditStore:      cfg.AuditStore,
 		tenantService:   cfg.TenantService,
 		authProvider:    cfg.AuthProvider,
@@ -79,6 +83,7 @@ func (s *Server) setupRoutes() {
 
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
+	r.Use(corsMiddleware)
 	r.Use(loggingMiddleware)
 	if s.metrics != nil {
 		r.Use(metrics.HTTPMiddleware(s.metrics))
@@ -147,6 +152,11 @@ func (s *Server) setupRoutes() {
 					r.Get("/requests", s.requestHandler.List)
 					r.Get("/requests/{id}", s.requestHandler.Get)
 					r.Get("/requests/{id}/audit", s.handleAudit)
+
+					r.Get("/deliveries", s.deliveryHandler.List)
+					r.Get("/deliveries/stats", s.deliveryHandler.Stats)
+					r.Post("/deliveries/{id}/retry", s.deliveryHandler.Retry)
+					r.Post("/requests/{id}/retry-deliveries", s.deliveryHandler.RetryAllForRequest)
 				})
 			})
 		})

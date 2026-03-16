@@ -7,9 +7,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 const outboxColumns = `id, request_id, webhook_url, webhook_secret, payload, status, attempts, max_retries, last_error, next_retry_at, created_at, delivered_at`
+
+// outboxColumnsQualified prefixes every column with the table alias "o." for use in JOINed queries.
+const outboxColumnsQualified = `o.id, o.request_id, o.webhook_url, o.webhook_secret, o.payload, o.status, o.attempts, o.max_retries, o.last_error, o.next_retry_at, o.created_at, o.delivered_at`
 
 type OutboxStore struct {
 	db *DB
@@ -113,6 +117,133 @@ func (s *OutboxStore) DeleteDelivered(ctx context.Context, olderThan time.Time) 
 	tag, err := s.db.Pool.Exec(ctx, query, olderThan)
 	if err != nil {
 		return 0, fmt.Errorf("deleting delivered outbox entries: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+func (s *OutboxStore) List(ctx context.Context, filter store.OutboxFilter) ([]model.OutboxEntry, int, error) {
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	perPage := filter.PerPage
+	if perPage < 1 {
+		perPage = 20
+	}
+	offset := (page - 1) * perPage
+
+	where := "WHERE 1=1"
+	args := []any{}
+	argIdx := 1
+
+	if filter.TenantID != nil {
+		where += fmt.Sprintf(" AND r.tenant_id = $%d", argIdx)
+		args = append(args, *filter.TenantID)
+		argIdx++
+	}
+	if filter.Status != nil {
+		where += fmt.Sprintf(" AND o.status = $%d", argIdx)
+		args = append(args, *filter.Status)
+		argIdx++
+	}
+	if filter.RequestID != nil {
+		where += fmt.Sprintf(" AND o.request_id = $%d", argIdx)
+		args = append(args, *filter.RequestID)
+		argIdx++
+	}
+
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM webhook_outbox o JOIN requests r ON r.id = o.request_id %s`, where)
+	var total int
+	if err := s.db.Pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting outbox entries: %w", err)
+	}
+
+	dataQuery := fmt.Sprintf(
+		`SELECT %s FROM webhook_outbox o JOIN requests r ON r.id = o.request_id %s ORDER BY o.created_at DESC LIMIT $%d OFFSET $%d`,
+		outboxColumnsQualified, where, argIdx, argIdx+1,
+	)
+	args = append(args, perPage, offset)
+
+	rows, err := s.db.Pool.Query(ctx, dataQuery, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("listing outbox entries: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []model.OutboxEntry
+	for rows.Next() {
+		var e model.OutboxEntry
+		if err := rows.Scan(
+			&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &e.Payload, &e.Status,
+			&e.Attempts, &e.MaxRetries, &e.LastError, &e.NextRetryAt, &e.CreatedAt, &e.DeliveredAt,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scanning outbox entry: %w", err)
+		}
+		entries = append(entries, e)
+	}
+
+	return entries, total, nil
+}
+
+func (s *OutboxStore) CountByStatus(ctx context.Context, tenantID *string) (map[string]int, error) {
+	var query string
+	var args []any
+
+	if tenantID != nil {
+		query = `SELECT o.status, COUNT(*) FROM webhook_outbox o JOIN requests r ON r.id = o.request_id WHERE r.tenant_id = $1 GROUP BY o.status`
+		args = []any{*tenantID}
+	} else {
+		query = `SELECT status, COUNT(*) FROM webhook_outbox GROUP BY status`
+	}
+
+	rows, err := s.db.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("counting outbox by status: %w", err)
+	}
+	defer rows.Close()
+
+	counts := map[string]int{}
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, fmt.Errorf("scanning status count: %w", err)
+		}
+		counts[status] = count
+	}
+	return counts, nil
+}
+
+func (s *OutboxStore) GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error) {
+	query := `SELECT ` + outboxColumns + ` FROM webhook_outbox WHERE id = $1`
+	var e model.OutboxEntry
+	err := s.db.Pool.QueryRow(ctx, query, id).Scan(
+		&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &e.Payload, &e.Status,
+		&e.Attempts, &e.MaxRetries, &e.LastError, &e.NextRetryAt, &e.CreatedAt, &e.DeliveredAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getting outbox entry: %w", err)
+	}
+	return &e, nil
+}
+
+func (s *OutboxStore) ResetForRetry(ctx context.Context, id uuid.UUID) error {
+	query := `UPDATE webhook_outbox SET status = 'pending', attempts = 0, last_error = NULL, next_retry_at = NOW() WHERE id = $1 AND status = 'failed'`
+	tag, err := s.db.Pool.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("resetting outbox entry for retry: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("entry not found or not in failed status")
+	}
+	return nil
+}
+
+func (s *OutboxStore) ResetAllFailedForRequest(ctx context.Context, requestID uuid.UUID) (int64, error) {
+	query := `UPDATE webhook_outbox SET status = 'pending', attempts = 0, last_error = NULL, next_retry_at = NOW() WHERE request_id = $1 AND status = 'failed'`
+	tag, err := s.db.Pool.Exec(ctx, query, requestID)
+	if err != nil {
+		return 0, fmt.Errorf("resetting failed entries for request: %w", err)
 	}
 	return tag.RowsAffected(), nil
 }

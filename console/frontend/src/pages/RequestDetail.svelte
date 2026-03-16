@@ -1,19 +1,22 @@
 <script lang="ts">
-  import { requests as requestsApi } from '../lib/api';
+  import { requests as requestsApi, deliveries as deliveriesApi } from '../lib/api';
   import { addToast } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import StatusBadge from '../components/StatusBadge.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
-  import type { Request, AuditLog } from '../lib/types';
+  import type { Request, AuditLog, OutboxEntry } from '../lib/types';
   import { getDisplay } from '../lib/types';
 
   let { id }: { id: string } = $props();
 
   let req: Request | null = $state(null);
   let auditLogs: AuditLog[] = $state([]);
+  let outboxEntries: OutboxEntry[] = $state([]);
   let isLoading = $state(true);
-  let activeTab: 'details' | 'payload' | 'audit' = $state('details');
+  let activeTab: 'details' | 'payload' | 'audit' | 'deliveries' = $state('details');
   let showRawPayload = $state(false);
+  let retryingId: string | null = $state(null);
+  let retryingAll = $state(false);
 
   $effect(() => {
     loadRequest(id);
@@ -22,12 +25,14 @@
   async function loadRequest(requestId: string) {
     isLoading = true;
     try {
-      const [requestData, auditData] = await Promise.all([
+      const [requestData, auditData, deliveryData] = await Promise.all([
         requestsApi.get(requestId),
         requestsApi.audit(requestId),
+        deliveriesApi.list({ request_id: requestId, per_page: 50 }).catch(() => ({ data: [], total: 0 })),
       ]);
       req = requestData;
       auditLogs = auditData.data || [];
+      outboxEntries = deliveryData.data || [];
     } catch {
       addToast('Failed to load request', 'error');
       window.location.hash = '#/requests';
@@ -40,6 +45,42 @@
     return JSON.stringify(obj, null, 2);
   }
 
+  async function retryEntry(entryId: string) {
+    retryingId = entryId;
+    try {
+      await deliveriesApi.retry(entryId);
+      addToast('Delivery queued for retry', 'success');
+      await loadRequest(id);
+    } catch {
+      addToast('Failed to retry delivery', 'error');
+    } finally {
+      retryingId = null;
+    }
+  }
+
+  async function retryAllFailed() {
+    retryingAll = true;
+    try {
+      const res = await deliveriesApi.retryAllForRequest(id);
+      addToast(`${res.reset} deliveries queued for retry`, 'success');
+      await loadRequest(id);
+    } catch {
+      addToast('Failed to retry deliveries', 'error');
+    } finally {
+      retryingAll = false;
+    }
+  }
+
+  function deliveryStatusClass(status: string): string {
+    switch (status) {
+      case 'delivered': return 'bg-green-100 text-green-800';
+      case 'failed': return 'bg-red-100 text-red-800';
+      case 'processing': return 'bg-blue-100 text-blue-800';
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  }
+
   function actionColor(action: string): string {
     switch (action) {
       case 'created': return 'bg-blue-100 text-blue-800';
@@ -50,6 +91,8 @@
       default: return 'bg-gray-100 text-gray-600';
     }
   }
+
+  let failedCount = $derived(outboxEntries.filter(e => e.status === 'failed').length);
 </script>
 
 <div>
@@ -133,6 +176,12 @@
         >
           Audit Trail ({auditLogs.length})
         </button>
+        <button
+          onclick={() => activeTab = 'deliveries'}
+          class="pb-2 text-sm font-medium border-b-2 transition-colors {activeTab === 'deliveries' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}"
+        >
+          Deliveries ({outboxEntries.length})
+        </button>
       </nav>
     </div>
 
@@ -213,6 +262,64 @@
               {/if}
             </div>
           {/each}
+        </div>
+      {/if}
+    {:else if activeTab === 'deliveries'}
+      {#if outboxEntries.length === 0}
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
+          <p class="text-sm text-gray-500">No delivery entries for this request.</p>
+        </div>
+      {:else}
+        {#if failedCount > 0}
+          <div class="mb-3 flex justify-end">
+            <button
+              onclick={retryAllFailed}
+              disabled={retryingAll}
+              class="text-sm bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-md px-3 py-1.5 disabled:opacity-50"
+            >
+              {retryingAll ? 'Retrying…' : `Retry All Failed (${failedCount})`}
+            </button>
+          </div>
+        {/if}
+        <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Webhook URL</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attempts</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Error</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              {#each outboxEntries as entry}
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-xs font-mono text-gray-700 max-w-[250px] truncate" title={entry.webhook_url}>{entry.webhook_url}</td>
+                  <td class="px-4 py-3">
+                    <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium {deliveryStatusClass(entry.status)}">{entry.status}</span>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-700">{entry.attempts} / {entry.max_retries}</td>
+                  <td class="px-4 py-3 text-xs text-red-600 max-w-[200px] truncate" title={entry.last_error || ''}>{entry.last_error || '—'}</td>
+                  <td class="px-4 py-3 text-xs text-gray-500">{formatDate(entry.created_at)}</td>
+                  <td class="px-4 py-3">
+                    {#if entry.status === 'failed'}
+                      <button
+                        onclick={() => retryEntry(entry.id)}
+                        disabled={retryingId === entry.id}
+                        class="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {retryingId === entry.id ? 'Retrying…' : 'Retry'}
+                      </button>
+                    {:else}
+                      <span class="text-xs text-gray-400">—</span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
       {/if}
     {/if}
