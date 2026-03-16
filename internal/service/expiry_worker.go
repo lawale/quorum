@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
@@ -19,7 +20,14 @@ type ExpiryWorker struct {
 	enqueueWebhooks func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
 	signalWebhooks  func()
 	runInTx         func(ctx context.Context, fn func(tx *store.Stores) error) error
+	signalSSE       func(requestID uuid.UUID)
 	metrics         *metrics.Metrics
+}
+
+// SetSSESignal configures the callback invoked after a request expires
+// to notify connected SSE clients.
+func (w *ExpiryWorker) SetSSESignal(signal func(requestID uuid.UUID)) {
+	w.signalSSE = signal
 }
 
 // SetMetrics sets the optional Prometheus metrics collector.
@@ -92,6 +100,9 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 			}
 			if w.signalWebhooks != nil {
 				w.signalWebhooks()
+			}
+			if w.signalSSE != nil {
+				w.signalSSE(req.ID)
 			}
 		} else {
 			if err := w.requests.UpdateStatus(ctx, req.ID, model.StatusExpired); err != nil {

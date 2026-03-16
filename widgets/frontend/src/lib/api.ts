@@ -7,6 +7,10 @@ export interface ClientConfig {
   authHeaders?: Record<string, string>;
 }
 
+export interface SSEConnection {
+  close(): void;
+}
+
 export interface QuorumClient {
   getRequest(id: string): Promise<Request>;
   listRequests(params?: { status?: string; type?: string; page?: number; per_page?: number }): Promise<PaginatedResponse<Request>>;
@@ -16,6 +20,7 @@ export interface QuorumClient {
   approve(requestId: string, comment?: string): Promise<Request>;
   reject(requestId: string, comment?: string): Promise<Request>;
   getAudit(requestId: string): Promise<AuditLog[]>;
+  connectSSE(requestId: string, onEvent: () => void, onDisconnect: () => void): SSEConnection;
 }
 
 export function createClient(config: ClientConfig): QuorumClient {
@@ -102,6 +107,62 @@ export function createClient(config: ClientConfig): QuorumClient {
     async getAudit(requestId) {
       const res = await request<ListResponse<AuditLog>>(`/requests/${requestId}/audit`);
       return res.data;
+    },
+
+    connectSSE(requestId, onEvent, onDisconnect) {
+      const controller = new AbortController();
+      const url = `${base}/requests/${requestId}/events`;
+
+      // Use fetch (not EventSource) because EventSource cannot set custom headers.
+      (async () => {
+        try {
+          const h = headers();
+          // SSE doesn't need Content-Type (it's a GET with no body)
+          delete h['Content-Type'];
+
+          const res = await fetch(url, {
+            headers: h,
+            signal: controller.signal,
+          });
+
+          if (!res.ok || !res.body) {
+            onDisconnect();
+            return;
+          }
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // Parse SSE frames (delimited by double newline)
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop() ?? '';
+
+            for (const part of parts) {
+              // Skip comments (keepalives start with ':')
+              const trimmed = part.trim();
+              if (!trimmed || trimmed.startsWith(':')) continue;
+              if (trimmed.includes('event:')) {
+                onEvent();
+              }
+            }
+          }
+
+          // Stream ended (server closed connection)
+          onDisconnect();
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return;
+          onDisconnect();
+        }
+      })();
+
+      return { close: () => controller.abort() };
     },
   };
 }

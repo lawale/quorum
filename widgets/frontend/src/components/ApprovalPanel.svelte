@@ -2,6 +2,7 @@
 
 <script lang="ts">
   import { createClient, ApiError } from '../lib/api';
+  import type { SSEConnection } from '../lib/api';
   import type { Request, Policy, Approval, AuditLog } from '../lib/types';
   import { formatDate, timeAgo, getDisplay } from '../lib/utils';
   import type { ResolvedDisplay } from '../lib/types';
@@ -17,6 +18,7 @@
     'auth-headers': authHeadersStr = '',
     'poll-interval': pollIntervalStr = '30000',
     'suppress-errors': suppressErrorsStr,
+    'sse': sseStr = 'true',
   }: {
     'request-id'?: string;
     'api-url'?: string;
@@ -25,6 +27,7 @@
     'auth-headers'?: string;
     'poll-interval'?: string;
     'suppress-errors'?: string;
+    'sse'?: string;
   } = $props();
 
   // Any presence of the attribute suppresses inline errors, unless explicitly "false".
@@ -42,6 +45,9 @@
   let activeTab: 'details' | 'payload' | 'audit' = $state('details');
   let showRawPayload = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | undefined;
+  let sseConnection: SSEConnection | null = $state(null);
+  let sseActive = $state(false);
+  let sseEnabled = $derived(sseStr !== 'false');
 
   function getClient() {
     let authHeaders: Record<string, string> | undefined;
@@ -69,6 +75,11 @@
       req = r;
       auditLogs = logs;
       policy = await client.getPolicyByType(req.type);
+      // Close SSE and stop polling when request reaches terminal status
+      if (req && req.status !== 'pending') {
+        closeSSE();
+        stopPolling();
+      }
     } catch (e) {
       error = e instanceof ApiError ? e.message : 'Failed to load';
       dispatch('quorum:error', { action: 'load', message: error, status: e instanceof ApiError ? e.status : 0 });
@@ -104,13 +115,59 @@
     if (requestId && apiUrl) load();
   });
 
-  $effect(() => {
+  function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     const interval = parseInt(pollIntervalStr) || 30000;
-    if (req?.status === 'pending' && interval > 0) {
+    if (interval > 0) {
       pollTimer = setInterval(() => load(), interval);
     }
-    return () => { if (pollTimer) clearInterval(pollTimer); };
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
+  }
+
+  function closeSSE() {
+    if (sseConnection) { sseConnection.close(); sseConnection = null; }
+    sseActive = false;
+  }
+
+  // SSE-first with polling fallback. They are mutually exclusive:
+  // - SSE active → no polling
+  // - SSE fails/disconnects → start polling as fallback
+  $effect(() => {
+    // Clean up previous connections
+    closeSSE();
+    stopPolling();
+
+    if (!req || req.status !== 'pending') return;
+
+    if (sseEnabled && requestId && apiUrl) {
+      try {
+        const client = getClient();
+        sseConnection = client.connectSSE(
+          requestId,
+          () => load(),                // onEvent: re-fetch full state
+          () => {                       // onDisconnect: fall back to polling
+            sseActive = false;
+            sseConnection = null;
+            if (req?.status === 'pending') startPolling();
+          },
+        );
+        sseActive = true;
+      } catch {
+        // SSE not available — fall back to polling
+        startPolling();
+      }
+    } else {
+      // SSE disabled — use polling
+      startPolling();
+    }
+
+    return () => {
+      closeSSE();
+      stopPolling();
+    };
   });
 </script>
 

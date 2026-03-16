@@ -9,6 +9,7 @@ import (
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/sse"
 	"github.com/lawale/quorum/internal/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -20,6 +21,7 @@ type Server struct {
 	policyHandler   *PolicyHandler
 	webhookHandler  *WebhookHandler
 	deliveryHandler *DeliveryHandler
+	sseHandler      *SSEHandler
 	consoleHandler  *ConsoleHandler
 	consoleSPA      http.Handler
 	embedHandler    http.Handler
@@ -47,6 +49,7 @@ type Config struct {
 	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
 	EmbedHandler    http.Handler // Widget JS handler from widgets package (nil when built without tag)
 	Metrics         *metrics.Metrics
+	EventHub        *sse.Hub
 	MetricsPath     string
 	Registry        *prometheus.Registry
 }
@@ -58,6 +61,7 @@ func New(cfg Config) *Server {
 		policyHandler:   NewPolicyHandler(cfg.PolicyService),
 		webhookHandler:  NewWebhookHandler(cfg.WebhookService),
 		deliveryHandler: NewDeliveryHandler(cfg.OutboxStore, cfg.SignalWorker),
+		sseHandler:      NewSSEHandler(cfg.EventHub, cfg.RequestService),
 		auditStore:      cfg.AuditStore,
 		tenantService:   cfg.TenantService,
 		authProvider:    cfg.AuthProvider,
@@ -179,6 +183,9 @@ func (s *Server) setupRoutes() {
 				r.Post("/reject", s.requestHandler.Reject)
 				r.Post("/cancel", s.requestHandler.Cancel)
 				r.Get("/audit", s.handleAudit)
+				if s.sseHandler != nil && s.sseHandler.hub != nil {
+					r.Get("/events", s.sseHandler.Events)
+				}
 			})
 		})
 

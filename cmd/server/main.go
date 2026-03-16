@@ -17,6 +17,7 @@ import (
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/server"
 	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/sse"
 	"github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/store/mssql"
 	"github.com/lawale/quorum/internal/store/postgres"
@@ -88,9 +89,14 @@ func main() {
 	})
 	requestService.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
 
+	// SSE event hub for real-time push to connected widgets
+	eventHub := sse.NewHub()
+	requestService.SetSSESignal(eventHub.Publish)
+
 	// Expiry worker
 	expiryWorker := service.NewExpiryWorker(stores.Requests, stores.Audits, cfg.Expiry.CheckInterval)
 	expiryWorker.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
+	expiryWorker.SetSSESignal(eventHub.Publish)
 
 	// Metrics (optional)
 	var (
@@ -141,6 +147,7 @@ func main() {
 		OutboxStore:     stores.Outbox,
 		SignalWorker:    dispatcher.Signal,
 		AuthProvider:    authProvider,
+		EventHub:        eventHub,
 		ConsoleEnabled:  cfg.Console.Enabled,
 		ConsoleSPA:      console.Handler(),
 		EmbedHandler:    widgets.Handler(),
@@ -150,11 +157,12 @@ func main() {
 	})
 
 	httpServer := &http.Server{
-		Addr:         cfg.Server.Addr(),
-		Handler:      srv.Handler(),
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:        cfg.Server.Addr(),
+		Handler:     srv.Handler(),
+		ReadTimeout: 15 * time.Second,
+		// WriteTimeout disabled (0) to support long-lived SSE connections.
+		// The SSE handler manages per-write deadlines via http.ResponseController.
+		IdleTimeout: 60 * time.Second,
 	}
 
 	// Graceful shutdown

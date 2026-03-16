@@ -40,7 +40,14 @@ type RequestService struct {
 	enqueueWebhooks   func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
 	signalWebhooks    func()
 	runInTx           func(ctx context.Context, fn func(tx *store.Stores) error) error
+	signalSSE         func(requestID uuid.UUID)
 	metrics           *metrics.Metrics
+}
+
+// SetSSESignal configures the callback invoked after a request's state changes
+// to notify connected SSE clients. Called post-commit alongside signalWebhooks.
+func (s *RequestService) SetSSESignal(signal func(requestID uuid.UUID)) {
+	s.signalSSE = signal
 }
 
 // SetMetrics sets the optional Prometheus metrics collector.
@@ -216,12 +223,18 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 		if s.signalWebhooks != nil {
 			s.signalWebhooks()
 		}
+		if s.signalSSE != nil {
+			s.signalSSE(requestID)
+		}
 	} else {
 		if err := s.requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
 			if errors.Is(err, store.ErrStatusConflict) {
 				return nil, ErrRequestNotPending
 			}
 			return nil, err
+		}
+		if s.signalSSE != nil {
+			s.signalSSE(requestID)
 		}
 	}
 
@@ -395,6 +408,9 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 			if s.signalWebhooks != nil {
 				s.signalWebhooks()
 			}
+			if s.signalSSE != nil {
+				s.signalSSE(requestID)
+			}
 			if s.metrics != nil {
 				s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
 				s.metrics.PendingRequestsGauge.Dec()
@@ -405,6 +421,9 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 			req.CurrentStage = *newStage
 			stageDetails, _ := json.Marshal(map[string]int{"from_stage": fromStage, "to_stage": *newStage})
 			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
+			if s.signalSSE != nil {
+				s.signalSSE(requestID)
+			}
 		}
 	} else {
 		// Fallback: no transaction support. Pre-read counts and predict outcome.
