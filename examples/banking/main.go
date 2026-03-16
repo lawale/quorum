@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -21,8 +22,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ---------------------------------------------------------------------------
@@ -30,10 +32,11 @@ import (
 // ---------------------------------------------------------------------------
 
 type config struct {
-	QuorumAPIURL  string // Base URL of the Quorum server
-	SelfURL       string // Publicly reachable URL of this app
-	WebhookSecret string // Shared secret for HMAC-SHA256 webhook verification
-	Port          string // HTTP listen port
+	QuorumAPIURL  string
+	SelfURL       string
+	WebhookSecret string
+	Port          string
+	DatabaseURL   string
 }
 
 func loadConfig() config {
@@ -42,6 +45,7 @@ func loadConfig() config {
 		SelfURL:       envOr("SELF_URL", "http://localhost:3001"),
 		WebhookSecret: envOr("WEBHOOK_SECRET", "banking-webhook-secret"),
 		Port:          envOr("PORT", "3001"),
+		DatabaseURL:   envOr("DATABASE_URL", "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable"),
 	}
 }
 
@@ -56,7 +60,6 @@ func envOr(key, fallback string) string {
 // Transfer model
 // ---------------------------------------------------------------------------
 
-// TransferStatus represents the lifecycle state of a wire transfer.
 type TransferStatus string
 
 const (
@@ -66,7 +69,6 @@ const (
 	StatusExecuted TransferStatus = "executed"
 )
 
-// Transfer represents a wire transfer request tracked by this application.
 type Transfer struct {
 	ID              string         `json:"id"`
 	FromUser        string         `json:"from_user"`
@@ -79,88 +81,135 @@ type Transfer struct {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory transfer store
+// PostgreSQL transfer store
 // ---------------------------------------------------------------------------
 
 type transferStore struct {
-	mu        sync.Mutex
-	transfers map[string]*Transfer
-	order     []string // insertion order for listing
-	nextID    int
+	pool *pgxpool.Pool
 }
 
-func newTransferStore() *transferStore {
-	return &transferStore{
-		transfers: make(map[string]*Transfer),
+func initDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("connect to database: %w", err)
 	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("ping database: %w", err)
+	}
+
+	ddl := `
+		CREATE SEQUENCE IF NOT EXISTS transfer_id_seq START 1;
+		CREATE TABLE IF NOT EXISTS transfers (
+			id              TEXT PRIMARY KEY,
+			from_user       TEXT NOT NULL,
+			source_account  TEXT NOT NULL,
+			amount          TEXT NOT NULL,
+			destination     TEXT NOT NULL,
+			status          TEXT NOT NULL DEFAULT 'pending',
+			quorum_request_id TEXT,
+			created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+	`
+	if _, err := pool.Exec(ctx, ddl); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("create schema/tables: %w", err)
+	}
+
+	return pool, nil
 }
 
-func (s *transferStore) Create(t *Transfer) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.nextID++
-	t.ID = fmt.Sprintf("TXN-%04d", s.nextID)
-	t.CreatedAt = time.Now()
+func newTransferStore(pool *pgxpool.Pool) *transferStore {
+	return &transferStore{pool: pool}
+}
+
+const transferColumns = `id, from_user, source_account, amount, destination, status, COALESCE(quorum_request_id, ''), created_at`
+
+func scanTransfer(row interface{ Scan(dest ...any) error }) (*Transfer, error) {
+	t := &Transfer{}
+	err := row.Scan(&t.ID, &t.FromUser, &t.SourceAccount, &t.Amount, &t.Destination, &t.Status, &t.QuorumRequestID, &t.CreatedAt)
+	return t, err
+}
+
+func (s *transferStore) Create(ctx context.Context, t *Transfer) error {
+	var seq int
+	if err := s.pool.QueryRow(ctx, "SELECT nextval('transfer_id_seq')").Scan(&seq); err != nil {
+		return fmt.Errorf("get next id: %w", err)
+	}
+	t.ID = fmt.Sprintf("TXN-%04d", seq)
 	t.Status = StatusPending
-	s.transfers[t.ID] = t
-	s.order = append(s.order, t.ID)
+	t.CreatedAt = time.Now().UTC()
+
+	_, err := s.pool.Exec(ctx,
+		`INSERT INTO transfers (id, from_user, source_account, amount, destination, status, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		t.ID, t.FromUser, t.SourceAccount, t.Amount, t.Destination, string(t.Status), t.CreatedAt,
+	)
+	return err
 }
 
-func (s *transferStore) Get(id string) (*Transfer, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	t, ok := s.transfers[id]
-	return t, ok
+func (s *transferStore) Get(ctx context.Context, id string) (*Transfer, bool) {
+	row := s.pool.QueryRow(ctx, `SELECT `+transferColumns+` FROM transfers WHERE id = $1`, id)
+	t, err := scanTransfer(row)
+	if err != nil {
+		return nil, false
+	}
+	return t, true
 }
 
-// FindByQuorumID looks up a transfer by its Quorum request UUID.
-func (s *transferStore) FindByQuorumID(quorumID string) (*Transfer, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, t := range s.transfers {
-		if t.QuorumRequestID == quorumID {
-			return t, true
+func (s *transferStore) FindByQuorumID(ctx context.Context, quorumID string) (*Transfer, bool) {
+	row := s.pool.QueryRow(ctx, `SELECT `+transferColumns+` FROM transfers WHERE quorum_request_id = $1`, quorumID)
+	t, err := scanTransfer(row)
+	if err != nil {
+		return nil, false
+	}
+	return t, true
+}
+
+func (s *transferStore) SetStatus(ctx context.Context, id string, status TransferStatus) error {
+	_, err := s.pool.Exec(ctx, `UPDATE transfers SET status = $1 WHERE id = $2`, string(status), id)
+	return err
+}
+
+func (s *transferStore) SetQuorumRequestID(ctx context.Context, id, quorumRequestID string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE transfers SET quorum_request_id = $1 WHERE id = $2`, quorumRequestID, id)
+	return err
+}
+
+func (s *transferStore) List(ctx context.Context) []*Transfer {
+	rows, err := s.pool.Query(ctx, `SELECT `+transferColumns+` FROM transfers ORDER BY created_at DESC`)
+	if err != nil {
+		log.Printf("ERROR: failed to list transfers: %v", err)
+		return nil
+	}
+	defer rows.Close()
+
+	var transfers []*Transfer
+	for rows.Next() {
+		t, err := scanTransfer(rows)
+		if err != nil {
+			log.Printf("ERROR: failed to scan transfer: %v", err)
+			continue
 		}
+		transfers = append(transfers, t)
 	}
-	return nil, false
-}
-
-func (s *transferStore) SetStatus(id string, status TransferStatus) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if t, ok := s.transfers[id]; ok {
-		t.Status = status
-	}
-}
-
-// List returns all transfers in reverse-chronological order.
-func (s *transferStore) List() []*Transfer {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	result := make([]*Transfer, len(s.order))
-	for i, id := range s.order {
-		result[len(s.order)-1-i] = s.transfers[id]
-	}
-	return result
+	return transfers
 }
 
 // ---------------------------------------------------------------------------
 // Quorum API types
 // ---------------------------------------------------------------------------
 
-// quorumCreateRequest is the body sent to POST /api/v1/requests.
 type quorumCreateRequest struct {
 	Type        string          `json:"type"`
 	Payload     json.RawMessage `json:"payload"`
 	CallbackURL *string         `json:"callback_url,omitempty"`
 }
 
-// quorumCreateResponse is the subset of fields we need from the response.
 type quorumCreateResponse struct {
 	ID string `json:"id"`
 }
 
-// quorumPolicyRequest is the body sent to POST /api/v1/policies.
 type quorumPolicyRequest struct {
 	Name            string                `json:"name"`
 	RequestType     string                `json:"request_type"`
@@ -175,13 +224,11 @@ type quorumApprovalStage struct {
 	RejectionPolicy   string `json:"rejection_policy"`
 }
 
-// webhookPayload matches the Quorum WebhookPayload model.
 type webhookPayload struct {
 	Event   string          `json:"event"`
 	Request json.RawMessage `json:"request"`
 }
 
-// webhookRequest is a minimal parse of the nested request object.
 type webhookRequest struct {
 	ID string `json:"id"`
 }
@@ -197,8 +244,6 @@ type app struct {
 	client *http.Client
 }
 
-// parseTemplates builds a per-page template set. Each page template is paired
-// with the shared layout so that {{define "content"}} blocks do not collide.
 func parseTemplates() map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	pageFiles := []string{"dashboard.html", "new_transfer.html", "detail.html"}
@@ -215,23 +260,29 @@ func parseTemplates() map[string]*template.Template {
 func main() {
 	cfg := loadConfig()
 
+	ctx := context.Background()
+	pool, err := initDB(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer pool.Close()
+
 	a := &app{
 		cfg:    cfg,
-		store:  newTransferStore(),
+		store:  newTransferStore(pool),
 		pages:  parseTemplates(),
 		client: &http.Client{Timeout: 10 * time.Second},
 	}
 
-	// Register the wire_transfer policy with Quorum on startup.
 	a.registerPolicy()
 
-	// Set up HTTP routes using Go 1.22+ method-based patterns.
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", a.handleDashboard)
 	mux.HandleFunc("GET /transfer/new", a.handleNewTransferForm)
 	mux.HandleFunc("POST /transfer/new", a.handleCreateTransfer)
 	mux.HandleFunc("GET /transfer/{id}", a.handleTransferDetail)
 	mux.HandleFunc("POST /webhooks/quorum", a.handleWebhook)
+	mux.HandleFunc("POST /api/transfers", a.handleCreateTransferAPI)
 
 	log.Printf("Banking app listening on :%s", cfg.Port)
 	log.Printf("Quorum API: %s", cfg.QuorumAPIURL)
@@ -245,8 +296,6 @@ func main() {
 // Policy registration
 // ---------------------------------------------------------------------------
 
-// registerPolicy creates the wire_transfer policy in Quorum.
-// If the policy already exists (409 Conflict) it is silently ignored.
 func (a *app) registerPolicy() {
 	displayTemplate, _ := json.Marshal(map[string]any{
 		"title":       "Wire Transfer - {{.source_account}}",
@@ -262,18 +311,8 @@ func (a *app) registerPolicy() {
 		Name:        "Wire Transfer Approval",
 		RequestType: "wire_transfer",
 		Stages: []quorumApprovalStage{
-			{
-				Index:             0,
-				Name:              "Manager Review",
-				RequiredApprovals: 1,
-				RejectionPolicy:   "any",
-			},
-			{
-				Index:             1,
-				Name:              "Compliance Check",
-				RequiredApprovals: 1,
-				RejectionPolicy:   "any",
-			},
+			{Index: 0, Name: "Manager Review", RequiredApprovals: 1, RejectionPolicy: "any"},
+			{Index: 1, Name: "Compliance Check", RequiredApprovals: 1, RejectionPolicy: "any"},
 		},
 		DisplayTemplate: displayTemplate,
 	}
@@ -310,28 +349,22 @@ func (a *app) registerPolicy() {
 // Route handlers
 // ---------------------------------------------------------------------------
 
-// handleDashboard renders the list of all transfers.
 func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	// The "GET /" pattern in Go 1.22+ matches all unmatched paths too,
-	// so we restrict to the exact root.
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 	data := map[string]any{
-		"Transfers": a.store.List(),
+		"Transfers": a.store.List(r.Context()),
 		"QuorumURL": a.cfg.QuorumAPIURL,
 	}
 	a.render(w, "dashboard.html", data)
 }
 
-// handleNewTransferForm renders the wire transfer creation form.
 func (a *app) handleNewTransferForm(w http.ResponseWriter, r *http.Request) {
 	a.render(w, "new_transfer.html", nil)
 }
 
-// handleCreateTransfer processes the form submission, saves the transfer
-// locally, and submits it to Quorum for approval.
 func (a *app) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "invalid form data", http.StatusBadRequest)
@@ -348,22 +381,65 @@ func (a *app) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create the transfer locally.
 	transfer := &Transfer{
 		FromUser:      fromUser,
 		SourceAccount: sourceAccount,
 		Amount:        amount,
 		Destination:   destination,
 	}
-	a.store.Create(transfer)
+	if err := a.store.Create(r.Context(), transfer); err != nil {
+		log.Printf("ERROR: failed to create transfer: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
-	// Build the Quorum request payload.
+	a.submitToQuorum(r.Context(), transfer)
+	http.Redirect(w, r, "/transfer/"+transfer.ID, http.StatusSeeOther)
+}
+
+// handleCreateTransferAPI is a JSON endpoint used by the seed script.
+func (a *app) handleCreateTransferAPI(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		FromUser      string `json:"from_user"`
+		SourceAccount string `json:"source_account"`
+		Amount        string `json:"amount"`
+		Destination   string `json:"destination"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if input.FromUser == "" || input.SourceAccount == "" || input.Amount == "" || input.Destination == "" {
+		http.Error(w, "all fields are required", http.StatusBadRequest)
+		return
+	}
+
+	transfer := &Transfer{
+		FromUser:      input.FromUser,
+		SourceAccount: input.SourceAccount,
+		Amount:        input.Amount,
+		Destination:   input.Destination,
+	}
+	if err := a.store.Create(r.Context(), transfer); err != nil {
+		log.Printf("ERROR: failed to create transfer: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	a.submitToQuorum(r.Context(), transfer)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(transfer)
+}
+
+func (a *app) submitToQuorum(ctx context.Context, transfer *Transfer) {
 	payload, _ := json.Marshal(map[string]string{
-		"transfer_id":    transfer.ID,
-		"from_user":      fromUser,
-		"source_account": sourceAccount,
-		"amount":         amount,
-		"destination":    destination,
+		"transfer_id":       transfer.ID,
+		"from_user":         transfer.FromUser,
+		"source_account_id": transfer.SourceAccount,
+		"amount":            transfer.Amount,
+		"destination":       transfer.Destination,
 	})
 
 	callbackURL := a.cfg.SelfURL + "/webhooks/quorum"
@@ -377,18 +453,15 @@ func (a *app) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {
 	httpReq, err := http.NewRequest(http.MethodPost, a.cfg.QuorumAPIURL+"/api/v1/requests", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("ERROR: failed to build Quorum request: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-User-ID", fromUser)
+	httpReq.Header.Set("X-User-ID", transfer.FromUser)
 	httpReq.Header.Set("X-Tenant-ID", "banking")
 
 	resp, err := a.client.Do(httpReq)
 	if err != nil {
 		log.Printf("ERROR: failed to submit to Quorum: %v", err)
-		// Transfer is created locally but not linked to Quorum.
-		http.Redirect(w, r, "/transfer/"+transfer.ID, http.StatusSeeOther)
 		return
 	}
 	defer resp.Body.Close()
@@ -397,26 +470,24 @@ func (a *app) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {
 		var qResp quorumCreateResponse
 		if err := json.NewDecoder(resp.Body).Decode(&qResp); err == nil {
 			transfer.QuorumRequestID = qResp.ID
+			if err := a.store.SetQuorumRequestID(ctx, transfer.ID, qResp.ID); err != nil {
+				log.Printf("ERROR: failed to save Quorum request ID: %v", err)
+			}
 			log.Printf("Transfer %s submitted to Quorum as request %s", transfer.ID, qResp.ID)
 		}
 	} else {
 		respBody, _ := io.ReadAll(resp.Body)
 		log.Printf("WARN: Quorum returned status %d: %s", resp.StatusCode, string(respBody))
 	}
-
-	http.Redirect(w, r, "/transfer/"+transfer.ID, http.StatusSeeOther)
 }
 
-// handleTransferDetail renders the detail page for a single transfer,
-// including the embedded Quorum approval widget.
 func (a *app) handleTransferDetail(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	transfer, ok := a.store.Get(id)
+	transfer, ok := a.store.Get(r.Context(), id)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-
 	data := map[string]any{
 		"Transfer":  transfer,
 		"QuorumURL": a.cfg.QuorumAPIURL,
@@ -428,9 +499,6 @@ func (a *app) handleTransferDetail(w http.ResponseWriter, r *http.Request) {
 // Webhook handler
 // ---------------------------------------------------------------------------
 
-// handleWebhook receives callbacks from Quorum when a request reaches a
-// terminal state (approved or rejected). It verifies the HMAC-SHA256 signature
-// and updates the local transfer status.
 func (a *app) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -438,7 +506,6 @@ func (a *app) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify HMAC-SHA256 signature.
 	sigHeader := r.Header.Get("X-Signature-256")
 	if !verifySignature(body, sigHeader, a.cfg.WebhookSecret) {
 		log.Println("WARN: webhook signature verification failed")
@@ -446,7 +513,6 @@ func (a *app) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the webhook payload.
 	var payload webhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		log.Printf("WARN: failed to parse webhook payload: %v", err)
@@ -454,7 +520,6 @@ func (a *app) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract the request ID from the nested request object.
 	var reqObj webhookRequest
 	if err := json.Unmarshal(payload.Request, &reqObj); err != nil {
 		log.Printf("WARN: failed to parse webhook request object: %v", err)
@@ -462,26 +527,21 @@ func (a *app) handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find the local transfer by Quorum request ID.
-	transfer, ok := a.store.FindByQuorumID(reqObj.ID)
+	ctx := r.Context()
+	transfer, ok := a.store.FindByQuorumID(ctx, reqObj.ID)
 	if !ok {
 		log.Printf("WARN: received webhook for unknown Quorum request %s", reqObj.ID)
-		// Return 200 so Quorum does not retry for unknown requests.
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// Update the transfer status based on the event.
 	switch payload.Event {
 	case "approved":
-		a.store.SetStatus(transfer.ID, StatusApproved)
-		// In a real system, this is where you would execute the wire transfer
-		// (e.g. call a payment gateway). For this demo we immediately mark
-		// it as executed.
-		a.store.SetStatus(transfer.ID, StatusExecuted)
+		a.store.SetStatus(ctx, transfer.ID, StatusApproved)
+		a.store.SetStatus(ctx, transfer.ID, StatusExecuted)
 		log.Printf("Transfer %s approved and executed (Quorum request %s)", transfer.ID, reqObj.ID)
 	case "rejected":
-		a.store.SetStatus(transfer.ID, StatusRejected)
+		a.store.SetStatus(ctx, transfer.ID, StatusRejected)
 		log.Printf("Transfer %s rejected (Quorum request %s)", transfer.ID, reqObj.ID)
 	default:
 		log.Printf("INFO: ignoring webhook event %q for request %s", payload.Event, reqObj.ID)
@@ -494,30 +554,23 @@ func (a *app) handleWebhook(w http.ResponseWriter, r *http.Request) {
 // HMAC verification
 // ---------------------------------------------------------------------------
 
-// verifySignature checks the HMAC-SHA256 signature of the webhook body.
-// The expected format is "sha256=<hex-encoded-hmac>".
 func verifySignature(body []byte, sigHeader, secret string) bool {
 	if !strings.HasPrefix(sigHeader, "sha256=") {
 		return false
 	}
-
 	receivedSig, err := hex.DecodeString(strings.TrimPrefix(sigHeader, "sha256="))
 	if err != nil {
 		return false
 	}
-
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write(body)
-	expectedSig := mac.Sum(nil)
-
-	return hmac.Equal(receivedSig, expectedSig)
+	return hmac.Equal(receivedSig, mac.Sum(nil))
 }
 
 // ---------------------------------------------------------------------------
 // Template rendering
 // ---------------------------------------------------------------------------
 
-// render executes the named page template (which includes the layout).
 func (a *app) render(w http.ResponseWriter, name string, data any) {
 	t, ok := a.pages[name]
 	if !ok {

@@ -9,6 +9,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/00-databases.sh:ro
       - ./scripts/init-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U quorum"]
@@ -66,11 +67,20 @@ services:
     depends_on:
       server:
         condition: service_started
+      banking:
+        condition: service_started
+      expenses:
+        condition: service_started
+      access-portal:
+        condition: service_started
     volumes:
       - ./scripts/seed.sh:/seed.sh:ro
     entrypoint: ["sh", "/seed.sh"]
     environment:
       QUORUM_API_URL: http://server:8080
+      BANKING_URL: http://banking:3001
+      EXPENSES_URL: http://expenses:3002
+      ACCESS_PORTAL_URL: http://access-portal:3003
     profiles:
       - seed
       - demo
@@ -84,9 +94,12 @@ services:
       QUORUM_API_URL: http://server:8080
       SELF_URL: http://banking:3001
       WEBHOOK_SECRET: banking-webhook-secret
+      DATABASE_URL: postgres://quorum:quorum@postgres:5432/banking?sslmode=disable
     depends_on:
       server:
         condition: service_started
+      postgres:
+        condition: service_healthy
     profiles:
       - demo
 
@@ -98,9 +111,12 @@ services:
       QUORUM_API_URL: http://server:8080
       SELF_URL: http://expenses:3002
       WEBHOOK_SECRET: expenses-webhook-secret
+      DATABASE_URL: postgres://quorum:quorum@postgres:5432/expenses?sslmode=disable
     depends_on:
       server:
         condition: service_started
+      postgres:
+        condition: service_healthy
     profiles:
       - demo
 
@@ -112,9 +128,12 @@ services:
       QUORUM_API_URL: http://server:8080
       SELF_URL: http://access-portal:3003
       WEBHOOK_SECRET: access-webhook-secret
+      DATABASE_URL: postgres://quorum:quorum@postgres:5432/access_portal?sslmode=disable
     depends_on:
       server:
         condition: service_started
+      postgres:
+        condition: service_healthy
     profiles:
       - demo
 

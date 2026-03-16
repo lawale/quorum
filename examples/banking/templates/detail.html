@@ -1,5 +1,3 @@
-{{template "layout" .}}
-
 {{define "title"}}Transfer {{.Transfer.ID}}{{end}}
 
 {{define "content"}}
@@ -49,81 +47,31 @@
         {{end}}
     </div>
 
-    <!-- Approval progress -->
-    <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Approval Progress</h2>
-
-        <div class="space-y-4">
-            <!-- Stage 1: Manager Review -->
-            <div class="flex items-center space-x-4">
-                {{if eq (printf "%s" .Transfer.Status) "pending"}}
-                <div class="flex-shrink-0 h-10 w-10 rounded-full bg-yellow-100 flex items-center justify-center">
-                    <svg class="h-5 w-5 text-yellow-600 animate-pulse" fill="currentColor" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="4" />
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-gray-900">Stage 1: Manager Review</p>
-                    <p class="text-xs text-gray-500">Waiting for a manager to review this transfer...</p>
-                </div>
-                {{else}}
-                <div class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                    <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-gray-900">Stage 1: Manager Review</p>
-                    <p class="text-xs text-green-600">Completed</p>
-                </div>
-                {{end}}
-            </div>
-
-            <!-- Stage 2: Compliance Check -->
-            <div class="flex items-center space-x-4">
-                {{if or (eq (printf "%s" .Transfer.Status) "executed") (eq (printf "%s" .Transfer.Status) "approved")}}
-                <div class="flex-shrink-0 h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                    <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-gray-900">Stage 2: Compliance Check</p>
-                    <p class="text-xs text-green-600">Completed</p>
-                </div>
-                {{else if eq (printf "%s" .Transfer.Status) "rejected"}}
-                <div class="flex-shrink-0 h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
-                    <svg class="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-gray-900">Stage 2: Compliance Check</p>
-                    <p class="text-xs text-red-600">Rejected</p>
-                </div>
-                {{else}}
-                <div class="flex-shrink-0 h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
-                    <svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="4" />
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-gray-900">Stage 2: Compliance Check</p>
-                    <p class="text-xs text-gray-500">Waiting for manager review first</p>
-                </div>
-                {{end}}
-            </div>
-        </div>
-    </div>
-
-    {{if eq (printf "%s" .Transfer.Status) "pending"}}
-    <div class="text-center">
-        <p class="text-xs text-gray-400">Status updates are received automatically via webhook.</p>
-        <button onclick="window.location.reload()"
-            class="mt-2 text-sm text-blue-600 hover:text-blue-700 font-medium">
-            Refresh Status
-        </button>
+    <!-- Quorum Approval Widget -->
+    {{if .Transfer.QuorumRequestID}}
+    <div class="mb-6">
+        <quorum-approval-panel
+            request-id="{{.Transfer.QuorumRequestID}}"
+            api-url="{{.QuorumURL}}"
+            tenant-id="banking"
+            auth-headers='{"X-User-Id": "{{.Transfer.FromUser}}"}'
+            poll-interval="5000">
+        </quorum-approval-panel>
     </div>
     {{end}}
 </div>
+{{end}}
+
+{{define "scripts"}}
+{{if .Transfer.QuorumRequestID}}
+<script src="{{.QuorumURL}}/assets/embed.js"></script>
+<script>
+    document.querySelector('quorum-approval-panel')?.addEventListener('quorum:approved', function() {
+        setTimeout(function() { window.location.reload(); }, 1000);
+    });
+    document.querySelector('quorum-approval-panel')?.addEventListener('quorum:rejected', function() {
+        setTimeout(function() { window.location.reload(); }, 1000);
+    });
+</script>
+{{end}}
 {{end}}

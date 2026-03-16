@@ -68,62 +68,27 @@
         {% endif %}
     </div>
 
-    <!-- Approval voting progress -->
-    <div class="bg-white shadow ring-1 ring-black ring-opacity-5 rounded-lg p-6 mb-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Security Review</h2>
-        <p class="text-sm text-gray-500 mb-4">Requires 2 of 3 security reviewers to approve (threshold-based voting).</p>
-
-        {% if quorum_data and quorum_data.approvals %}
-        <div class="space-y-3">
-            {% for approval in quorum_data.approvals %}
-            <div class="flex items-center space-x-3 p-3 rounded-lg {{ 'bg-green-50' if approval.decision == 'approved' else 'bg-red-50' }}">
-                {% if approval.decision == 'approved' %}
-                <div class="flex-shrink-0 h-8 w-8 rounded-full bg-green-200 flex items-center justify-center">
-                    <svg class="h-4 w-4 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-green-800">{{ approval.checker_id }} approved</p>
-                    {% if approval.comment %}
-                    <p class="text-xs text-green-600 mt-0.5">"{{ approval.comment }}"</p>
-                    {% endif %}
-                </div>
-                {% else %}
-                <div class="flex-shrink-0 h-8 w-8 rounded-full bg-red-200 flex items-center justify-center">
-                    <svg class="h-4 w-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </div>
-                <div>
-                    <p class="text-sm font-medium text-red-800">{{ approval.checker_id }} rejected</p>
-                    {% if approval.comment %}
-                    <p class="text-xs text-red-600 mt-0.5">"{{ approval.comment }}"</p>
-                    {% endif %}
-                </div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
-        {% elif access_req.status == 'pending' %}
-        <div class="text-center py-8 text-gray-500">
-            <svg class="mx-auto h-10 w-10 text-gray-300 animate-pulse" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-            <p class="mt-3 text-sm">Waiting for security team to review...</p>
-            <p class="text-xs text-gray-400 mt-1">Security reviewers can approve or reject in the Quorum console.</p>
-        </div>
-        {% endif %}
+    <!-- Quorum Approval Widget -->
+    {% if access_req.quorum_request_id %}
+    <div class="mb-6">
+        <quorum-approval-panel
+            request-id="{{ access_req.quorum_request_id }}"
+            api-url="{{ quorum_url }}"
+            tenant-id="access-portal"
+            auth-headers='{"X-User-Id": "{{ access_req.requester }}"}'
+            poll-interval="5000">
+        </quorum-approval-panel>
     </div>
 
-    {% if access_req.status == 'pending' %}
-    <div class="text-center">
-        <p class="text-xs text-gray-400">This page fetches the latest status from Quorum on each load.</p>
-        <button onclick="window.location.reload()"
-            class="mt-2 text-sm text-blue-600 hover:text-blue-700 font-medium">
-            Refresh Status
-        </button>
-    </div>
+    <script src="{{ quorum_url }}/assets/embed.js"></script>
+    <script>
+        document.querySelector('quorum-approval-panel')?.addEventListener('quorum:approved', function() {
+            setTimeout(function() { window.location.reload(); }, 1000);
+        });
+        document.querySelector('quorum-approval-panel')?.addEventListener('quorum:rejected', function() {
+            setTimeout(function() { window.location.reload(); }, 1000);
+        });
+    </script>
     {% endif %}
 </div>
 {% endblock %}

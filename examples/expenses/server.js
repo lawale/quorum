@@ -1,6 +1,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
+const { Pool } = require("pg");
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -8,29 +9,124 @@ const path = require("path");
 const QUORUM_API_URL = process.env.QUORUM_API_URL || "http://localhost:8080";
 const SELF_URL = process.env.SELF_URL || "http://localhost:3002";
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "expenses-webhook-secret";
+const DATABASE_URL = process.env.DATABASE_URL || "postgres://quorum:quorum@localhost:5432/quorum";
 const PORT = parseInt(process.env.PORT, 10) || 3002;
 
 // ---------------------------------------------------------------------------
-// In-memory expense store
+// PostgreSQL expense store
 // ---------------------------------------------------------------------------
-const expenses = new Map();
+const pool = new Pool({ connectionString: DATABASE_URL });
 
-function createExpense({ employeeName, amount, category, description }) {
+async function initDB() {
+  const ddl = `
+    CREATE TABLE IF NOT EXISTS expenses (
+      id                TEXT PRIMARY KEY,
+      employee_name     TEXT NOT NULL,
+      amount            NUMERIC(12,2) NOT NULL,
+      category          TEXT NOT NULL,
+      description       TEXT,
+      status            TEXT NOT NULL DEFAULT 'pending',
+      quorum_request_id TEXT,
+      approvals         JSONB NOT NULL DEFAULT '[]',
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `;
+  await pool.query(ddl);
+  console.log("[db] Schema and tables initialized");
+}
+
+async function createExpense({ employeeName, amount, category, description }) {
   const id = crypto.randomUUID();
-  const expense = {
+  const now = new Date().toISOString();
+  const parsedAmount = parseFloat(amount);
+
+  await pool.query(
+    `INSERT INTO expenses (id, employee_name, amount, category, description, status, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, 'pending', $6, $6)`,
+    [id, employeeName, parsedAmount, category, description || null, now]
+  );
+
+  return {
     id,
     employeeName,
-    amount: parseFloat(amount),
+    amount: parsedAmount,
     category,
     description,
     status: "pending",
     quorumRequestId: null,
     approvals: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   };
-  expenses.set(id, expense);
-  return expense;
+}
+
+async function getExpenseById(id) {
+  const { rows } = await pool.query(
+    `SELECT id, employee_name, amount, category, description, status, quorum_request_id, approvals, created_at, updated_at
+     FROM expenses WHERE id = $1`,
+    [id]
+  );
+  return rows.length ? toExpenseObj(rows[0]) : null;
+}
+
+async function getExpenseByQuorumId(quorumId) {
+  const { rows } = await pool.query(
+    `SELECT id, employee_name, amount, category, description, status, quorum_request_id, approvals, created_at, updated_at
+     FROM expenses WHERE quorum_request_id = $1`,
+    [quorumId]
+  );
+  return rows.length ? toExpenseObj(rows[0]) : null;
+}
+
+async function listExpenses() {
+  const { rows } = await pool.query(
+    `SELECT id, employee_name, amount, category, description, status, quorum_request_id, approvals, created_at, updated_at
+     FROM expenses ORDER BY created_at DESC`
+  );
+  return rows.map(toExpenseObj);
+}
+
+async function updateExpense(id, fields) {
+  const sets = [];
+  const values = [];
+  let i = 1;
+
+  if (fields.status !== undefined) {
+    sets.push(`status = $${i++}`);
+    values.push(fields.status);
+  }
+  if (fields.quorumRequestId !== undefined) {
+    sets.push(`quorum_request_id = $${i++}`);
+    values.push(fields.quorumRequestId);
+  }
+  if (fields.approvals !== undefined) {
+    sets.push(`approvals = $${i++}`);
+    values.push(JSON.stringify(fields.approvals));
+  }
+  sets.push(`updated_at = $${i++}`);
+  values.push(new Date().toISOString());
+
+  values.push(id);
+  await pool.query(
+    `UPDATE expenses SET ${sets.join(", ")} WHERE id = $${i}`,
+    values
+  );
+}
+
+function toExpenseObj(row) {
+  return {
+    id: row.id,
+    employeeName: row.employee_name,
+    amount: parseFloat(row.amount),
+    category: row.category,
+    description: row.description,
+    status: row.status,
+    quorumRequestId: row.quorum_request_id,
+    approvals: row.approvals || [],
+    createdAt: row.created_at?.toISOString?.() || row.created_at,
+    updatedAt: row.updated_at?.toISOString?.() || row.updated_at,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +233,6 @@ function verifySignature(rawBody, signature) {
 // ---------------------------------------------------------------------------
 const app = express();
 
-// Parse JSON with raw body capture for webhook signature verification
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -147,7 +242,6 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
-// View engine
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
@@ -155,11 +249,9 @@ app.set("views", path.join(__dirname, "views"));
 // Routes
 // ---------------------------------------------------------------------------
 
-// Dashboard - list all expenses
-app.get("/", (_req, res) => {
-  const allExpenses = Array.from(expenses.values()).sort(
-    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-  );
+// Dashboard
+app.get("/", async (_req, res) => {
+  const allExpenses = await listExpenses();
   res.render("dashboard", { expenses: allExpenses });
 });
 
@@ -168,11 +260,10 @@ app.get("/expense/new", (_req, res) => {
   res.render("new_expense", { error: null });
 });
 
-// Create expense and submit to Quorum
+// Create expense via form
 app.post("/expense/new", async (req, res) => {
   const { employeeName, amount, category, description } = req.body;
 
-  // Basic validation
   if (!employeeName || !amount || !category) {
     return res.render("new_expense", {
       error: "Employee name, amount, and category are required.",
@@ -186,50 +277,74 @@ app.post("/expense/new", async (req, res) => {
     });
   }
 
-  const expense = createExpense({ employeeName, amount, category, description });
+  const expense = await createExpense({ employeeName, amount, category, description });
 
-  // Submit to Quorum for approval
   try {
     const result = await submitRequest(expense, employeeName.toLowerCase().replace(/\s+/g, "."));
     if (result.status === 201 && result.data) {
+      await updateExpense(expense.id, { quorumRequestId: result.data.id });
       expense.quorumRequestId = result.data.id;
-      expense.updatedAt = new Date().toISOString();
       console.log(`[expense] Created expense ${expense.id}, Quorum request: ${result.data.id}`);
     } else {
       console.error(`[expense] Failed to submit to Quorum: ${result.status}`, result.raw);
-      expense.status = "error";
-      expense.updatedAt = new Date().toISOString();
+      await updateExpense(expense.id, { status: "error" });
     }
   } catch (err) {
     console.error("[expense] Error submitting to Quorum:", err.message);
-    expense.status = "error";
-    expense.updatedAt = new Date().toISOString();
+    await updateExpense(expense.id, { status: "error" });
   }
 
   res.redirect(`/expense/${expense.id}`);
 });
 
-// Expense detail - polls Quorum for latest status
+// Create expense via JSON API (used by seed script)
+app.post("/api/expenses", async (req, res) => {
+  const { employeeName, amount, category, description } = req.body;
+
+  if (!employeeName || !amount || !category) {
+    return res.status(400).json({ error: "employeeName, amount, and category are required" });
+  }
+
+  const expense = await createExpense({ employeeName, amount, category, description });
+
+  try {
+    const result = await submitRequest(expense, employeeName.toLowerCase().replace(/\s+/g, "."));
+    if (result.status === 201 && result.data) {
+      await updateExpense(expense.id, { quorumRequestId: result.data.id });
+      expense.quorumRequestId = result.data.id;
+      console.log(`[expense] Created expense ${expense.id}, Quorum request: ${result.data.id}`);
+    } else {
+      console.error(`[expense] Failed to submit to Quorum: ${result.status}`, result.raw);
+      await updateExpense(expense.id, { status: "error" });
+    }
+  } catch (err) {
+    console.error("[expense] Error submitting to Quorum:", err.message);
+    await updateExpense(expense.id, { status: "error" });
+  }
+
+  res.status(201).json(expense);
+});
+
+// Expense detail
 app.get("/expense/:id", async (req, res) => {
-  const expense = expenses.get(req.params.id);
+  const expense = await getExpenseById(req.params.id);
   if (!expense) {
     return res.status(404).send("Expense not found");
   }
 
   let quorumRequest = null;
 
-  // Poll Quorum for latest status if we have a request ID
   if (expense.quorumRequestId) {
     try {
       const result = await getRequest(expense.quorumRequestId);
       if (result.status === 200 && result.data) {
         quorumRequest = result.data;
-        // Sync status from Quorum
         if (result.data.status !== expense.status) {
+          await updateExpense(expense.id, { status: result.data.status });
           expense.status = result.data.status;
-          expense.updatedAt = new Date().toISOString();
         }
         if (result.data.approvals) {
+          await updateExpense(expense.id, { approvals: result.data.approvals });
           expense.approvals = result.data.approvals;
         }
       }
@@ -238,16 +353,15 @@ app.get("/expense/:id", async (req, res) => {
     }
   }
 
-  res.render("detail", { expense, quorumRequest });
+  res.render("detail", { expense, quorumRequest, quorumUrl: QUORUM_API_URL });
 });
 
 // ---------------------------------------------------------------------------
-// Webhook endpoint - receives callbacks from Quorum
+// Webhook endpoint
 // ---------------------------------------------------------------------------
-app.post("/webhooks/quorum", (req, res) => {
+app.post("/webhooks/quorum", async (req, res) => {
   const signature = req.headers["x-signature-256"];
 
-  // Verify HMAC-SHA256 signature
   if (WEBHOOK_SECRET && req.rawBody) {
     if (!verifySignature(req.rawBody, signature)) {
       console.warn("[webhook] Invalid signature, rejecting");
@@ -262,27 +376,20 @@ app.post("/webhooks/quorum", (req, res) => {
     return res.status(400).json({ error: "missing request data" });
   }
 
-  // Find local expense by Quorum request ID
-  let matchedExpense = null;
-  for (const expense of expenses.values()) {
-    if (expense.quorumRequestId === quorumReq.id) {
-      matchedExpense = expense;
-      break;
-    }
-  }
+  let matchedExpense = await getExpenseByQuorumId(quorumReq.id);
 
   if (!matchedExpense) {
-    // Could also match via payload.expense_id if available
     const payloadExpenseId = quorumReq.payload?.expense_id;
     if (payloadExpenseId) {
-      matchedExpense = expenses.get(payloadExpenseId);
+      matchedExpense = await getExpenseById(payloadExpenseId);
     }
   }
 
   if (matchedExpense) {
-    matchedExpense.status = event; // "approved" | "rejected"
-    matchedExpense.approvals = approvals || [];
-    matchedExpense.updatedAt = new Date().toISOString();
+    await updateExpense(matchedExpense.id, {
+      status: event,
+      approvals: approvals || [],
+    });
     console.log(`[webhook] Updated expense ${matchedExpense.id} -> ${event}`);
   } else {
     console.warn(`[webhook] No matching expense found for Quorum request ${quorumReq.id}`);
@@ -294,17 +401,25 @@ app.post("/webhooks/quorum", (req, res) => {
 // ---------------------------------------------------------------------------
 // Startup
 // ---------------------------------------------------------------------------
-app.listen(PORT, async () => {
-  console.log(`Expense Tracker running at http://localhost:${PORT}`);
-  console.log(`Quorum API: ${QUORUM_API_URL}`);
-  console.log(`Webhook callback: ${SELF_URL}/webhooks/quorum`);
-  console.log();
-
-  // Register policy on startup (idempotent)
+(async () => {
   try {
-    await registerPolicy();
+    await initDB();
   } catch (err) {
-    console.error("[startup] Could not reach Quorum API:", err.message);
-    console.error("[startup] Make sure Quorum is running. The app will still work for viewing.");
+    console.error("[startup] Failed to initialize database:", err.message);
+    process.exit(1);
   }
-});
+
+  app.listen(PORT, async () => {
+    console.log(`Expense Tracker running at http://localhost:${PORT}`);
+    console.log(`Quorum API: ${QUORUM_API_URL}`);
+    console.log(`Webhook callback: ${SELF_URL}/webhooks/quorum`);
+    console.log();
+
+    try {
+      await registerPolicy();
+    } catch (err) {
+      console.error("[startup] Could not reach Quorum API:", err.message);
+      console.error("[startup] Make sure Quorum is running. The app will still work for viewing.");
+    }
+  });
+})();

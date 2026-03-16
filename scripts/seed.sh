@@ -2,11 +2,18 @@
 set -eu
 
 # Quorum seed script — creates tenants, policies, requests, and approvals.
+# Requests are created through the sample app APIs so they appear in both
+# the app dashboards AND Quorum.
+#
 # Usage: QUORUM_API_URL=http://localhost:8080 sh scripts/seed.sh
 
 API_URL="${QUORUM_API_URL:-http://localhost:8080}"
 CONSOLE_API="${API_URL}/api/v1/console"
 API="${API_URL}/api/v1"
+
+BANKING_URL="${BANKING_URL:-http://banking:3001}"
+EXPENSES_URL="${EXPENSES_URL:-http://expenses:3002}"
+ACCESS_PORTAL_URL="${ACCESS_PORTAL_URL:-http://access-portal:3003}"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -29,21 +36,43 @@ until curl -sf "${API_URL}/health" > /dev/null 2>&1; do
 done
 log "Server is ready"
 
+# ---- Wait for sample apps ----
+section "Waiting for sample apps"
+
+wait_for_app() {
+  local url="$1" name="$2" attempts=0
+  until curl -sf "${url}/" > /dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 30 ]; then
+      printf "  %s not ready after 60s, skipping.\n" "$name"
+      return 1
+    fi
+    printf "  Waiting for %s...\n" "$name"
+    sleep 2
+  done
+  log "$name is ready"
+  return 0
+}
+
+wait_for_app "$BANKING_URL" "Banking"
+wait_for_app "$EXPENSES_URL" "Expenses"
+wait_for_app "$ACCESS_PORTAL_URL" "Access Portal"
+
 # ---- Console admin setup ----
 section "Console Admin Setup"
-NEEDS_SETUP=$(curl -sf "${CONSOLE_API}/auth/status" | sed -n 's/.*"needs_setup":\([a-z]*\).*/\1/p')
+NEEDS_SETUP=$(curl -sf "${CONSOLE_API}/auth/status" | sed -n 's/.*"needs_setup": *\([a-z]*\).*/\1/p')
 if [ "$NEEDS_SETUP" = "true" ]; then
   SETUP_RESP=$(curl -sf -X POST "${CONSOLE_API}/auth/setup" \
     -H "Content-Type: application/json" \
     -d '{"username":"admin","password":"admin123","display_name":"Demo Admin"}')
-  JWT=$(echo "$SETUP_RESP" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+  JWT=$(echo "$SETUP_RESP" | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p')
   log "Created admin operator (admin / admin123)"
 else
   log "Admin already exists, logging in"
   LOGIN_RESP=$(curl -sf -X POST "${CONSOLE_API}/auth/login" \
     -H "Content-Type: application/json" \
     -d '{"username":"admin","password":"admin123"}')
-  JWT=$(echo "$LOGIN_RESP" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+  JWT=$(echo "$LOGIN_RESP" | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p')
 fi
 
 if [ -z "${JWT:-}" ]; then
@@ -99,7 +128,7 @@ curl -sf -X POST "${API}/policies" \
         {"label": "Description", "path": "description"}
       ]
     }
-  }' > /dev/null
+  }' > /dev/null 2>&1 || log "  (already exists)"
 
 log "Creating policy: Wire Transfer (tenant: banking)"
 curl -sf -X POST "${API}/policies" \
@@ -135,7 +164,7 @@ curl -sf -X POST "${API}/policies" \
         {"label": "Destination", "path": "destination"}
       ]
     }
-  }' > /dev/null
+  }' > /dev/null 2>&1 || log "  (already exists)"
 
 log "Creating policy: System Access Request (tenant: access-portal)"
 curl -sf -X POST "${API}/policies" \
@@ -162,7 +191,7 @@ curl -sf -X POST "${API}/policies" \
         {"label": "Justification", "path": "justification"}
       ]
     }
-  }' > /dev/null
+  }' > /dev/null 2>&1 || log "  (already exists)"
 
 log "Creating policy: Account Closure (tenant: banking)"
 curl -sf -X POST "${API}/policies" \
@@ -196,74 +225,96 @@ curl -sf -X POST "${API}/policies" \
         {"label": "Reason", "path": "reason"}
       ]
     }
-  }' > /dev/null
+  }' > /dev/null 2>&1 || log "  (already exists)"
 
-# ---- Requests ----
-section "Creating Requests"
+# ---- Webhooks (before requests so approval callbacks work) ----
+section "Creating Webhooks"
 
-log "Creating request: Expense by alice (tenant: expenses)"
-EXPENSE_ID=$(curl -sf -X POST "${API}/requests" \
+log "Registering webhook for banking tenant"
+curl -sf -X POST "${API}/webhooks" \
   -H "Content-Type: application/json" \
-  -H "X-User-ID: alice" \
-  -H "X-Tenant-ID: expenses" \
-  -d '{
-    "type": "expense_approval",
-    "payload": {
-      "employee_name": "Alice Johnson",
-      "amount": 1250.00,
-      "category": "Travel",
-      "description": "Client visit to NYC - flights and hotel"
-    }
-  }' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
-log "  -> ${EXPENSE_ID}"
-
-log "Creating request: Wire transfer by bob (tenant: banking)"
-WIRE_ID=$(curl -sf -X POST "${API}/requests" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: bob" \
+  -H "X-User-ID: seed-admin" \
   -H "X-Tenant-ID: banking" \
   -d '{
-    "type": "wire_transfer",
-    "payload": {
-      "source_account_id": "ACC-001",
-      "amount": 50000,
-      "destination": "IBAN-DE89370400440532013000"
-    }
-  }' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
-log "  -> ${WIRE_ID}"
+    "url": "http://banking:3001/webhooks/quorum",
+    "events": ["approved", "rejected"],
+    "secret": "banking-webhook-secret"
+  }' > /dev/null 2>&1 || log "  (already exists or error)"
 
-log "Creating request: Access request by charlie (tenant: access-portal)"
-ACCESS_ID=$(curl -sf -X POST "${API}/requests" \
+log "Registering webhook for expenses tenant"
+curl -sf -X POST "${API}/webhooks" \
   -H "Content-Type: application/json" \
-  -H "X-User-ID: charlie" \
-  -H "X-Tenant-ID: access-portal" \
-  -d '{
-    "type": "access_request",
-    "payload": {
-      "system_name": "Production Database",
-      "access_level": "read-write",
-      "justification": "Need to run quarterly data migration"
-    }
-  }' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
-log "  -> ${ACCESS_ID}"
-
-log "Creating request: Expense by dave (tenant: expenses)"
-EXPENSE2_ID=$(curl -sf -X POST "${API}/requests" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: dave" \
+  -H "X-User-ID: seed-admin" \
   -H "X-Tenant-ID: expenses" \
   -d '{
-    "type": "expense_approval",
-    "payload": {
-      "employee_name": "Dave Kim",
-      "amount": 89.99,
-      "category": "Software",
-      "description": "Annual IDE license renewal"
-    }
-  }' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
-log "  -> ${EXPENSE2_ID}"
+    "url": "http://expenses:3002/webhooks/quorum",
+    "events": ["approved", "rejected"],
+    "secret": "expenses-webhook-secret"
+  }' > /dev/null 2>&1 || log "  (already exists or error)"
 
-log "Creating request: Account closure by eve (tenant: banking)"
+log "Registering webhook for access-portal tenant"
+curl -sf -X POST "${API}/webhooks" \
+  -H "Content-Type: application/json" \
+  -H "X-User-ID: seed-admin" \
+  -H "X-Tenant-ID: access-portal" \
+  -d '{
+    "url": "http://access-portal:3003/webhooks/quorum",
+    "events": ["approved", "rejected"],
+    "secret": "access-webhook-secret"
+  }' > /dev/null 2>&1 || log "  (already exists or error)"
+
+# ---- Requests (via sample app APIs) ----
+section "Creating Requests (via sample apps)"
+
+log "Creating expense via Expenses app (alice)"
+EXPENSE_RESP=$(curl -sf -X POST "${EXPENSES_URL}/api/expenses" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "employeeName": "Alice Johnson",
+    "amount": 1250.00,
+    "category": "Travel",
+    "description": "Client visit to NYC - flights and hotel"
+  }')
+EXPENSE_QID=$(echo "$EXPENSE_RESP" | sed -n 's/.*"quorumRequestId": *"\([^"]*\)".*/\1/p')
+log "  -> Quorum ID: ${EXPENSE_QID:-unknown}"
+
+log "Creating wire transfer via Banking app (bob)"
+WIRE_RESP=$(curl -sf -X POST "${BANKING_URL}/api/transfers" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from_user": "bob",
+    "source_account": "ACC-001",
+    "amount": "50000",
+    "destination": "IBAN-DE89370400440532013000"
+  }')
+WIRE_QID=$(echo "$WIRE_RESP" | sed -n 's/.*"quorum_request_id": *"\([^"]*\)".*/\1/p')
+log "  -> Quorum ID: ${WIRE_QID:-unknown}"
+
+log "Creating access request via Access Portal (charlie)"
+ACCESS_RESP=$(curl -sf -X POST "${ACCESS_PORTAL_URL}/api/requests" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requester": "charlie",
+    "system_name": "Production Database",
+    "access_level": "read-write",
+    "justification": "Need to run quarterly data migration"
+  }')
+ACCESS_QID=$(echo "$ACCESS_RESP" | sed -n 's/.*"quorum_request_id": *"\([^"]*\)".*/\1/p')
+log "  -> Quorum ID: ${ACCESS_QID:-unknown}"
+
+log "Creating expense via Expenses app (dave)"
+EXPENSE2_RESP=$(curl -sf -X POST "${EXPENSES_URL}/api/expenses" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "employeeName": "Dave Kim",
+    "amount": 89.99,
+    "category": "Software",
+    "description": "Annual IDE license renewal"
+  }')
+EXPENSE2_QID=$(echo "$EXPENSE2_RESP" | sed -n 's/.*"quorumRequestId": *"\([^"]*\)".*/\1/p')
+log "  -> Quorum ID: ${EXPENSE2_QID:-unknown}"
+
+log "Creating account closure via Quorum API (eve, tenant: banking)"
 CLOSURE_ID=$(curl -sf -X POST "${API}/requests" \
   -H "Content-Type: application/json" \
   -H "X-User-ID: eve" \
@@ -275,84 +326,62 @@ CLOSURE_ID=$(curl -sf -X POST "${API}/requests" \
       "customer_name": "Acme Corp",
       "reason": "Company dissolved"
     }
-  }' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+  }' | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p')
 log "  -> ${CLOSURE_ID}"
 
-log "Creating request: Wire transfer by frank (tenant: banking)"
-WIRE2_ID=$(curl -sf -X POST "${API}/requests" \
+log "Creating wire transfer via Banking app (frank)"
+WIRE2_RESP=$(curl -sf -X POST "${BANKING_URL}/api/transfers" \
   -H "Content-Type: application/json" \
-  -H "X-User-ID: frank" \
-  -H "X-Tenant-ID: banking" \
   -d '{
-    "type": "wire_transfer",
-    "payload": {
-      "source_account_id": "ACC-007",
-      "amount": 15000,
-      "destination": "IBAN-GB29NWBK60161331926819"
-    }
-  }' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
-log "  -> ${WIRE2_ID}"
+    "from_user": "frank",
+    "source_account": "ACC-007",
+    "amount": "15000",
+    "destination": "IBAN-GB29NWBK60161331926819"
+  }')
+WIRE2_QID=$(echo "$WIRE2_RESP" | sed -n 's/.*"quorum_request_id": *"\([^"]*\)".*/\1/p')
+log "  -> Quorum ID: ${WIRE2_QID:-unknown}"
 
 # ---- Approve some requests ----
 section "Approving Some Requests"
 
-log "Approving expense by alice (single-stage -> approved)"
-curl -sf -X POST "${API}/requests/${EXPENSE_ID}/approve" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: manager-maria" \
-  -H "X-User-Roles: manager" \
-  -H "X-Tenant-ID: expenses" \
-  -d '{"comment": "Approved - within travel budget"}' > /dev/null
+if [ -n "${EXPENSE_QID:-}" ]; then
+  log "Approving expense by alice (single-stage -> approved)"
+  curl -sf -X POST "${API}/requests/${EXPENSE_QID}/approve" \
+    -H "Content-Type: application/json" \
+    -H "X-User-ID: manager-maria" \
+    -H "X-User-Roles: manager" \
+    -H "X-Tenant-ID: expenses" \
+    -d '{"comment": "Approved - within travel budget"}' > /dev/null
+fi
 
-log "Approving wire transfer stage 1 (advances to compliance review)"
-curl -sf -X POST "${API}/requests/${WIRE_ID}/approve" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: manager-maria" \
-  -H "X-User-Roles: manager" \
-  -H "X-Tenant-ID: banking" \
-  -d '{"comment": "Manager approved"}' > /dev/null
+if [ -n "${WIRE_QID:-}" ]; then
+  log "Approving wire transfer stage 1 (advances to compliance review)"
+  curl -sf -X POST "${API}/requests/${WIRE_QID}/approve" \
+    -H "Content-Type: application/json" \
+    -H "X-User-ID: manager-maria" \
+    -H "X-User-Roles: manager" \
+    -H "X-Tenant-ID: banking" \
+    -d '{"comment": "Manager approved"}' > /dev/null
+fi
 
-log "Approving expense by dave (single-stage -> approved)"
-curl -sf -X POST "${API}/requests/${EXPENSE2_ID}/approve" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: finance-fay" \
-  -H "X-User-Roles: finance" \
-  -H "X-Tenant-ID: expenses" \
-  -d '{"comment": "Small amount, auto-approved"}' > /dev/null
-
-# ---- Webhook ----
-section "Creating Webhooks"
-
-log "Registering webhook for banking tenant"
-curl -sf -X POST "${API}/webhooks" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: seed-admin" \
-  -H "X-Tenant-ID: banking" \
-  -d '{
-    "url": "https://httpbin.org/post",
-    "events": ["approved", "rejected"],
-    "secret": "demo-webhook-secret-change-me"
-  }' > /dev/null
-
-log "Registering webhook for expenses tenant"
-curl -sf -X POST "${API}/webhooks" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: seed-admin" \
-  -H "X-Tenant-ID: expenses" \
-  -d '{
-    "url": "https://httpbin.org/post",
-    "events": ["approved", "rejected"],
-    "secret": "demo-webhook-secret-change-me"
-  }' > /dev/null
+if [ -n "${EXPENSE2_QID:-}" ]; then
+  log "Approving expense by dave (single-stage -> approved)"
+  curl -sf -X POST "${API}/requests/${EXPENSE2_QID}/approve" \
+    -H "Content-Type: application/json" \
+    -H "X-User-ID: finance-fay" \
+    -H "X-User-Roles: finance" \
+    -H "X-Tenant-ID: expenses" \
+    -d '{"comment": "Small amount, auto-approved"}' > /dev/null
+fi
 
 # ---- Summary ----
 section "Seed Complete"
 log "Tenants:   3 created (banking, expenses, access-portal) + default"
 log "Policies:  4 created across tenants"
-log "Requests:  6 created (2 approved, 4 pending at various stages)"
-log "Webhooks:  2 registered (httpbin.org for banking + expenses)"
+log "Requests:  6 created via sample app APIs (2 approved, 4 pending)"
+log "Webhooks:  3 registered (banking, expenses, access-portal)"
 log ""
 log "Console:   ${API_URL}/console/  (admin / admin123)"
-log "API:       ${API_URL}/api/v1/"
-log ""
-log "Try: curl -H 'X-User-ID: alice' -H 'X-Tenant-ID: expenses' ${API_URL}/api/v1/requests"
+log "Banking:   ${BANKING_URL}"
+log "Expenses:  ${EXPENSES_URL}"
+log "Portal:    ${ACCESS_PORTAL_URL}"
