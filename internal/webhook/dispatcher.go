@@ -314,7 +314,11 @@ func (d *Dispatcher) computeBackoff(attempts int) time.Duration {
 }
 
 func (d *Dispatcher) auditWebhook(ctx context.Context, requestID uuid.UUID, action string, url string) {
-	details, _ := json.Marshal(map[string]string{"url": url})
+	details, err := json.Marshal(map[string]string{"url": url})
+	if err != nil {
+		slog.Error("failed to marshal webhook audit details", "error", err)
+		return
+	}
 	log := &model.AuditLog{
 		RequestID: requestID,
 		Action:    action,

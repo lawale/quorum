@@ -44,7 +44,11 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 
 	var eligibleJSON []byte
 	if len(req.EligibleReviewers) > 0 {
-		eligibleJSON, _ = json.Marshal(req.EligibleReviewers)
+		var err error
+		eligibleJSON, err = json.Marshal(req.EligibleReviewers)
+		if err != nil {
+			return fmt.Errorf("marshaling eligible reviewers: %w", err)
+		}
 	}
 
 	_, err := s.db.Pool.Exec(ctx, query,

@@ -2,11 +2,12 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/lawale/quorum/internal/model"
 )
 
@@ -120,7 +121,7 @@ func (s *OperatorStore) scanOne(ctx context.Context, query string, args ...any) 
 		&op.MustChangePassword, &op.CreatedAt, &op.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows || err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("querying operator: %w", err)

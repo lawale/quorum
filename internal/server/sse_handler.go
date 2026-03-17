@@ -55,10 +55,14 @@ func (h *SSEHandler) Events(w http.ResponseWriter, r *http.Request) {
 
 	// If the request is already terminal, send a single status event and close.
 	if req.Status.IsTerminal() {
-		data, _ := json.Marshal(map[string]string{
+		data, err := json.Marshal(map[string]string{
 			"request_id": id.String(),
 			"status":     string(req.Status),
 		})
+		if err != nil {
+			writeServerError(w, r, err, "failed to marshal SSE status event")
+			return
+		}
 		fmt.Fprintf(w, "event: status\ndata: %s\n\n", data)
 		if f, ok := w.(http.Flusher); ok {
 			f.Flush()
@@ -89,10 +93,15 @@ func (h *SSEHandler) Events(w http.ResponseWriter, r *http.Request) {
 
 		case <-sub.C():
 			// State change — send an update event.
-			_ = rc.SetWriteDeadline(time.Now().Add(sseKeepaliveInterval + 15*time.Second))
-			data, _ := json.Marshal(map[string]string{
+			if err := rc.SetWriteDeadline(time.Now().Add(sseKeepaliveInterval + 15*time.Second)); err != nil {
+				return
+			}
+			data, err := json.Marshal(map[string]string{
 				"request_id": id.String(),
 			})
+			if err != nil {
+				return
+			}
 			if _, err := fmt.Fprintf(w, "event: updated\ndata: %s\n\n", data); err != nil {
 				return
 			}
@@ -102,7 +111,9 @@ func (h *SSEHandler) Events(w http.ResponseWriter, r *http.Request) {
 
 		case <-keepalive.C:
 			// Keep the connection alive through proxies.
-			_ = rc.SetWriteDeadline(time.Now().Add(sseKeepaliveInterval + 15*time.Second))
+			if err := rc.SetWriteDeadline(time.Now().Add(sseKeepaliveInterval + 15*time.Second)); err != nil {
+				return
+			}
 			if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
 				return
 			}

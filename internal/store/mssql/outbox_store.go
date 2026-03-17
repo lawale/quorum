@@ -3,6 +3,7 @@ package mssql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -242,6 +243,9 @@ func (s *OutboxStore) GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxE
 		&e.Attempts, &e.MaxRetries, &lastError, &e.NextRetryAt, &e.CreatedAt, &e.DeliveredAt,
 	)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("getting outbox entry: %w", err)
 	}
 	if payload.Valid {
@@ -259,7 +263,10 @@ func (s *OutboxStore) ResetForRetry(ctx context.Context, id uuid.UUID) error {
 	if err != nil {
 		return fmt.Errorf("resetting outbox entry for retry: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("checking rows affected: %w", err)
+	}
 	if rows == 0 {
 		return fmt.Errorf("entry not found or not in failed status")
 	}

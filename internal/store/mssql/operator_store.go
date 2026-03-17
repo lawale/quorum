@@ -3,6 +3,7 @@ package mssql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -120,7 +121,7 @@ func (s *OperatorStore) scanOne(ctx context.Context, query string, args ...any) 
 		&op.MustChangePassword, &op.CreatedAt, &op.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("querying operator: %w", err)

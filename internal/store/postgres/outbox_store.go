@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
@@ -232,6 +234,9 @@ func (s *OutboxStore) GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxE
 		&e.Attempts, &e.MaxRetries, &e.LastError, &e.NextRetryAt, &e.CreatedAt, &e.DeliveredAt,
 	)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("getting outbox entry: %w", err)
 	}
 	return &e, nil

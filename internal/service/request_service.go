@@ -418,7 +418,10 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		} else if newStage != nil {
 			fromStage := req.CurrentStage
 			req.CurrentStage = *newStage
-			stageDetails, _ := json.Marshal(map[string]int{"from_stage": fromStage, "to_stage": *newStage})
+			stageDetails, err := json.Marshal(map[string]int{"from_stage": fromStage, "to_stage": *newStage})
+			if err != nil {
+				slog.WarnContext(ctx, "failed to marshal stage details for audit", "error", err)
+			}
 			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
 			if s.signalSSE != nil {
 				s.signalSSE(requestID)
@@ -478,7 +481,10 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 				return nil, err
 			}
 			req.CurrentStage = *newStage
-			stageDetails, _ := json.Marshal(map[string]int{"from_stage": fromStage, "to_stage": *newStage})
+			stageDetails, err := json.Marshal(map[string]int{"from_stage": fromStage, "to_stage": *newStage})
+			if err != nil {
+				slog.WarnContext(ctx, "failed to marshal stage details for audit", "error", err)
+			}
 			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
 		}
 	}
@@ -717,6 +723,7 @@ func resolveDisplayTemplate(req *model.Request, policy *model.Policy) {
 
 	merged, err := json.Marshal(meta)
 	if err != nil {
+		slog.Warn("failed to marshal display metadata", "error", err)
 		return
 	}
 	req.Metadata = merged
