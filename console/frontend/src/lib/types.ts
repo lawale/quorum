@@ -36,6 +36,7 @@ export interface Policy {
   stages: ApprovalStage[];
   identity_fields?: string[];
   dynamic_authorization_url?: string;
+  dynamic_authorization_secret?: string;
   auto_expire_duration?: string;
   display_template?: Record<string, unknown>;
   created_at: string;

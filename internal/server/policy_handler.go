@@ -32,13 +32,14 @@ type stageBody struct {
 }
 
 type createPolicyBody struct {
-	Name                    string          `json:"name"`
-	RequestType             string          `json:"request_type"`
-	Stages                  []stageBody     `json:"stages"`
-	IdentityFields          []string        `json:"identity_fields,omitempty"`
-	DynamicAuthorizationURL *string         `json:"dynamic_authorization_url,omitempty"`
-	AutoExpireDuration      string          `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate         json.RawMessage `json:"display_template,omitempty"`
+	Name                       string          `json:"name"`
+	RequestType                string          `json:"request_type"`
+	Stages                     []stageBody     `json:"stages"`
+	IdentityFields             []string        `json:"identity_fields,omitempty"`
+	DynamicAuthorizationURL    *string         `json:"dynamic_authorization_url,omitempty"`
+	DynamicAuthorizationSecret *string         `json:"dynamic_authorization_secret,omitempty"`
+	AutoExpireDuration         string          `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
 }
 
 func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -76,12 +77,13 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	policy := &model.Policy{
-		Name:                    body.Name,
-		RequestType:             body.RequestType,
-		Stages:                  stages,
-		IdentityFields:          body.IdentityFields,
-		DynamicAuthorizationURL: body.DynamicAuthorizationURL,
-		DisplayTemplate:         body.DisplayTemplate,
+		Name:                       body.Name,
+		RequestType:                body.RequestType,
+		Stages:                     stages,
+		IdentityFields:             body.IdentityFields,
+		DynamicAuthorizationURL:    body.DynamicAuthorizationURL,
+		DynamicAuthorizationSecret: body.DynamicAuthorizationSecret,
+		DisplayTemplate:            body.DisplayTemplate,
 	}
 
 	if body.AutoExpireDuration != "" {
@@ -140,12 +142,13 @@ func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 type updatePolicyBody struct {
-	Name                    string          `json:"name"`
-	Stages                  []stageBody     `json:"stages,omitempty"`
-	IdentityFields          []string        `json:"identity_fields,omitempty"`
-	DynamicAuthorizationURL *string         `json:"dynamic_authorization_url,omitempty"`
-	AutoExpireDuration      string          `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate         json.RawMessage `json:"display_template,omitempty"`
+	Name                       string          `json:"name"`
+	Stages                     []stageBody     `json:"stages,omitempty"`
+	IdentityFields             []string        `json:"identity_fields,omitempty"`
+	DynamicAuthorizationURL    *string         `json:"dynamic_authorization_url,omitempty"`
+	DynamicAuthorizationSecret *string         `json:"dynamic_authorization_secret,omitempty"`
+	AutoExpireDuration         string          `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
 }
 
 func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -195,6 +198,9 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.DynamicAuthorizationURL != nil {
 		existing.DynamicAuthorizationURL = body.DynamicAuthorizationURL
+	}
+	if body.DynamicAuthorizationSecret != nil {
+		existing.DynamicAuthorizationSecret = body.DynamicAuthorizationSecret
 	}
 	if body.AutoExpireDuration != "" {
 		d, err := time.ParseDuration(body.AutoExpireDuration)

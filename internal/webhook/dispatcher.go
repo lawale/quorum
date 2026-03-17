@@ -3,9 +3,6 @@ package webhook
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -16,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/signing"
 	"github.com/lawale/quorum/internal/store"
 )
 
@@ -221,7 +219,7 @@ func (d *Dispatcher) deliverEntry(ctx context.Context, entry model.OutboxEntry) 
 
 	// HMAC signature
 	if entry.WebhookSecret != "" {
-		sig := computeHMAC(entry.Payload, entry.WebhookSecret)
+		sig := signing.ComputeHMAC(entry.Payload, entry.WebhookSecret)
 		req.Header.Set("X-Signature-256", "sha256="+sig)
 	}
 
@@ -319,10 +317,4 @@ func (d *Dispatcher) auditWebhook(ctx context.Context, requestID uuid.UUID, acti
 	if err := d.audits.Create(ctx, log); err != nil {
 		slog.Error("failed to audit webhook", "error", err, "request_id", requestID)
 	}
-}
-
-func computeHMAC(payload []byte, secret string) string {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(payload)
-	return hex.EncodeToString(mac.Sum(nil))
 }

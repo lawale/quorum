@@ -152,6 +152,31 @@ func TestPolicyHandler_Create_WithDynamicAuthorizationURL(t *testing.T) {
 	}
 }
 
+func TestPolicyHandler_Create_WithDynamicAuthorizationSecret(t *testing.T) {
+	var createdPolicy *model.Policy
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) { return nil, nil },
+		CreateFunc: func(ctx context.Context, policy *model.Policy) error {
+			createdPolicy = policy
+			return nil
+		},
+	}
+	handler := newTestPolicyHandler(policies)
+
+	body := `{"name":"Test","request_type":"transfer","stages":[{"index":0,"required_approvals":1}],"dynamic_authorization_url":"https://example.com/check","dynamic_authorization_secret":"my-secret"}`
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+	if createdPolicy.DynamicAuthorizationSecret == nil || *createdPolicy.DynamicAuthorizationSecret != "my-secret" {
+		t.Errorf("DynamicAuthorizationSecret = %v, want my-secret", createdPolicy.DynamicAuthorizationSecret)
+	}
+}
+
 func TestPolicyHandler_Get_Success(t *testing.T) {
 	policyID := uuid.New()
 	expected := testutil.NewPolicy(func(p *model.Policy) { p.ID = policyID })

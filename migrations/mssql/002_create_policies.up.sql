@@ -7,6 +7,7 @@ CREATE TABLE [quorum].[policies] (
     stages NVARCHAR(MAX) NOT NULL,
     identity_fields NVARCHAR(MAX),
     dynamic_authorization_url NVARCHAR(2048),
+    dynamic_authorization_secret NVARCHAR(512),
     auto_expire_duration NVARCHAR(64),
     display_template NVARCHAR(MAX),
     created_at DATETIMEOFFSET NOT NULL DEFAULT GETUTCDATE(),

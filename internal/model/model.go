@@ -85,17 +85,18 @@ type ApprovalStage struct {
 }
 
 type Policy struct {
-	ID                      uuid.UUID       `json:"id"`
-	TenantID                string          `json:"tenant_id"`
-	Name                    string          `json:"name"`
-	RequestType             string          `json:"request_type"`
-	Stages                  []ApprovalStage `json:"stages"`
-	IdentityFields          []string        `json:"identity_fields,omitempty"`
-	DynamicAuthorizationURL *string         `json:"dynamic_authorization_url,omitempty"`
-	AutoExpireDuration      *time.Duration  `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate         json.RawMessage `json:"display_template,omitempty"`
-	CreatedAt               time.Time       `json:"created_at"`
-	UpdatedAt               time.Time       `json:"updated_at"`
+	ID                         uuid.UUID       `json:"id"`
+	TenantID                   string          `json:"tenant_id"`
+	Name                       string          `json:"name"`
+	RequestType                string          `json:"request_type"`
+	Stages                     []ApprovalStage `json:"stages"`
+	IdentityFields             []string        `json:"identity_fields,omitempty"`
+	DynamicAuthorizationURL    *string         `json:"dynamic_authorization_url,omitempty"`
+	DynamicAuthorizationSecret *string         `json:"-"`
+	AutoExpireDuration         *time.Duration  `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
+	CreatedAt                  time.Time       `json:"created_at"`
+	UpdatedAt                  time.Time       `json:"updated_at"`
 }
 
 // StageAt returns the approval stage at the given index, or nil if out of range.

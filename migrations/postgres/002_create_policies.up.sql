@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS quorum.policies (
     stages JSONB NOT NULL,
     identity_fields JSONB,
     dynamic_authorization_url VARCHAR(2048),
+    dynamic_authorization_secret VARCHAR(512),
     auto_expire_duration INTERVAL,
     display_template JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

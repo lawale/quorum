@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/signing"
 	"github.com/lawale/quorum/internal/testutil"
 )
 
@@ -232,7 +233,7 @@ func TestDispatcher_DeliverEntry_HMAC_Signature(t *testing.T) {
 	}
 
 	// Verify the HMAC matches the actual received body
-	expectedSig := "sha256=" + computeHMAC(receivedBody, secret)
+	expectedSig := "sha256=" + signing.ComputeHMAC(receivedBody, secret)
 	if receivedSig != expectedSig {
 		t.Errorf("signature mismatch: got %q, want %q", receivedSig, expectedSig)
 	}
@@ -293,29 +294,6 @@ func TestDispatcher_Signal_NonBlocking(t *testing.T) {
 		t.Error("expected at most one signal in channel")
 	default:
 		// OK — channel is empty after draining
-	}
-}
-
-func TestComputeHMAC_Deterministic(t *testing.T) {
-	payload := []byte(`{"event":"approved"}`)
-	secret := "test-secret"
-
-	sig1 := computeHMAC(payload, secret)
-	sig2 := computeHMAC(payload, secret)
-
-	if sig1 != sig2 {
-		t.Errorf("HMAC not deterministic: %s vs %s", sig1, sig2)
-	}
-}
-
-func TestComputeHMAC_DifferentSecrets(t *testing.T) {
-	payload := []byte(`{"event":"approved"}`)
-
-	sig1 := computeHMAC(payload, "secret1")
-	sig2 := computeHMAC(payload, "secret2")
-
-	if sig1 == sig2 {
-		t.Error("HMAC should differ for different secrets")
 	}
 }
 

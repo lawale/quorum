@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/signing"
 )
 
 var (
@@ -27,7 +28,7 @@ func NewAuthorizationHook(timeout time.Duration) *AuthorizationHook {
 	}
 }
 
-func (h *AuthorizationHook) Check(ctx context.Context, hookURL string, hookReq model.AuthorizationHookRequest) error {
+func (h *AuthorizationHook) Check(ctx context.Context, hookURL string, secret string, hookReq model.AuthorizationHookRequest) error {
 	body, err := json.Marshal(hookReq)
 	if err != nil {
 		return fmt.Errorf("marshaling authorization hook request: %w", err)
@@ -39,6 +40,11 @@ func (h *AuthorizationHook) Check(ctx context.Context, hookURL string, hookReq m
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "Quorum/1.0")
+
+	if secret != "" {
+		sig := signing.ComputeHMAC(body, secret)
+		httpReq.Header.Set("X-Signature-256", "sha256="+sig)
+	}
 
 	resp, err := h.client.Do(httpReq)
 	if err != nil {

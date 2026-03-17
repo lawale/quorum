@@ -311,7 +311,11 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 			MakerID:     req.MakerID,
 			Payload:     req.Payload,
 		}
-		if err := s.authorizationHook.Check(ctx, *policy.DynamicAuthorizationURL, hookReq); err != nil {
+		secret := ""
+		if policy.DynamicAuthorizationSecret != nil {
+			secret = *policy.DynamicAuthorizationSecret
+		}
+		if err := s.authorizationHook.Check(ctx, *policy.DynamicAuthorizationURL, secret, hookReq); err != nil {
 			return nil, err
 		}
 	}
