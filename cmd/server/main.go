@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/lawale/quorum/internal/config"
 	"github.com/lawale/quorum/internal/logging"
 	"github.com/lawale/quorum/internal/metrics"
+	qmigrate "github.com/lawale/quorum/internal/migrate"
 	"github.com/lawale/quorum/internal/server"
 	"github.com/lawale/quorum/internal/service"
 	"github.com/lawale/quorum/internal/sse"
@@ -30,6 +32,10 @@ import (
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	healthCheck := flag.String("health", "", "run health check against given address (e.g. http://localhost:8080)")
+	migrateCmd := flag.String("migrate", "", "run migrations: up, down, or version")
+	migrateSteps := flag.Int("migrate-steps", 1, "number of steps to roll back (used with -migrate down)")
+	migrationsPath := flag.String("migrations", "migrations", "path to migrations directory")
+	autoMigrate := flag.Bool("auto-migrate", false, "run pending migrations on startup before serving")
 	flag.Parse()
 
 	if *healthCheck != "" {
@@ -62,6 +68,26 @@ func main() {
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
+	}
+
+	// Migrations (run and exit, or auto-migrate before serving)
+	if *migrateCmd != "" || *autoMigrate {
+		driver := cfg.Database.Driver
+		if driver == "" {
+			driver = "postgres"
+		}
+		srcPath := fmt.Sprintf("file://%s/%s", *migrationsPath, driver)
+		cmd := *migrateCmd
+		if cmd == "" {
+			cmd = "up"
+		}
+		if err := qmigrate.Run(cfg.Database, srcPath, cmd, *migrateSteps); err != nil {
+			slog.Error("migration failed", "error", err)
+			os.Exit(1)
+		}
+		if *migrateCmd != "" {
+			os.Exit(0)
+		}
 	}
 
 	// Database and Stores

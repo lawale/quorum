@@ -1,11 +1,22 @@
-.PHONY: build run test test-integration test-all lint migrate-up migrate-down docker-up docker-down clean \
+.PHONY: build run test test-integration test-all lint \
+       migrate-up migrate-down migrate-version \
+       docker-up docker-down clean \
        console-deps console-build console-dev build-console \
        embed-deps embed-build embed-dev build-embed build-all \
-       seed demo
+       seed demo \
+       docker-build docker-build-api docker-build-console docker-build-all \
+       docker-push docker-push-api docker-push-console docker-push-all \
+       docker-buildx docker-buildx-api docker-buildx-console docker-buildx-all
 
 BINARY_NAME=quorum
 BUILD_DIR=bin
 LDFLAGS=-s -w
+
+# Docker image settings
+IMAGE_NAME ?= quorum
+REGISTRY ?=
+IMAGE_TAG ?= $(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
+PLATFORM ?= linux/amd64,linux/arm64
 
 build:
 	go build -trimpath -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
@@ -24,18 +35,56 @@ test-all: test test-integration
 lint:
 	golangci-lint run ./...
 
-migrate-up:
-	psql "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable" -c "CREATE SCHEMA IF NOT EXISTS quorum;"
-	migrate -path migrations/postgres -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable&search_path=quorum" up
+migrate-up: build
+	./$(BUILD_DIR)/$(BINARY_NAME) -config config.yaml -migrate up
 
-migrate-down:
-	migrate -path migrations/postgres -database "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable&search_path=quorum" down 1
+migrate-down: build
+	./$(BUILD_DIR)/$(BINARY_NAME) -config config.yaml -migrate down
+
+migrate-version: build
+	./$(BUILD_DIR)/$(BINARY_NAME) -config config.yaml -migrate version
 
 docker-up:
 	docker-compose up -d
 
 docker-down:
 	docker-compose down
+
+# Docker build targets
+docker-build: docker-build-api docker-build-console docker-build-all
+
+docker-build-api:
+	docker build -f Dockerfile -t $(REGISTRY)$(IMAGE_NAME):$(IMAGE_TAG) .
+
+docker-build-console:
+	docker build -f Dockerfile.console -t $(REGISTRY)$(IMAGE_NAME)-console:$(IMAGE_TAG) .
+
+docker-build-all:
+	docker build -f Dockerfile.all -t $(REGISTRY)$(IMAGE_NAME)-all:$(IMAGE_TAG) .
+
+# Docker push targets
+docker-push: docker-push-api docker-push-console docker-push-all
+
+docker-push-api:
+	docker push $(REGISTRY)$(IMAGE_NAME):$(IMAGE_TAG)
+
+docker-push-console:
+	docker push $(REGISTRY)$(IMAGE_NAME)-console:$(IMAGE_TAG)
+
+docker-push-all:
+	docker push $(REGISTRY)$(IMAGE_NAME)-all:$(IMAGE_TAG)
+
+# Docker buildx (multi-platform build + push)
+docker-buildx: docker-buildx-api docker-buildx-console docker-buildx-all
+
+docker-buildx-api:
+	docker buildx build --platform $(PLATFORM) -f Dockerfile -t $(REGISTRY)$(IMAGE_NAME):$(IMAGE_TAG) --push .
+
+docker-buildx-console:
+	docker buildx build --platform $(PLATFORM) -f Dockerfile.console -t $(REGISTRY)$(IMAGE_NAME)-console:$(IMAGE_TAG) --push .
+
+docker-buildx-all:
+	docker buildx build --platform $(PLATFORM) -f Dockerfile.all -t $(REGISTRY)$(IMAGE_NAME)-all:$(IMAGE_TAG) --push .
 
 console-deps:
 	cd console/frontend && npm install
