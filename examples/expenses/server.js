@@ -223,7 +223,7 @@ app.set("views", path.join(__dirname, "views"));
 // Dashboard
 app.get("/", async (_req, res) => {
   const allExpenses = await listExpenses();
-  res.render("dashboard", { expenses: allExpenses });
+  res.render("dashboard", { expenses: allExpenses, quorumUrl: QUORUM_PUBLIC_URL });
 });
 
 // New expense form

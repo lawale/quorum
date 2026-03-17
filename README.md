@@ -39,7 +39,9 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 
 - **Optional Admin Console** — Manage everything with a built-in web UI built with Svelte 5. Browse requests, define policies, inspect audit logs, and manage operators — all served directly from the Go binary. Opt-in via build tag for a smaller default binary.
 
-- **Embeddable UI Widgets** — Drop pre-built Web Components into your own application to give end users approval functionality without building custom UI. Three widgets (`<quorum-approval-panel>`, `<quorum-request-list>`, `<quorum-stage-progress>`) use Shadow DOM for style isolation and work with any frontend framework. Opt-in via build tag.
+- **Embeddable UI Widgets** — Drop pre-built Web Components into your own application to give end users approval functionality without building custom UI. Three widgets (`<quorum-approval-panel>`, `<quorum-request-list>`, `<quorum-stage-progress>`) use Shadow DOM for style isolation and work with any frontend framework. CORS is enabled out of the box for cross-origin embedding. Opt-in via build tag.
+
+- **Real-Time Updates via SSE** — Widgets receive instant push notifications the moment a request's state changes, via Server-Sent Events. No polling required, the widget opens a long-lived connection and the server pushes events on approve, reject, cancel, stage advance, and expiry. Polling is kept as an automatic fallback if the SSE connection drops.
 
 - **Production-Ready from Day One:**
   - **Multi-Database Support** — Choose between PostgreSQL and Microsoft SQL Server.
@@ -71,8 +73,8 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
   Request            Request          for type              │
                                                             ▼
 ┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐
-│ Webhook  │      │ Request  │      │ Layered  │      │  Checker │
-│   or     │◀─────│ Resolved │◀─────│ Guards   │◀─────│ Approves │
+│ Webhook, │      │ Request  │      │ Layered  │      │  Checker │
+│ SSE, or  │◀─────│ Resolved │◀─────│ Guards   │◀─────│ Approves │
 │  Poll    │      │          │      │          │      │          │
 └──────────┘      └──────────┘      └──────────┘      └──────────┘
   Your app           Approved         Self-approval,        User
@@ -379,6 +381,7 @@ All endpoints are under `/api/v1` and require authentication (configurable via t
 | `POST` | `/api/v1/requests/{id}/reject` | Reject a request |
 | `POST` | `/api/v1/requests/{id}/cancel` | Cancel a request (maker only) |
 | `GET` | `/api/v1/requests/{id}/audit` | Get audit trail for a request |
+| `GET` | `/api/v1/requests/{id}/events` | SSE stream for real-time status updates |
 | `POST` | `/api/v1/policies` | Create a policy |
 | `GET` | `/api/v1/policies` | List all policies |
 | `GET` | `/api/v1/policies/{id}` | Get a policy by ID |
@@ -542,6 +545,10 @@ const request = await client.getRequest('uuid-here');
 
 **Authentication:** Pass a `token` attribute for Bearer authentication, or an `auth-headers` attribute (JSON string) for trust-mode headers like `{"X-User-ID": "alice", "X-User-Roles": "manager"}`.
 
+**Real-time updates:** The approval panel connects via SSE by default for instant push notifications. Set `sse="false"` to disable and use polling only. The `poll-interval` attribute (default 30000ms) controls the fallback polling rate.
+
+**Error handling:** Set `suppress-errors` on the widget to hide inline error messages. Listen for `quorum:error` events to handle errors externally (e.g., toast notifications). The event detail includes `{ action, message, status }` where `action` is `"load"`, `"approve"`, or `"reject"`.
+
 **Events:** Widgets dispatch custom events you can listen for: `quorum:approved`, `quorum:rejected`, `quorum:select`, and `quorum:error`.
 
 ### Display Templates
@@ -694,6 +701,10 @@ This starts everything: PostgreSQL, Quorum with the admin console, seed data, an
 - **Expense Tracker**: Polling-based flow — the detail page fetches the latest status from Quorum on each page load
 - **Access Portal**: Threshold voting — 2 of 3 security reviewers must approve; not every rejection is fatal
 
+Each app embeds all three Quorum widgets: `<quorum-request-list>` on the dashboard as an "Approval Queue", `<quorum-stage-progress>` on detail pages for stage visualization, and `<quorum-approval-panel>` for approve/reject actions. Clicking a row in the request list navigates to the matching local detail page.
+
+Each app includes a **profile switcher** in the navigation bar for testing different personas (maker, manager, compliance officer, etc.) without restarting. Switch profiles to walk through the full approval flow: create a request as the maker, then switch to a reviewer to approve or reject it.
+
 Visit the [Quorum console](http://localhost:8080/console/) (admin / admin123) to approve or reject requests created from the sample apps.
 
 ---
@@ -756,6 +767,7 @@ internal/
   model/             — Domain models
   server/            — HTTP handlers and routing
   service/           — Business logic and approval workflow
+  sse/               — In-process pub/sub hub for SSE push notifications
   store/             — Storage interfaces
     postgres/        — PostgreSQL implementation
     mssql/           — SQL Server implementation

@@ -48,6 +48,7 @@
   let sseConnection: SSEConnection | null = $state(null);
   let sseActive = $state(false);
   let sseEnabled = $derived(sseStr !== 'false');
+  let isPending = $state(false);
 
   function getClient() {
     let authHeaders: Record<string, string> | undefined;
@@ -75,8 +76,8 @@
       req = r;
       auditLogs = logs;
       policy = await client.getPolicyByType(req.type);
-      // Close SSE and stop polling when request reaches terminal status
-      if (req && req.status !== 'pending') {
+      isPending = req.status === 'pending';
+      if (!isPending) {
         closeSSE();
         stopPolling();
       }
@@ -135,32 +136,31 @@
   // SSE-first with polling fallback. They are mutually exclusive:
   // - SSE active → no polling
   // - SSE fails/disconnects → start polling as fallback
+  // Uses isPending (a primitive boolean) to avoid re-running when load()
+  // creates a new req object with the same status.
   $effect(() => {
-    // Clean up previous connections
     closeSSE();
     stopPolling();
 
-    if (!req || req.status !== 'pending') return;
+    if (!isPending) return;
 
     if (sseEnabled && requestId && apiUrl) {
       try {
         const client = getClient();
         sseConnection = client.connectSSE(
           requestId,
-          () => load(),                // onEvent: re-fetch full state
-          () => {                       // onDisconnect: fall back to polling
+          () => load(),
+          () => {
             sseActive = false;
             sseConnection = null;
-            if (req?.status === 'pending') startPolling();
+            if (isPending) startPolling();
           },
         );
         sseActive = true;
       } catch {
-        // SSE not available — fall back to polling
         startPolling();
       }
     } else {
-      // SSE disabled — use polling
       startPolling();
     }
 

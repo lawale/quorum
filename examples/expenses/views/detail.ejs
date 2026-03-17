@@ -54,6 +54,17 @@
     ` : ''}
   </div>
 
+  <!-- Quorum Stage Progress -->
+  ${expense.quorumRequestId ? `
+  <div class="mb-6">
+    <quorum-stage-progress
+      request-id="${expense.quorumRequestId}"
+      api-url="${quorumUrl}"
+      tenant-id="expenses">
+    </quorum-stage-progress>
+  </div>
+  ` : ''}
+
   <!-- Quorum Approval Widget -->
   ${expense.quorumRequestId ? `
   <div class="mb-6">
@@ -67,28 +78,6 @@
   </div>
 
   <script>
-    (function() {
-        var p = window.__quorumProfile;
-        if (p) {
-            var headers = JSON.stringify({ 'X-User-Id': p.userId, 'X-User-Roles': p.roles });
-            document.querySelector('quorum-approval-panel')?.setAttribute('auth-headers', headers);
-        }
-    })();
-  <\/script>
-  <script src="${quorumUrl}/assets/embed.js"><\/script>
-  <script>
-    var panel = document.querySelector('quorum-approval-panel');
-    panel?.addEventListener('quorum:approved', function() {
-      setTimeout(function() { window.location.reload(); }, 1000);
-    });
-    panel?.addEventListener('quorum:rejected', function() {
-      setTimeout(function() { window.location.reload(); }, 1000);
-    });
-    panel?.addEventListener('quorum:error', function(e) {
-      var msg = e.detail && e.detail.message ? e.detail.message : 'An error occurred';
-      showToast(msg);
-    });
-
     function showToast(message) {
       var existing = document.getElementById('quorum-toast');
       if (existing) existing.remove();
@@ -107,6 +96,29 @@
         setTimeout(function() { toast.remove(); }, 300);
       }, 4000);
     }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      var p = window.__quorumProfile;
+      if (p) {
+        var headers = JSON.stringify({ 'X-User-Id': p.userId, 'X-User-Roles': p.roles });
+        document.querySelector('quorum-approval-panel')?.setAttribute('auth-headers', headers);
+        document.querySelector('quorum-stage-progress')?.setAttribute('auth-headers', headers);
+      }
+      var panel = document.querySelector('quorum-approval-panel');
+      panel?.addEventListener('quorum:approved', function() {
+        setTimeout(function() { window.location.reload(); }, 1000);
+      });
+      panel?.addEventListener('quorum:rejected', function() {
+        setTimeout(function() { window.location.reload(); }, 1000);
+      });
+      panel?.addEventListener('quorum:error', function(e) {
+        var msg = e.detail && e.detail.message ? e.detail.message : 'An error occurred';
+        showToast(msg);
+      });
+      var s = document.createElement('script');
+      s.src = '${quorumUrl}/assets/embed.js';
+      document.body.appendChild(s);
+    });
   <\/script>
   ` : ''}
 </div>

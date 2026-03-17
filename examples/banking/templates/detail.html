@@ -47,6 +47,17 @@
         {{end}}
     </div>
 
+    <!-- Quorum Stage Progress -->
+    {{if .Transfer.QuorumRequestID}}
+    <div class="mb-6">
+        <quorum-stage-progress
+            request-id="{{.Transfer.QuorumRequestID}}"
+            api-url="{{.QuorumURL}}"
+            tenant-id="banking">
+        </quorum-stage-progress>
+    </div>
+    {{end}}
+
     <!-- Quorum Approval Widget -->
     {{if .Transfer.QuorumRequestID}}
     <div class="mb-6">
@@ -70,6 +81,7 @@
         if (p) {
             var headers = JSON.stringify({ 'X-User-Id': p.userId, 'X-User-Roles': p.roles });
             document.querySelector('quorum-approval-panel')?.setAttribute('auth-headers', headers);
+            document.querySelector('quorum-stage-progress')?.setAttribute('auth-headers', headers);
         }
     })();
 </script>

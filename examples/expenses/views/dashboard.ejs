@@ -49,4 +49,37 @@ ${expenses.length === 0 ? `
 </div>
 `}
 
+<!-- Quorum Approval Queue -->
+<div class="mt-8">
+  <h2 class="text-lg font-semibold text-gray-900 mb-3">Approval Queue</h2>
+  <p class="text-sm text-gray-500 mb-4">Live view of all expense approval requests tracked by Quorum.</p>
+  <quorum-request-list
+    api-url="${quorumUrl}"
+    tenant-id="expenses"
+    type="expense_approval"
+    page-size="10"
+    suppress-errors="true">
+  </quorum-request-list>
+</div>
+
+<script>
+  var quorumToLocal = {};
+  ${expenses.filter(function(e) { return e.quorumRequestId; }).map(function(e) { return 'quorumToLocal["' + e.quorumRequestId + '"] = "' + e.id + '";'; }).join('\n  ')}
+  document.addEventListener('DOMContentLoaded', function() {
+    var p = window.__quorumProfile;
+    if (p) {
+      var headers = JSON.stringify({ 'X-User-Id': p.userId, 'X-User-Roles': p.roles });
+      document.querySelector('quorum-request-list')?.setAttribute('auth-headers', headers);
+    }
+    var list = document.querySelector('quorum-request-list');
+    list?.addEventListener('quorum:select', function(e) {
+      var localId = quorumToLocal[e.detail.requestId];
+      if (localId) window.location.href = '/expense/' + localId;
+    });
+    var s = document.createElement('script');
+    s.src = '${quorumUrl}/assets/embed.js';
+    document.body.appendChild(s);
+  });
+<\/script>
+
 ` }) %>

@@ -273,7 +273,7 @@ def verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
 def dashboard():
     """Dashboard listing all access requests with status badges."""
     sorted_requests = db_list_requests()
-    return render_template("dashboard.html", requests=sorted_requests)
+    return render_template("dashboard.html", requests=sorted_requests, quorum_url=QUORUM_PUBLIC_URL)
 
 
 @app.route("/request/new", methods=["GET"])
