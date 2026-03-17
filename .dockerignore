@@ -1,0 +1,13 @@
+.git
+bin
+artifacts
+*.md
+.claude
+.golangci.yml
+LICENSE
+
+# Frontend build artifacts (rebuilt in Docker)
+console/frontend/node_modules
+console/frontend/dist
+widgets/frontend/node_modules
+widgets/frontend/dist

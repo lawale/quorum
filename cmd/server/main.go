@@ -29,7 +29,20 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
+	healthCheck := flag.String("health", "", "run health check against given address (e.g. http://localhost:8080)")
 	flag.Parse()
+
+	if *healthCheck != "" {
+		resp, err := http.Get(*healthCheck + "/health")
+		if err != nil {
+			os.Exit(1)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,

@@ -43,7 +43,7 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "/bin/quorum", "-health", "http://localhost:8080"]
       interval: 10s
       timeout: 5s
       retries: 3

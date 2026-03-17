@@ -5,9 +5,10 @@
 
 BINARY_NAME=quorum
 BUILD_DIR=bin
+LDFLAGS=-s -w
 
 build:
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+	go build -trimpath -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 
 run: build
 	./$(BUILD_DIR)/$(BINARY_NAME)
@@ -46,7 +47,7 @@ console-dev:
 	cd console/frontend && npm run dev
 
 build-console: console-build
-	go build -tags console -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+	go build -trimpath -ldflags="$(LDFLAGS)" -tags console -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 
 embed-deps:
 	cd widgets/frontend && npm install
@@ -58,10 +59,10 @@ embed-dev:
 	cd widgets/frontend && npm run dev
 
 build-embed: embed-build
-	go build -tags embed -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+	go build -trimpath -ldflags="$(LDFLAGS)" -tags embed -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 
 build-all: console-build embed-build
-	go build -tags "console,embed" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+	go build -trimpath -ldflags="$(LDFLAGS)" -tags "console,embed" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 
 seed:
 	sh scripts/seed.sh
