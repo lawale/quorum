@@ -64,12 +64,11 @@ func main() {
 	defer stores.Close()
 	slog.Info("connected to database", "driver", cfg.Database.Driver)
 
-	// Permission checker for external permission callback
-	permissionChecker := auth.NewPermissionChecker(cfg.Webhook.Timeout)
+	authorizationHook := auth.NewAuthorizationHook(cfg.Webhook.Timeout)
 
 	// Services
 	policyService := service.NewPolicyService(stores.Policies)
-	requestService := service.NewRequestService(stores.Requests, stores.Approvals, stores.Policies, stores.Audits, permissionChecker)
+	requestService := service.NewRequestService(stores.Requests, stores.Approvals, stores.Policies, stores.Audits, authorizationHook)
 	webhookService := service.NewWebhookService(stores.Webhooks)
 	tenantService := service.NewTenantService(stores.Tenants)
 	if err := tenantService.LoadCache(ctx); err != nil {
@@ -123,7 +122,7 @@ func main() {
 	var authProvider auth.Provider
 	switch cfg.Auth.Mode {
 	case "trust":
-		authProvider = auth.NewTrustProvider(cfg.Auth.Trust.UserIDHeader, cfg.Auth.Trust.RolesHeader, cfg.Auth.Trust.TenantIDHeader)
+		authProvider = auth.NewTrustProvider(cfg.Auth.Trust.UserIDHeader, cfg.Auth.Trust.RolesHeader, cfg.Auth.Trust.PermissionsHeader, cfg.Auth.Trust.TenantIDHeader)
 	default:
 		slog.Error("unsupported auth mode", "mode", cfg.Auth.Mode)
 		os.Exit(1)

@@ -6,7 +6,7 @@ import (
 )
 
 func TestTrustProvider_Authenticate_Success(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-User-Permissions", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
 	r.Header.Set("X-User-Roles", "admin,manager")
@@ -28,7 +28,7 @@ func TestTrustProvider_Authenticate_Success(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_MissingUserID(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-User-Permissions", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-Tenant-ID", "test-tenant")
 
@@ -39,7 +39,7 @@ func TestTrustProvider_Authenticate_MissingUserID(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_MissingTenantID(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-User-Permissions", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
 
@@ -50,7 +50,7 @@ func TestTrustProvider_Authenticate_MissingTenantID(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_NoRoles(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-User-Permissions", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
 	r.Header.Set("X-Tenant-ID", "test-tenant")
@@ -68,7 +68,7 @@ func TestTrustProvider_Authenticate_NoRoles(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_MultipleRoles(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-User-Permissions", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
 	r.Header.Set("X-User-Roles", "admin, manager, viewer")
@@ -91,7 +91,7 @@ func TestTrustProvider_Authenticate_MultipleRoles(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_EmptyRoleEntries(t *testing.T) {
-	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-Tenant-ID")
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-User-Permissions", "X-Tenant-ID")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-User-ID", "user-123")
 	r.Header.Set("X-User-Roles", "admin,,viewer,  ")
@@ -111,7 +111,7 @@ func TestTrustProvider_Authenticate_EmptyRoleEntries(t *testing.T) {
 }
 
 func TestTrustProvider_Authenticate_CustomHeaders(t *testing.T) {
-	p := NewTrustProvider("X-Custom-User", "X-Custom-Roles", "X-Custom-Tenant")
+	p := NewTrustProvider("X-Custom-User", "X-Custom-Roles", "X-Custom-Permissions", "X-Custom-Tenant")
 	r := httptest.NewRequest("GET", "/", nil)
 	r.Header.Set("X-Custom-User", "custom-user")
 	r.Header.Set("X-Custom-Roles", "role1")

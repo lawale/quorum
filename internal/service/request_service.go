@@ -20,16 +20,17 @@ import (
 )
 
 var (
-	ErrRequestNotFound       = errors.New("request not found")
-	ErrRequestNotPending     = errors.New("request is not in pending status")
-	ErrDuplicateRequest      = errors.New("a pending request with the same identity already exists")
-	ErrIdempotencyConflict   = errors.New("request with this idempotency key already exists")
-	ErrSelfApproval          = errors.New("maker cannot approve their own request")
-	ErrAlreadyActioned       = errors.New("checker has already acted on this request")
-	ErrInvalidCheckerRole    = errors.New("checker does not have a required role")
-	ErrNotEligibleReviewer   = errors.New("checker is not in the eligible reviewers list")
-	ErrInvalidStage          = errors.New("request is at an invalid stage for this policy")
-	ErrMissingIdentityFields = errors.New("missing identity field in payload")
+	ErrRequestNotFound          = errors.New("request not found")
+	ErrRequestNotPending        = errors.New("request is not in pending status")
+	ErrDuplicateRequest         = errors.New("a pending request with the same identity already exists")
+	ErrIdempotencyConflict      = errors.New("request with this idempotency key already exists")
+	ErrSelfApproval             = errors.New("maker cannot approve their own request")
+	ErrAlreadyActioned          = errors.New("checker has already acted on this request")
+	ErrInvalidCheckerRole       = errors.New("checker does not have a required role")
+	ErrInvalidCheckerPermission = errors.New("checker does not have a required permission")
+	ErrNotEligibleReviewer      = errors.New("checker is not in the eligible reviewers list")
+	ErrInvalidStage             = errors.New("request is at an invalid stage for this policy")
+	ErrMissingIdentityFields    = errors.New("missing identity field in payload")
 )
 
 type RequestService struct {
@@ -37,7 +38,7 @@ type RequestService struct {
 	approvals         store.ApprovalStore
 	policies          store.PolicyStore
 	audits            store.AuditStore
-	permissionChecker *auth.PermissionChecker
+	authorizationHook *auth.AuthorizationHook
 	enqueueWebhooks   func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
 	signalWebhooks    func()
 	runInTx           func(ctx context.Context, fn func(tx *store.Stores) error) error
@@ -61,14 +62,14 @@ func NewRequestService(
 	approvals store.ApprovalStore,
 	policies store.PolicyStore,
 	audits store.AuditStore,
-	permissionChecker *auth.PermissionChecker,
+	authorizationHook *auth.AuthorizationHook,
 ) *RequestService {
 	return &RequestService{
 		requests:          requests,
 		approvals:         approvals,
 		policies:          policies,
 		audits:            audits,
-		permissionChecker: permissionChecker,
+		authorizationHook: authorizationHook,
 	}
 }
 
@@ -291,8 +292,8 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		return nil, ErrAlreadyActioned
 	}
 
-	// Validate checker roles against the current stage's allowed roles
-	if err := validateCheckerRoles(stage, roles); err != nil {
+	permissions := auth.PermissionsFromContext(ctx)
+	if err := validateAuthorization(stage, roles, permissions); err != nil {
 		return nil, err
 	}
 
@@ -301,17 +302,16 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		return nil, ErrNotEligibleReviewer
 	}
 
-	// Permission check callback (dynamic check via consuming system)
-	if policy.PermissionCheckURL != nil && *policy.PermissionCheckURL != "" && s.permissionChecker != nil {
-		checkReq := model.PermissionCheckRequest{
-			RequestID:    requestID,
-			RequestType:  req.Type,
-			CheckerID:    checkerID,
-			CheckerRoles: roles,
-			MakerID:      req.MakerID,
-			Payload:      req.Payload,
+	// Dynamic authorization hook (external check via consuming system)
+	if policy.DynamicAuthorizationURL != nil && *policy.DynamicAuthorizationURL != "" && s.authorizationHook != nil {
+		hookReq := model.AuthorizationHookRequest{
+			RequestID:   requestID,
+			RequestType: req.Type,
+			CheckerID:   checkerID,
+			MakerID:     req.MakerID,
+			Payload:     req.Payload,
 		}
-		if err := s.permissionChecker.Check(ctx, *policy.PermissionCheckURL, checkReq); err != nil {
+		if err := s.authorizationHook.Check(ctx, *policy.DynamicAuthorizationURL, hookReq); err != nil {
 			return nil, err
 		}
 	}
@@ -602,6 +602,73 @@ func validateCheckerRoles(stage *model.ApprovalStage, checkerRoles []string) err
 	return ErrInvalidCheckerRole
 }
 
+func validateCheckerPermissions(stage *model.ApprovalStage, checkerPermissions []string) error {
+	if stage.AllowedPermissions == nil {
+		return nil
+	}
+
+	var allowedPermissions []string
+	if err := json.Unmarshal(stage.AllowedPermissions, &allowedPermissions); err != nil {
+		slog.Error("failed to parse allowed_permissions", "error", err, "stage_index", stage.Index)
+		return fmt.Errorf("invalid allowed_permissions configuration: %w", err)
+	}
+
+	if len(allowedPermissions) == 0 {
+		return nil
+	}
+
+	permSet := make(map[string]bool)
+	for _, p := range checkerPermissions {
+		permSet[p] = true
+	}
+
+	for _, allowed := range allowedPermissions {
+		if permSet[allowed] {
+			return nil
+		}
+	}
+
+	return ErrInvalidCheckerPermission
+}
+
+// validateAuthorization combines role and permission checks based on the
+// stage's authorization_mode. When only one of roles/permissions is configured,
+// the mode is implicit. When both are configured, the mode must be set.
+func validateAuthorization(stage *model.ApprovalStage, checkerRoles, checkerPermissions []string) error {
+	hasRoles := stage.AllowedCheckerRoles != nil
+	hasPermissions := stage.AllowedPermissions != nil
+
+	if !hasRoles && !hasPermissions {
+		return nil
+	}
+
+	if hasRoles && !hasPermissions {
+		return validateCheckerRoles(stage, checkerRoles)
+	}
+
+	if !hasRoles && hasPermissions {
+		return validateCheckerPermissions(stage, checkerPermissions)
+	}
+
+	// Both are set — use authorization_mode
+	switch stage.AuthorizationMode {
+	case model.AuthModeAny:
+		roleErr := validateCheckerRoles(stage, checkerRoles)
+		permErr := validateCheckerPermissions(stage, checkerPermissions)
+		if roleErr == nil || permErr == nil {
+			return nil
+		}
+		return roleErr
+	case model.AuthModeAll:
+		if err := validateCheckerRoles(stage, checkerRoles); err != nil {
+			return err
+		}
+		return validateCheckerPermissions(stage, checkerPermissions)
+	default:
+		return validateCheckerRoles(stage, checkerRoles)
+	}
+}
+
 // resolveDisplayTemplate resolves the policy's display template against the request
 // payload and merges the result into metadata.display. If the consumer already
 // provided metadata.display (override), or the policy has no template, this is a no-op.
@@ -649,10 +716,10 @@ func resolveDisplayTemplate(req *model.Request, policy *model.Policy) {
 }
 
 // CanViewerAct determines whether the given viewer can approve or reject
-// the request based on the same permission checks enforced by processDecision.
-// The external permission_check_url is intentionally skipped (HTTP call not
+// the request based on the same checks enforced by processDecision.
+// The dynamic_authorization_url is intentionally skipped (HTTP call not
 // suitable for the read path); it is still enforced on actual approve/reject.
-func (s *RequestService) CanViewerAct(ctx context.Context, req *model.Request, viewerID string, viewerRoles []string) bool {
+func (s *RequestService) CanViewerAct(ctx context.Context, req *model.Request, viewerID string, viewerRoles, viewerPermissions []string) bool {
 	if viewerID == "" {
 		return false
 	}
@@ -663,19 +730,16 @@ func (s *RequestService) CanViewerAct(ctx context.Context, req *model.Request, v
 		return false
 	}
 
-	// Check eligible reviewers (per-request whitelist)
 	if len(req.EligibleReviewers) > 0 && !slices.Contains(req.EligibleReviewers, viewerID) {
 		return false
 	}
 
-	// Check if viewer already voted on the current stage (from attached approvals)
 	for _, a := range req.Approvals {
 		if a.CheckerID == viewerID && a.StageIndex == req.CurrentStage {
 			return false
 		}
 	}
 
-	// Validate roles against the current stage
 	policy, err := s.policies.GetByRequestType(ctx, req.Type)
 	if err != nil || policy == nil {
 		return false
@@ -686,7 +750,7 @@ func (s *RequestService) CanViewerAct(ctx context.Context, req *model.Request, v
 		return false
 	}
 
-	if err := validateCheckerRoles(stage, viewerRoles); err != nil {
+	if err := validateAuthorization(stage, viewerRoles, viewerPermissions); err != nil {
 		return false
 	}
 

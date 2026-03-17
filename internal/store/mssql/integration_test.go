@@ -42,14 +42,14 @@ func setupMSSQL(t *testing.T) *mssql.DB {
 
 	// Run migration scripts against the container
 	migrationFiles := []string{
-		"001_create_policies.up.sql",
-		"002_create_requests.up.sql",
-		"003_create_approvals.up.sql",
-		"004_create_webhooks.up.sql",
-		"005_create_audit_logs.up.sql",
-		"006_add_permission_check_url.up.sql",
-		"007_add_approval_stages.up.sql",
-		"008_create_operators.up.sql",
+		"001_create_tenants.up.sql",
+		"002_create_policies.up.sql",
+		"003_create_requests.up.sql",
+		"004_create_approvals.up.sql",
+		"005_create_webhooks.up.sql",
+		"006_create_audit_logs.up.sql",
+		"007_create_operators.up.sql",
+		"008_create_webhook_outbox.up.sql",
 	}
 
 	migDB, err := sql.Open("sqlserver", connStr)

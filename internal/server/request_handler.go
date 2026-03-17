@@ -100,7 +100,8 @@ func (h *RequestHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	viewerID := auth.UserIDFromContext(r.Context())
 	roles := auth.RolesFromContext(r.Context())
-	canAct := h.requestService.CanViewerAct(r.Context(), req, viewerID, roles)
+	permissions := auth.PermissionsFromContext(r.Context())
+	canAct := h.requestService.CanViewerAct(r.Context(), req, viewerID, roles, permissions)
 	req.ViewerCanAct = &canAct
 
 	writeJSON(w, http.StatusOK, req)
@@ -196,7 +197,9 @@ func (h *RequestHandler) handleDecision(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusForbidden, err.Error())
 		case errors.Is(err, service.ErrNotEligibleReviewer):
 			writeError(w, http.StatusForbidden, err.Error())
-		case errors.Is(err, auth.ErrPermissionDenied):
+		case errors.Is(err, auth.ErrAuthorizationDenied):
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, service.ErrInvalidCheckerPermission):
 			writeError(w, http.StatusForbidden, err.Error())
 		default:
 			writeServerError(w, r, err, "failed to process decision")
@@ -204,7 +207,8 @@ func (h *RequestHandler) handleDecision(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	canAct := h.requestService.CanViewerAct(r.Context(), result, checkerID, roles)
+	permissions := auth.PermissionsFromContext(r.Context())
+	canAct := h.requestService.CanViewerAct(r.Context(), result, checkerID, roles, permissions)
 	result.ViewerCanAct = &canAct
 
 	writeJSON(w, http.StatusOK, result)

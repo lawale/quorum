@@ -25,18 +25,20 @@ type stageBody struct {
 	Name                string          `json:"name,omitempty"`
 	RequiredApprovals   int             `json:"required_approvals"`
 	AllowedCheckerRoles json.RawMessage `json:"allowed_checker_roles,omitempty"`
+	AllowedPermissions  json.RawMessage `json:"allowed_permissions,omitempty"`
+	AuthorizationMode   string          `json:"authorization_mode,omitempty"`
 	RejectionPolicy     string          `json:"rejection_policy,omitempty"`
 	MaxCheckers         *int            `json:"max_checkers,omitempty"`
 }
 
 type createPolicyBody struct {
-	Name               string          `json:"name"`
-	RequestType        string          `json:"request_type"`
-	Stages             []stageBody     `json:"stages"`
-	IdentityFields     []string        `json:"identity_fields,omitempty"`
-	PermissionCheckURL *string         `json:"permission_check_url,omitempty"`
-	AutoExpireDuration string          `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate    json.RawMessage `json:"display_template,omitempty"`
+	Name                    string          `json:"name"`
+	RequestType             string          `json:"request_type"`
+	Stages                  []stageBody     `json:"stages"`
+	IdentityFields          []string        `json:"identity_fields,omitempty"`
+	DynamicAuthorizationURL *string         `json:"dynamic_authorization_url,omitempty"`
+	AutoExpireDuration      string          `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate         json.RawMessage `json:"display_template,omitempty"`
 }
 
 func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -66,18 +68,20 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 			Name:                sb.Name,
 			RequiredApprovals:   sb.RequiredApprovals,
 			AllowedCheckerRoles: sb.AllowedCheckerRoles,
+			AllowedPermissions:  sb.AllowedPermissions,
+			AuthorizationMode:   model.AuthorizationMode(sb.AuthorizationMode),
 			RejectionPolicy:     model.RejectionPolicy(sb.RejectionPolicy),
 			MaxCheckers:         sb.MaxCheckers,
 		}
 	}
 
 	policy := &model.Policy{
-		Name:               body.Name,
-		RequestType:        body.RequestType,
-		Stages:             stages,
-		IdentityFields:     body.IdentityFields,
-		PermissionCheckURL: body.PermissionCheckURL,
-		DisplayTemplate:    body.DisplayTemplate,
+		Name:                    body.Name,
+		RequestType:             body.RequestType,
+		Stages:                  stages,
+		IdentityFields:          body.IdentityFields,
+		DynamicAuthorizationURL: body.DynamicAuthorizationURL,
+		DisplayTemplate:         body.DisplayTemplate,
 	}
 
 	if body.AutoExpireDuration != "" {
@@ -94,7 +98,7 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) {
+		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) || errors.Is(err, service.ErrInvalidAuthorizationMode) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -136,12 +140,12 @@ func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 type updatePolicyBody struct {
-	Name               string          `json:"name"`
-	Stages             []stageBody     `json:"stages,omitempty"`
-	IdentityFields     []string        `json:"identity_fields,omitempty"`
-	PermissionCheckURL *string         `json:"permission_check_url,omitempty"`
-	AutoExpireDuration string          `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate    json.RawMessage `json:"display_template,omitempty"`
+	Name                    string          `json:"name"`
+	Stages                  []stageBody     `json:"stages,omitempty"`
+	IdentityFields          []string        `json:"identity_fields,omitempty"`
+	DynamicAuthorizationURL *string         `json:"dynamic_authorization_url,omitempty"`
+	AutoExpireDuration      string          `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate         json.RawMessage `json:"display_template,omitempty"`
 }
 
 func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +182,8 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 				Name:                sb.Name,
 				RequiredApprovals:   sb.RequiredApprovals,
 				AllowedCheckerRoles: sb.AllowedCheckerRoles,
+				AllowedPermissions:  sb.AllowedPermissions,
+				AuthorizationMode:   model.AuthorizationMode(sb.AuthorizationMode),
 				RejectionPolicy:     model.RejectionPolicy(sb.RejectionPolicy),
 				MaxCheckers:         sb.MaxCheckers,
 			}
@@ -187,8 +193,8 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.IdentityFields != nil {
 		existing.IdentityFields = body.IdentityFields
 	}
-	if body.PermissionCheckURL != nil {
-		existing.PermissionCheckURL = body.PermissionCheckURL
+	if body.DynamicAuthorizationURL != nil {
+		existing.DynamicAuthorizationURL = body.DynamicAuthorizationURL
 	}
 	if body.AutoExpireDuration != "" {
 		d, err := time.ParseDuration(body.AutoExpireDuration)
@@ -203,7 +209,7 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.policyService.Update(r.Context(), existing); err != nil {
-		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) {
+		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) || errors.Is(err, service.ErrInvalidAuthorizationMode) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

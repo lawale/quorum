@@ -13,7 +13,7 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-const policyColumns = `id, tenant_id, name, request_type, stages, identity_fields, permission_check_url, auto_expire_duration, display_template, created_at, updated_at`
+const policyColumns = `id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, auto_expire_duration, display_template, created_at, updated_at`
 
 type PolicyStore struct {
 	db *DB
@@ -54,7 +54,7 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 
 	_, err = s.db.Pool.ExecContext(ctx, query,
 		policy.ID, policy.TenantID, policy.Name, policy.RequestType, string(stagesJSON),
-		nullableString(identityFieldsJSON), policy.PermissionCheckURL, autoExpire, nullableString(policy.DisplayTemplate), policy.CreatedAt, policy.UpdatedAt,
+		nullableString(identityFieldsJSON), policy.DynamicAuthorizationURL, autoExpire, nullableString(policy.DisplayTemplate), policy.CreatedAt, policy.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting policy: %w", err)
@@ -112,7 +112,7 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 	tenantID := auth.TenantIDFromContext(ctx)
 	query := `
 		UPDATE [quorum].[policies] SET name = @p1, stages = @p2, identity_fields = @p3,
-		permission_check_url = @p4, auto_expire_duration = @p5, display_template = @p6, updated_at = @p7
+		dynamic_authorization_url = @p4, auto_expire_duration = @p5, display_template = @p6, updated_at = @p7
 		WHERE id = @p8`
 	if tenantID != "" {
 		query += ` AND tenant_id = @p9`
@@ -138,7 +138,7 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 
 	args := []any{
 		policy.Name, string(stagesJSON), nullableString(identityFieldsJSON),
-		policy.PermissionCheckURL, autoExpire, nullableString(policy.DisplayTemplate), policy.UpdatedAt, policy.ID,
+		policy.DynamicAuthorizationURL, autoExpire, nullableString(policy.DisplayTemplate), policy.UpdatedAt, policy.ID,
 	}
 	if tenantID != "" {
 		args = append(args, tenantID)
@@ -190,7 +190,7 @@ func (s *PolicyStore) scanSingleRow(row *sql.Row) (*model.Policy, error) {
 
 	err := row.Scan(
 		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
-		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.DynamicAuthorizationURL, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -227,7 +227,7 @@ func (s *PolicyStore) scanPolicyRow(rows *sql.Rows) (*model.Policy, error) {
 
 	err := rows.Scan(
 		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
-		&identityFieldsJSON, &p.PermissionCheckURL, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.DynamicAuthorizationURL, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scanning policy: %w", err)

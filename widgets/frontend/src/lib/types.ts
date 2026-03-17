@@ -36,7 +36,7 @@ export interface Policy {
   request_type: string;
   stages: ApprovalStage[];
   identity_fields?: string[];
-  permission_check_url?: string;
+  dynamic_authorization_url?: string;
   auto_expire_duration?: string;
   created_at: string;
   updated_at: string;
@@ -47,6 +47,8 @@ export interface ApprovalStage {
   name?: string;
   required_approvals: number;
   allowed_checker_roles?: string[];
+  allowed_permissions?: string[];
+  authorization_mode?: string;
   rejection_policy: 'any' | 'threshold';
   max_checkers?: number;
 }

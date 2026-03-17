@@ -64,27 +64,38 @@ type Approval struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+type AuthorizationMode string
+
+const (
+	AuthModeRole       AuthorizationMode = "role"
+	AuthModePermission AuthorizationMode = "permission"
+	AuthModeAny        AuthorizationMode = "any"
+	AuthModeAll        AuthorizationMode = "all"
+)
+
 type ApprovalStage struct {
-	Index               int             `json:"index"`
-	Name                string          `json:"name,omitempty"`
-	RequiredApprovals   int             `json:"required_approvals"`
-	AllowedCheckerRoles json.RawMessage `json:"allowed_checker_roles,omitempty"`
-	RejectionPolicy     RejectionPolicy `json:"rejection_policy"`
-	MaxCheckers         *int            `json:"max_checkers,omitempty"`
+	Index               int               `json:"index"`
+	Name                string            `json:"name,omitempty"`
+	RequiredApprovals   int               `json:"required_approvals"`
+	AllowedCheckerRoles json.RawMessage   `json:"allowed_checker_roles,omitempty"`
+	AllowedPermissions  json.RawMessage   `json:"allowed_permissions,omitempty"`
+	AuthorizationMode   AuthorizationMode `json:"authorization_mode,omitempty"`
+	RejectionPolicy     RejectionPolicy   `json:"rejection_policy"`
+	MaxCheckers         *int              `json:"max_checkers,omitempty"`
 }
 
 type Policy struct {
-	ID                 uuid.UUID       `json:"id"`
-	TenantID           string          `json:"tenant_id"`
-	Name               string          `json:"name"`
-	RequestType        string          `json:"request_type"`
-	Stages             []ApprovalStage `json:"stages"`
-	IdentityFields     []string        `json:"identity_fields,omitempty"`
-	PermissionCheckURL *string         `json:"permission_check_url,omitempty"`
-	AutoExpireDuration *time.Duration  `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate    json.RawMessage `json:"display_template,omitempty"`
-	CreatedAt          time.Time       `json:"created_at"`
-	UpdatedAt          time.Time       `json:"updated_at"`
+	ID                      uuid.UUID       `json:"id"`
+	TenantID                string          `json:"tenant_id"`
+	Name                    string          `json:"name"`
+	RequestType             string          `json:"request_type"`
+	Stages                  []ApprovalStage `json:"stages"`
+	IdentityFields          []string        `json:"identity_fields,omitempty"`
+	DynamicAuthorizationURL *string         `json:"dynamic_authorization_url,omitempty"`
+	AutoExpireDuration      *time.Duration  `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate         json.RawMessage `json:"display_template,omitempty"`
+	CreatedAt               time.Time       `json:"created_at"`
+	UpdatedAt               time.Time       `json:"updated_at"`
 }
 
 // StageAt returns the approval stage at the given index, or nil if out of range.
@@ -100,18 +111,15 @@ func (p *Policy) TotalStages() int {
 	return len(p.Stages)
 }
 
-// PermissionCheckRequest is the payload sent to the consuming system's permission check endpoint.
-type PermissionCheckRequest struct {
-	RequestID    uuid.UUID       `json:"request_id"`
-	RequestType  string          `json:"request_type"`
-	CheckerID    string          `json:"checker_id"`
-	CheckerRoles []string        `json:"checker_roles"`
-	MakerID      string          `json:"maker_id"`
-	Payload      json.RawMessage `json:"payload"`
+type AuthorizationHookRequest struct {
+	RequestID   uuid.UUID       `json:"request_id"`
+	RequestType string          `json:"request_type"`
+	CheckerID   string          `json:"checker_id"`
+	MakerID     string          `json:"maker_id"`
+	Payload     json.RawMessage `json:"payload"`
 }
 
-// PermissionCheckResponse is the expected response from the permission check endpoint.
-type PermissionCheckResponse struct {
+type AuthorizationHookResponse struct {
 	Allowed bool   `json:"allowed"`
 	Reason  string `json:"reason,omitempty"`
 }

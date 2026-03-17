@@ -25,7 +25,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		// Handle preflight
 		if r.Method == http.MethodOptions {
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-ID, X-User-Id, X-User-Roles, X-Tenant-ID")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-ID, X-User-Id, X-User-Roles, X-User-Permissions, X-Tenant-ID")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 			w.WriteHeader(http.StatusNoContent)
 			return

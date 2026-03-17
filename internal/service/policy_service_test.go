@@ -372,3 +372,193 @@ func TestPolicyDelete_NotFound(t *testing.T) {
 		t.Fatalf("expected ErrPolicyNotFound, got: %v", err)
 	}
 }
+
+// --- Authorization Mode Validation Tests ---
+
+func TestPolicyCreate_AuthorizationMode_BothSetWithoutMode_Error(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:               0,
+				RequiredApprovals:   1,
+				AllowedCheckerRoles: []byte(`["manager"]`),
+				AllowedPermissions:  []byte(`["approve_transfer"]`),
+				RejectionPolicy:     model.RejectionPolicyAny,
+				// AuthorizationMode intentionally missing
+			},
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if !errors.Is(err, ErrInvalidAuthorizationMode) {
+		t.Fatalf("expected ErrInvalidAuthorizationMode, got: %v", err)
+	}
+}
+
+func TestPolicyCreate_AuthorizationMode_BothSetWithAny_Success(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+		CreateFunc: func(ctx context.Context, policy *model.Policy) error {
+			return nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:               0,
+				RequiredApprovals:   1,
+				AllowedCheckerRoles: []byte(`["manager"]`),
+				AllowedPermissions:  []byte(`["approve_transfer"]`),
+				AuthorizationMode:   model.AuthModeAny,
+				RejectionPolicy:     model.RejectionPolicyAny,
+			},
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPolicyCreate_AuthorizationMode_BothSetWithAll_Success(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+		CreateFunc: func(ctx context.Context, policy *model.Policy) error {
+			return nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:               0,
+				RequiredApprovals:   1,
+				AllowedCheckerRoles: []byte(`["manager"]`),
+				AllowedPermissions:  []byte(`["approve_transfer"]`),
+				AuthorizationMode:   model.AuthModeAll,
+				RejectionPolicy:     model.RejectionPolicyAny,
+			},
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPolicyCreate_AuthorizationMode_PermissionModeWithoutPermissions_Error(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:               0,
+				RequiredApprovals:   1,
+				AllowedCheckerRoles: []byte(`["manager"]`),
+				AuthorizationMode:   model.AuthModePermission,
+				RejectionPolicy:     model.RejectionPolicyAny,
+			},
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if !errors.Is(err, ErrInvalidAuthorizationMode) {
+		t.Fatalf("expected ErrInvalidAuthorizationMode, got: %v", err)
+	}
+}
+
+func TestPolicyCreate_AuthorizationMode_RoleModeWithoutRoles_Error(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:              0,
+				RequiredApprovals:  1,
+				AllowedPermissions: []byte(`["approve_transfer"]`),
+				AuthorizationMode:  model.AuthModeRole,
+				RejectionPolicy:    model.RejectionPolicyAny,
+			},
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if !errors.Is(err, ErrInvalidAuthorizationMode) {
+		t.Fatalf("expected ErrInvalidAuthorizationMode, got: %v", err)
+	}
+}
+
+func TestPolicyCreate_AuthorizationMode_OnlyRolesSet_NoModeRequired(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+		CreateFunc: func(ctx context.Context, policy *model.Policy) error {
+			return nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:               0,
+				RequiredApprovals:   1,
+				AllowedCheckerRoles: []byte(`["manager"]`),
+				RejectionPolicy:     model.RejectionPolicyAny,
+			},
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPolicyCreate_AuthorizationMode_OnlyPermissionsSet_NoModeRequired(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+		CreateFunc: func(ctx context.Context, policy *model.Policy) error {
+			return nil
+		},
+	}
+	svc := NewPolicyService(policies)
+
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:              0,
+				RequiredApprovals:  1,
+				AllowedPermissions: []byte(`["approve_transfer"]`),
+				RejectionPolicy:    model.RejectionPolicyAny,
+			},
+		}
+	})
+	err := svc.Create(context.Background(), policy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

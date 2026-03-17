@@ -31,7 +31,8 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
   - **Self-approval prevention** — The maker of a request can never approve their own request.
   - **Eligible reviewers** — Optionally restrict each request to a specific set of allowed reviewers.
   - **Role-based stage access** — Each approval stage can define which roles are allowed to act (e.g., only `manager` for Stage 1, only `compliance_officer` for Stage 2).
-  - **External permission checks** — Delegate to an external HTTP endpoint for custom business logic (e.g., "only managers in the same department can approve").
+  - **Permission-based stage access** — Each approval stage can define which permissions are required (e.g., only users with `approve_transfers` permission for Stage 2). When both roles and permissions are configured, `authorization_mode` controls whether either suffices (`"any"`) or both are required (`"all"`).
+  - **External authorization checks** — Delegate to an external HTTP endpoint for custom business logic (e.g., "only managers in the same department can approve").
   - **Duplicate vote prevention** — A checker can only act once per stage.
   - **Request fingerprinting** — Configurable identity fields prevent duplicate pending requests for the same underlying resource.
 
@@ -303,7 +304,9 @@ Quorum enforces a layered permission model on every approval action. When a user
 | **Self-approval prevention** | Built-in | The maker of a request cannot approve their own request. Always enforced. |
 | **Eligible reviewers** | Per-request | An optional allowlist of user IDs set when creating the request. If provided, only those users can act. |
 | **Allowed checker roles** | Per-stage | Each approval stage can restrict which roles are permitted. The checker must hold at least one matching role. |
-| **Permission check URL** | Per-policy | An external HTTP endpoint called before each approval. The endpoint receives the full request context and returns `{"allowed": true/false}`. Use this for custom business logic your domain requires. |
+| **Allowed permissions** | Per-stage | Each approval stage can restrict which permissions are required. The checker must hold at least one matching permission. |
+| **Authorization mode** | Per-stage | When both `allowed_checker_roles` and `allowed_permissions` are set, controls whether either suffices (`"any"`) or both are required (`"all"`). |
+| **Dynamic authorization URL** | Per-policy | An external HTTP endpoint called before each approval. The endpoint receives the full request context and returns `{"allowed": true/false}`. Use this for custom business logic your domain requires. |
 | **Duplicate vote prevention** | Per-stage | A checker can only vote once per stage. They may vote on different stages of the same request. |
 | **Request fingerprinting** | Per-policy | Configurable `identity_fields` extracted from the payload and hashed. Prevents duplicate pending requests for the same resource. |
 
@@ -329,24 +332,29 @@ Approve/Reject Request
         │ pass
         ▼
 ┌───────────────────────┐
-│  External permission  │──▶ REJECT (endpoint returned allowed: false)
-│  check (if configured)│
+│  Allowed permissions  │──▶ REJECT (checker lacks required permission)
+│  (if set)             │
+└───────┬───────────────┘
+        │ pass
+        ▼
+┌───────────────────────┐
+│  Dynamic authorization│──▶ REJECT (endpoint returned allowed: false)
+│  URL (if configured)  │
 └───────┬───────────────┘
         │ pass
         ▼
    Vote recorded
 ```
 
-### External Permission Check
+### Dynamic Authorization Check
 
-When a policy has a `permission_check_url`, Quorum sends a POST request with this payload before allowing the approval:
+When a policy has a `dynamic_authorization_url`, Quorum sends a POST request with this payload before allowing the approval:
 
 ```json
 {
   "request_id": "uuid",
   "request_type": "wire_transfer",
   "checker_id": "bob",
-  "checker_roles": ["manager"],
   "maker_id": "alice",
   "payload": { "source_account_id": "ACC-001", "amount": 50000 }
 }
@@ -762,7 +770,7 @@ make build-all
 ```
 cmd/server/          — Entry point
 internal/
-  auth/              — Authentication providers and permission checker
+  auth/              — Authentication providers and authorization hook
   config/            — Configuration loading
   display/           — Display template resolution
   metrics/           — Prometheus metrics

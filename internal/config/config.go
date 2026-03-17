@@ -82,9 +82,10 @@ type AuthConfig struct {
 }
 
 type TrustConfig struct {
-	UserIDHeader   string `yaml:"user_id_header"`
-	RolesHeader    string `yaml:"roles_header"`
-	TenantIDHeader string `yaml:"tenant_id_header"`
+	UserIDHeader      string `yaml:"user_id_header"`
+	RolesHeader       string `yaml:"roles_header"`
+	PermissionsHeader string `yaml:"permissions_header"`
+	TenantIDHeader    string `yaml:"tenant_id_header"`
 }
 
 type VerifyConfig struct {
@@ -173,6 +174,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Auth.Trust.RolesHeader == "" {
 		cfg.Auth.Trust.RolesHeader = "X-User-Roles"
+	}
+	if cfg.Auth.Trust.PermissionsHeader == "" {
+		cfg.Auth.Trust.PermissionsHeader = "X-User-Permissions"
 	}
 	if cfg.Auth.Trust.TenantIDHeader == "" {
 		cfg.Auth.Trust.TenantIDHeader = "X-Tenant-ID"

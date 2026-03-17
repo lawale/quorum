@@ -127,7 +127,7 @@ func TestPolicyHandler_Create_InvalidAutoExpire(t *testing.T) {
 	}
 }
 
-func TestPolicyHandler_Create_WithPermissionCheckURL(t *testing.T) {
+func TestPolicyHandler_Create_WithDynamicAuthorizationURL(t *testing.T) {
 	var createdPolicy *model.Policy
 	policies := &testutil.MockPolicyStore{
 		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) { return nil, nil },
@@ -138,7 +138,7 @@ func TestPolicyHandler_Create_WithPermissionCheckURL(t *testing.T) {
 	}
 	handler := newTestPolicyHandler(policies)
 
-	body := `{"name":"Test","request_type":"transfer","stages":[{"index":0,"required_approvals":1}],"permission_check_url":"https://example.com/check"}`
+	body := `{"name":"Test","request_type":"transfer","stages":[{"index":0,"required_approvals":1}],"dynamic_authorization_url":"https://example.com/check"}`
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
 	rec := httptest.NewRecorder()
 
@@ -147,8 +147,8 @@ func TestPolicyHandler_Create_WithPermissionCheckURL(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusCreated)
 	}
-	if createdPolicy.PermissionCheckURL == nil || *createdPolicy.PermissionCheckURL != "https://example.com/check" {
-		t.Errorf("PermissionCheckURL = %v, want https://example.com/check", createdPolicy.PermissionCheckURL)
+	if createdPolicy.DynamicAuthorizationURL == nil || *createdPolicy.DynamicAuthorizationURL != "https://example.com/check" {
+		t.Errorf("DynamicAuthorizationURL = %v, want https://example.com/check", createdPolicy.DynamicAuthorizationURL)
 	}
 }
 

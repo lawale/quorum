@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -13,12 +14,13 @@ import (
 )
 
 var (
-	ErrPolicyNotFound         = errors.New("policy not found")
-	ErrPolicyTypeConflict     = errors.New("a policy for this request type already exists")
-	ErrNoStages               = errors.New("policy must have at least one approval stage")
-	ErrInvalidStageIndex      = errors.New("stage indices must be sequential starting from 0")
-	ErrInvalidDisplayTemplate = errors.New("invalid display template")
-	ErrThresholdNoMaxCheckers = errors.New("max_checkers is required when rejection_policy is 'threshold'")
+	ErrPolicyNotFound           = errors.New("policy not found")
+	ErrPolicyTypeConflict       = errors.New("a policy for this request type already exists")
+	ErrNoStages                 = errors.New("policy must have at least one approval stage")
+	ErrInvalidStageIndex        = errors.New("stage indices must be sequential starting from 0")
+	ErrInvalidDisplayTemplate   = errors.New("invalid display template")
+	ErrThresholdNoMaxCheckers   = errors.New("max_checkers is required when rejection_policy is 'threshold'")
+	ErrInvalidAuthorizationMode = errors.New("authorization_mode must be 'any' or 'all' when both allowed_checker_roles and allowed_permissions are set")
 )
 
 type PolicyService struct {
@@ -73,8 +75,34 @@ func validateAndDefaultStages(stages []model.ApprovalStage) error {
 		if stages[i].RejectionPolicy == model.RejectionPolicyThreshold && stages[i].MaxCheckers == nil {
 			return fmt.Errorf("%w (stage %d)", ErrThresholdNoMaxCheckers, i)
 		}
+
+		hasRoles := isNonEmptyJSONArray(stages[i].AllowedCheckerRoles)
+		hasPermissions := isNonEmptyJSONArray(stages[i].AllowedPermissions)
+		mode := stages[i].AuthorizationMode
+
+		if hasRoles && hasPermissions {
+			if mode != model.AuthModeAny && mode != model.AuthModeAll {
+				return fmt.Errorf("%w (stage %d)", ErrInvalidAuthorizationMode, i)
+			}
+		} else if hasRoles && !hasPermissions && mode == model.AuthModePermission {
+			return fmt.Errorf("%w (stage %d)", ErrInvalidAuthorizationMode, i)
+		} else if hasPermissions && !hasRoles && mode == model.AuthModeRole {
+			return fmt.Errorf("%w (stage %d)", ErrInvalidAuthorizationMode, i)
+		}
 	}
 	return nil
+}
+
+// isNonEmptyJSONArray returns true if raw is a JSON array with at least one element.
+func isNonEmptyJSONArray(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return false
+	}
+	return len(arr) > 0
 }
 
 func (s *PolicyService) GetByID(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
