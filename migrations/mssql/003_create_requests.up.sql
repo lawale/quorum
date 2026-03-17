@@ -1,7 +1,7 @@
 IF OBJECT_ID('[quorum].[requests]', 'U') IS NULL
 CREATE TABLE [quorum].[requests] (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    tenant_id NVARCHAR(255) NOT NULL DEFAULT 'default',
+    tenant_id NVARCHAR(255) NOT NULL,
     idempotency_key NVARCHAR(255) UNIQUE,
     type NVARCHAR(255) NOT NULL,
     payload NVARCHAR(MAX) NOT NULL,

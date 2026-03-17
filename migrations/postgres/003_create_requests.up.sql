@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS quorum.requests (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id VARCHAR(255) NOT NULL DEFAULT 'default',
+    tenant_id VARCHAR(255) NOT NULL,
     idempotency_key VARCHAR(255) UNIQUE,
     type VARCHAR(255) NOT NULL,
     payload JSONB NOT NULL,

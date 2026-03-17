@@ -95,6 +95,7 @@ func main() {
 		MaxRetryDelay:   cfg.Webhook.MaxRetryDelay,
 		Heartbeat:       cfg.Webhook.Heartbeat,
 		RetentionPeriod: cfg.Webhook.OutboxRetention,
+		BlockPrivateIPs: cfg.Webhook.BlockPrivateIPs,
 	})
 	requestService.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
 

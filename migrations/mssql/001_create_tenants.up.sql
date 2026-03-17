@@ -9,6 +9,3 @@ CREATE TABLE [quorum].[tenants] (
     created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
     updated_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET()
 );
-
-IF NOT EXISTS (SELECT 1 FROM [quorum].[tenants] WHERE slug = 'default')
-    INSERT INTO [quorum].[tenants] (slug, name) VALUES ('default', 'Default Tenant');

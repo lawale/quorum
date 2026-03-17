@@ -347,10 +347,6 @@ func (h *ConsoleHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "tenant not found")
 			return
 		}
-		if errors.Is(err, service.ErrCannotDeleteDefault) {
-			writeError(w, http.StatusBadRequest, "cannot delete the default tenant")
-			return
-		}
 		writeServerError(w, r, err, "failed to delete tenant")
 		return
 	}

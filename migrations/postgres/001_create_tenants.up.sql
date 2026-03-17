@@ -7,5 +7,3 @@ CREATE TABLE IF NOT EXISTS quorum.tenants (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-INSERT INTO quorum.tenants (slug, name) VALUES ('default', 'Default Tenant');

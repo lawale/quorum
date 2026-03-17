@@ -1,7 +1,7 @@
 IF OBJECT_ID('[quorum].[policies]', 'U') IS NULL
 CREATE TABLE [quorum].[policies] (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    tenant_id NVARCHAR(255) NOT NULL DEFAULT 'default',
+    tenant_id NVARCHAR(255) NOT NULL,
     name NVARCHAR(255) NOT NULL,
     request_type NVARCHAR(255) NOT NULL,
     stages NVARCHAR(MAX) NOT NULL,

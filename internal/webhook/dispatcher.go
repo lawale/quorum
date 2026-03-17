@@ -51,7 +51,7 @@ type Config struct {
 	Heartbeat       time.Duration
 	BatchSize       int
 	RetentionPeriod time.Duration // how long to keep delivered entries; 0 = never clean up
-	AllowPrivateIPs bool          // disable SSRF protection (testing/development only)
+	BlockPrivateIPs bool          // enable SSRF protection; blocks webhooks to private/reserved IPs (recommended for SaaS deployments)
 }
 
 func NewDispatcher(outbox store.OutboxStore, audits store.AuditStore, cfg Config) *Dispatcher {
@@ -72,7 +72,7 @@ func NewDispatcher(outbox store.OutboxStore, audits store.AuditStore, cfg Config
 		maxRetryDelay = time.Hour
 	}
 	client := &http.Client{Timeout: cfg.Timeout}
-	if !cfg.AllowPrivateIPs {
+	if cfg.BlockPrivateIPs {
 		client.Transport = &http.Transport{
 			DialContext: newSafeDialer().DialContext,
 		}

@@ -1,7 +1,7 @@
 IF OBJECT_ID('[quorum].[webhooks]', 'U') IS NULL
 CREATE TABLE [quorum].[webhooks] (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    tenant_id NVARCHAR(255) NOT NULL DEFAULT 'default',
+    tenant_id NVARCHAR(255) NOT NULL,
     url NVARCHAR(2048) NOT NULL,
     events NVARCHAR(MAX) NOT NULL,
     secret NVARCHAR(255) NOT NULL,

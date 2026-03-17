@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS quorum.webhooks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id VARCHAR(255) NOT NULL DEFAULT 'default',
+    tenant_id VARCHAR(255) NOT NULL,
     url VARCHAR(2048) NOT NULL,
     events JSONB NOT NULL,
     secret VARCHAR(255) NOT NULL,

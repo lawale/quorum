@@ -93,7 +93,7 @@ func TestDispatcher_DeliverEntry_Success(t *testing.T) {
 		},
 	}
 
-	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second, AllowPrivateIPs: true})
+	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second})
 
 	entry := model.OutboxEntry{
 		ID:            uuid.New(),
@@ -126,10 +126,9 @@ func TestDispatcher_DeliverEntry_FailureSchedulesRetry(t *testing.T) {
 	}
 
 	dispatcher := NewDispatcher(outbox, &testutil.MockAuditStore{}, Config{
-		Timeout:         5 * time.Second,
-		MaxRetries:      3,
-		RetryDelay:      time.Millisecond,
-		AllowPrivateIPs: true,
+		Timeout:    5 * time.Second,
+		MaxRetries: 3,
+		RetryDelay: time.Millisecond,
 	})
 
 	entry := model.OutboxEntry{
@@ -170,10 +169,9 @@ func TestDispatcher_DeliverEntry_ExhaustsRetries(t *testing.T) {
 	}
 
 	dispatcher := NewDispatcher(outbox, audits, Config{
-		Timeout:         5 * time.Second,
-		MaxRetries:      1,
-		RetryDelay:      time.Millisecond,
-		AllowPrivateIPs: true,
+		Timeout:    5 * time.Second,
+		MaxRetries: 1,
+		RetryDelay: time.Millisecond,
 	})
 
 	entry := model.OutboxEntry{
@@ -212,7 +210,7 @@ func TestDispatcher_DeliverEntry_HMAC_Signature(t *testing.T) {
 	}
 
 	secret := "my-webhook-secret"
-	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second, AllowPrivateIPs: true})
+	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second})
 
 	payload := []byte(`{"event":"approved","request_id":"00000000-0000-0000-0000-000000000001"}`)
 	entry := model.OutboxEntry{
@@ -256,7 +254,7 @@ func TestDispatcher_DeliverEntry_NoHMAC_WhenNoSecret(t *testing.T) {
 		CreateFunc: func(ctx context.Context, log *model.AuditLog) error { return nil },
 	}
 
-	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second, AllowPrivateIPs: true})
+	dispatcher := NewDispatcher(outbox, audits, Config{Timeout: 5 * time.Second})
 
 	entry := model.OutboxEntry{
 		ID:            uuid.New(),
@@ -351,11 +349,10 @@ func TestHandleFailure_RetryWindowExpired(t *testing.T) {
 	}
 
 	d := NewDispatcher(outbox, audits, Config{
-		Timeout:         5 * time.Second,
-		MaxRetries:      20,
-		RetryDelay:      30 * time.Second,
-		RetryWindow:     time.Hour, // 1h window
-		AllowPrivateIPs: true,
+		Timeout:     5 * time.Second,
+		MaxRetries:  20,
+		RetryDelay:  30 * time.Second,
+		RetryWindow: time.Hour, // 1h window
 	})
 
 	// Entry created 2 hours ago — window should be expired

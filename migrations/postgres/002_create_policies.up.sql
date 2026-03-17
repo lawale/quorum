@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS quorum.policies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id VARCHAR(255) NOT NULL DEFAULT 'default',
+    tenant_id VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
     request_type VARCHAR(255) NOT NULL,
     stages JSONB NOT NULL,

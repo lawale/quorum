@@ -240,7 +240,7 @@ curl -sf -X POST "${API}/webhooks" \
 
 # ---- Summary ----
 section "Setup Complete"
-log "Tenants:   3 created (banking, expenses, access-portal) + default"
+log "Tenants:   3 created (banking, expenses, access-portal)"
 log "Policies:  4 created across tenants"
 log "Webhooks:  3 registered (banking, expenses, access-portal)"
 log "Console:   ${API_URL}/console/  (admin / admin123)"

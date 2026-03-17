@@ -119,6 +119,7 @@ type WebhookConfig struct {
 	Timeout         time.Duration `yaml:"timeout"`
 	Heartbeat       time.Duration `yaml:"heartbeat"`
 	OutboxRetention time.Duration `yaml:"outbox_retention"`
+	BlockPrivateIPs bool          `yaml:"block_private_ips"`
 }
 
 type ExpiryConfig struct {

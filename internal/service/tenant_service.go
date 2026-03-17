@@ -15,12 +15,11 @@ import (
 )
 
 var (
-	ErrTenantNotFound      = errors.New("tenant not found")
-	ErrTenantSlugExists    = errors.New("tenant slug already exists")
-	ErrTenantSlugInvalid   = errors.New("tenant slug must be lowercase alphanumeric with hyphens only")
-	ErrTenantSlugRequired  = errors.New("tenant slug is required")
-	ErrTenantNameRequired  = errors.New("tenant name is required")
-	ErrCannotDeleteDefault = errors.New("cannot delete the default tenant")
+	ErrTenantNotFound     = errors.New("tenant not found")
+	ErrTenantSlugExists   = errors.New("tenant slug already exists")
+	ErrTenantSlugInvalid  = errors.New("tenant slug must be lowercase alphanumeric with hyphens only")
+	ErrTenantSlugRequired = errors.New("tenant slug is required")
+	ErrTenantNameRequired = errors.New("tenant name is required")
 )
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$`)
@@ -144,9 +143,6 @@ func (s *TenantService) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 	if tenant == nil {
 		return ErrTenantNotFound
-	}
-	if tenant.Slug == "default" {
-		return ErrCannotDeleteDefault
 	}
 
 	if err := s.tenants.Delete(ctx, id); err != nil {
