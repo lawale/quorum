@@ -35,9 +35,7 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	if req.ID == uuid.Nil {
 		req.ID = uuid.New()
 	}
-	if req.TenantID == "" {
-		req.TenantID = auth.TenantIDFromContext(ctx)
-	}
+	req.TenantID = auth.TenantIDFromContext(ctx)
 	req.CreatedAt = now
 	req.UpdatedAt = now
 	if req.Status == "" {

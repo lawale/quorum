@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 )
 
@@ -26,6 +27,7 @@ func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 	if log.ID == uuid.Nil {
 		log.ID = uuid.New()
 	}
+	log.TenantID = auth.TenantIDFromContext(ctx)
 	log.CreatedAt = time.Now().UTC()
 
 	_, err := s.db.Pool.Exec(ctx, query,
@@ -41,9 +43,16 @@ func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 func (s *AuditStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.AuditLog, error) {
 	query := `
 		SELECT id, tenant_id, request_id, action, actor_id, details, created_at
-		FROM audit_logs WHERE request_id = $1 ORDER BY created_at ASC`
+		FROM audit_logs WHERE request_id = $1`
+	args := []any{requestID}
 
-	rows, err := s.db.Pool.Query(ctx, query, requestID)
+	if tenant := auth.TenantIDFromContext(ctx); tenant != "" {
+		query += " AND tenant_id = $2"
+		args = append(args, tenant)
+	}
+	query += " ORDER BY created_at ASC"
+
+	rows, err := s.db.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing audit logs: %w", err)
 	}

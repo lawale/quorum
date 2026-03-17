@@ -30,9 +30,7 @@ func (s *WebhookStore) Create(ctx context.Context, webhook *model.Webhook) error
 	if webhook.ID == uuid.Nil {
 		webhook.ID = uuid.New()
 	}
-	if webhook.TenantID == "" {
-		webhook.TenantID = auth.TenantIDFromContext(ctx)
-	}
+	webhook.TenantID = auth.TenantIDFromContext(ctx)
 	webhook.CreatedAt = time.Now().UTC()
 	webhook.Active = true
 

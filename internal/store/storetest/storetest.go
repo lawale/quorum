@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -432,6 +433,47 @@ func TestApprovalStore(t *testing.T, as store.ApprovalStore, rs store.RequestSto
 		}
 		if count != 2 {
 			t.Errorf("expected 2 approvals from multi-checker, got %d", count)
+		}
+	})
+
+	t.Run("ListByRequestID tenant isolation", func(t *testing.T) {
+		ctxA := auth.WithTenantID(context.Background(), "tenant-a")
+		ctxB := auth.WithTenantID(context.Background(), "tenant-b")
+
+		// Create requests under each tenant.
+		reqA := &model.Request{Type: "transfer", Payload: json.RawMessage(`{}`), MakerID: "user-1"}
+		if err := rs.Create(ctxA, reqA); err != nil {
+			t.Fatalf("Create reqA: %v", err)
+		}
+		reqB := &model.Request{Type: "transfer", Payload: json.RawMessage(`{}`), MakerID: "user-1"}
+		if err := rs.Create(ctxB, reqB); err != nil {
+			t.Fatalf("Create reqB: %v", err)
+		}
+
+		// Create approvals for each request.
+		if err := as.Create(ctx, &model.Approval{RequestID: reqA.ID, CheckerID: "checker-iso-a", Decision: model.DecisionApproved}); err != nil {
+			t.Fatalf("Create approval A: %v", err)
+		}
+		if err := as.Create(ctx, &model.Approval{RequestID: reqB.ID, CheckerID: "checker-iso-b", Decision: model.DecisionApproved}); err != nil {
+			t.Fatalf("Create approval B: %v", err)
+		}
+
+		// Tenant A context querying tenant B's request should return empty.
+		crossApprovals, err := as.ListByRequestID(ctxA, reqB.ID)
+		if err != nil {
+			t.Fatalf("ListByRequestID cross-tenant: %v", err)
+		}
+		if len(crossApprovals) != 0 {
+			t.Errorf("expected 0 approvals for cross-tenant query, got %d", len(crossApprovals))
+		}
+
+		// Tenant A context querying own request should return the approval.
+		ownApprovals, err := as.ListByRequestID(ctxA, reqA.ID)
+		if err != nil {
+			t.Fatalf("ListByRequestID own tenant: %v", err)
+		}
+		if len(ownApprovals) != 1 {
+			t.Errorf("expected 1 approval for own tenant, got %d", len(ownApprovals))
 		}
 	})
 }
@@ -876,6 +918,77 @@ func TestAuditStore(t *testing.T, as store.AuditStore, rs store.RequestStore) {
 		}
 		if string(logs[0].Details) != `{"note":"test"}` {
 			t.Errorf("Details = %s", logs[0].Details)
+		}
+	})
+
+	t.Run("ListByRequestID tenant isolation", func(t *testing.T) {
+		ctxA := auth.WithTenantID(context.Background(), "tenant-a")
+		ctxB := auth.WithTenantID(context.Background(), "tenant-b")
+
+		// Create requests under each tenant.
+		reqA := &model.Request{Type: "transfer", Payload: json.RawMessage(`{}`), MakerID: "user-1"}
+		if err := rs.Create(ctxA, reqA); err != nil {
+			t.Fatalf("Create reqA: %v", err)
+		}
+		reqB := &model.Request{Type: "transfer", Payload: json.RawMessage(`{}`), MakerID: "user-1"}
+		if err := rs.Create(ctxB, reqB); err != nil {
+			t.Fatalf("Create reqB: %v", err)
+		}
+
+		// Create audit logs under each tenant.
+		if err := as.Create(ctxA, &model.AuditLog{RequestID: reqA.ID, Action: "created", ActorID: "user-1"}); err != nil {
+			t.Fatalf("Create audit A: %v", err)
+		}
+		if err := as.Create(ctxB, &model.AuditLog{RequestID: reqB.ID, Action: "created", ActorID: "user-1"}); err != nil {
+			t.Fatalf("Create audit B: %v", err)
+		}
+
+		// Tenant A should only see their own logs.
+		logsA, err := as.ListByRequestID(ctxA, reqA.ID)
+		if err != nil {
+			t.Fatalf("ListByRequestID tenant-a own: %v", err)
+		}
+		if len(logsA) != 1 {
+			t.Errorf("expected 1 log for tenant-a, got %d", len(logsA))
+		}
+
+		// Tenant A should NOT see tenant B's logs even with the request ID.
+		crossLogs, err := as.ListByRequestID(ctxA, reqB.ID)
+		if err != nil {
+			t.Fatalf("ListByRequestID cross-tenant: %v", err)
+		}
+		if len(crossLogs) != 0 {
+			t.Errorf("expected 0 logs for cross-tenant query, got %d", len(crossLogs))
+		}
+	})
+
+	t.Run("Create enforces tenant from context", func(t *testing.T) {
+		ctxT := auth.WithTenantID(context.Background(), "tenant-enforce")
+
+		req := &model.Request{Type: "transfer", Payload: json.RawMessage(`{}`), MakerID: "user-1"}
+		if err := rs.Create(ctxT, req); err != nil {
+			t.Fatalf("Create request: %v", err)
+		}
+
+		log := &model.AuditLog{
+			TenantID:  "should-be-overwritten",
+			RequestID: req.ID,
+			Action:    "created",
+			ActorID:   "user-1",
+		}
+		if err := as.Create(ctxT, log); err != nil {
+			t.Fatalf("Create audit: %v", err)
+		}
+
+		logs, err := as.ListByRequestID(ctxT, req.ID)
+		if err != nil {
+			t.Fatalf("ListByRequestID: %v", err)
+		}
+		if len(logs) != 1 {
+			t.Fatalf("expected 1 log, got %d", len(logs))
+		}
+		if logs[0].TenantID != "tenant-enforce" {
+			t.Errorf("TenantID = %q, want %q (context should override)", logs[0].TenantID, "tenant-enforce")
 		}
 	})
 }

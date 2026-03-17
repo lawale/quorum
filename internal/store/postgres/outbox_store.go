@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -215,9 +216,18 @@ func (s *OutboxStore) CountByStatus(ctx context.Context, tenantID *string) (map[
 }
 
 func (s *OutboxStore) GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error) {
-	query := `SELECT ` + outboxColumns + ` FROM webhook_outbox WHERE id = $1`
+	args := []any{id}
+	var query string
+
+	if tenant := auth.TenantIDFromContext(ctx); tenant != "" {
+		query = `SELECT ` + outboxColumnsQualified + ` FROM webhook_outbox o JOIN requests r ON r.id = o.request_id WHERE o.id = $1 AND r.tenant_id = $2`
+		args = append(args, tenant)
+	} else {
+		query = `SELECT ` + outboxColumns + ` FROM webhook_outbox WHERE id = $1`
+	}
+
 	var e model.OutboxEntry
-	err := s.db.Pool.QueryRow(ctx, query, id).Scan(
+	err := s.db.Pool.QueryRow(ctx, query, args...).Scan(
 		&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &e.Payload, &e.Status,
 		&e.Attempts, &e.MaxRetries, &e.LastError, &e.NextRetryAt, &e.CreatedAt, &e.DeliveredAt,
 	)

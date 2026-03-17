@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -47,11 +48,25 @@ func (s *ApprovalStore) Create(ctx context.Context, approval *model.Approval) er
 }
 
 func (s *ApprovalStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error) {
-	query := `
-		SELECT id, request_id, checker_id, decision, stage_index, comment, created_at
-		FROM approvals WHERE request_id = $1 ORDER BY created_at ASC`
+	args := []any{requestID}
+	var query string
 
-	rows, err := s.db.Pool.Query(ctx, query, requestID)
+	if tenant := auth.TenantIDFromContext(ctx); tenant != "" {
+		query = `
+			SELECT a.id, a.request_id, a.checker_id, a.decision, a.stage_index, a.comment, a.created_at
+			FROM approvals a
+			JOIN requests r ON r.id = a.request_id
+			WHERE a.request_id = $1 AND r.tenant_id = $2
+			ORDER BY a.created_at ASC`
+		args = append(args, tenant)
+	} else {
+		query = `
+			SELECT id, request_id, checker_id, decision, stage_index, comment, created_at
+			FROM approvals WHERE request_id = $1
+			ORDER BY created_at ASC`
+	}
+
+	rows, err := s.db.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing approvals: %w", err)
 	}

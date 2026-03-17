@@ -32,9 +32,7 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	if policy.ID == uuid.Nil {
 		policy.ID = uuid.New()
 	}
-	if policy.TenantID == "" {
-		policy.TenantID = auth.TenantIDFromContext(ctx)
-	}
+	policy.TenantID = auth.TenantIDFromContext(ctx)
 	policy.CreatedAt = now
 	policy.UpdatedAt = now
 

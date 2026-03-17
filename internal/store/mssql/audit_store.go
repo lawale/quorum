@@ -44,9 +44,16 @@ func (s *AuditStore) Create(ctx context.Context, log *model.AuditLog) error {
 func (s *AuditStore) ListByRequestID(ctx context.Context, requestID uuid.UUID) ([]model.AuditLog, error) {
 	query := `
 		SELECT id, tenant_id, request_id, action, actor_id, details, created_at
-		FROM [quorum].[audit_logs] WHERE request_id = @p1 ORDER BY created_at ASC`
+		FROM [quorum].[audit_logs] WHERE request_id = @p1`
+	args := []any{requestID}
 
-	rows, err := s.db.Pool.QueryContext(ctx, query, requestID)
+	if tenant := auth.TenantIDFromContext(ctx); tenant != "" {
+		query += " AND tenant_id = @p2"
+		args = append(args, tenant)
+	}
+	query += " ORDER BY created_at ASC"
+
+	rows, err := s.db.Pool.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing audit logs: %w", err)
 	}
