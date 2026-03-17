@@ -196,10 +196,6 @@ func (s *PolicyStore) scanPolicy(ctx context.Context, query string, args ...any)
 	return p, nil
 }
 
-type scannable interface {
-	Scan(dest ...any) error
-}
-
 func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 	p := &model.Policy{}
 	var stagesJSON, identityFieldsJSON []byte

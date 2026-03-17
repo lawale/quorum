@@ -87,3 +87,12 @@ func TestPostgresOperatorStore(t *testing.T) {
 	db := setupPostgres(t)
 	storetest.TestOperatorStore(t, postgres.NewOperatorStore(db))
 }
+
+func TestPostgresConcurrentApprovals(t *testing.T) {
+	db := setupPostgres(t)
+	stores, err := postgres.NewStoresFromDB(db)
+	if err != nil {
+		t.Fatalf("NewStoresFromDB: %v", err)
+	}
+	storetest.TestConcurrentApprovals(t, stores.Requests, stores.Approvals, stores.RunInTx)
+}

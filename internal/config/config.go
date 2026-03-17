@@ -165,7 +165,7 @@ func walkStruct(v reflect.Value, prefix []string) {
 		}
 
 		segment := camelToScreamingSnake(field.Name)
-		path := append(prefix, segment)
+		path := append(append([]string{}, prefix...), segment)
 
 		switch fv.Kind() {
 		case reflect.Struct:

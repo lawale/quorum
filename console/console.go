@@ -32,7 +32,7 @@ func Handler() http.Handler {
 
 		// Check if the file exists in the embedded FS
 		if f, err := dist.Open(path); err == nil {
-			f.Close()
+			f.Close() //nolint:errcheck // existence check only
 			fileServer.ServeHTTP(w, r)
 			return
 		}

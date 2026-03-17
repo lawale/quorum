@@ -134,8 +134,14 @@ func main() {
 	switch cfg.Auth.Mode {
 	case "trust":
 		authProvider = auth.NewTrustProvider(cfg.Auth.Trust.UserIDHeader, cfg.Auth.Trust.RolesHeader, cfg.Auth.Trust.PermissionsHeader, cfg.Auth.Trust.TenantIDHeader)
+	case "verify":
+		slog.Error("auth mode \"verify\" is not yet implemented")
+		os.Exit(1)
+	case "custom":
+		slog.Error("auth mode \"custom\" is not yet implemented")
+		os.Exit(1)
 	default:
-		slog.Error("unsupported auth mode", "mode", cfg.Auth.Mode)
+		slog.Error("unknown auth mode", "mode", cfg.Auth.Mode)
 		os.Exit(1)
 	}
 

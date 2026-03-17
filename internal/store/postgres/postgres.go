@@ -64,6 +64,51 @@ func (db *DB) withTx(tx pgx.Tx) *DB {
 	return &DB{pool: db.pool, Pool: tx}
 }
 
+// NewStoresFromDB builds a Stores bundle from an existing DB connection.
+// Used by integration tests that manage their own database lifecycle.
+func NewStoresFromDB(db *DB) (*store.Stores, error) {
+	s := &store.Stores{
+		Requests:       NewRequestStore(db),
+		Approvals:      NewApprovalStore(db),
+		Policies:       NewPolicyStore(db),
+		Webhooks:       NewWebhookStore(db),
+		Audits:         NewAuditStore(db),
+		Operators:      NewOperatorStore(db),
+		Tenants:        NewTenantStore(db),
+		Outbox:         NewOutboxStore(db),
+		Close:          func() {}, // caller owns the DB lifecycle
+		HealthCheckers: []health.HealthChecker{db},
+	}
+
+	s.RunInTx = func(ctx context.Context, fn func(tx *store.Stores) error) error {
+		tx, err := db.pool.BeginTx(ctx, pgx.TxOptions{})
+		if err != nil {
+			return fmt.Errorf("beginning transaction: %w", err)
+		}
+		defer tx.Rollback(ctx) //nolint:errcheck
+
+		txDB := db.withTx(tx)
+		txStores := &store.Stores{
+			Requests:  NewRequestStore(txDB),
+			Approvals: NewApprovalStore(txDB),
+			Policies:  NewPolicyStore(txDB),
+			Webhooks:  NewWebhookStore(txDB),
+			Audits:    NewAuditStore(txDB),
+			Operators: NewOperatorStore(txDB),
+			Tenants:   NewTenantStore(txDB),
+			Outbox:    NewOutboxStore(txDB),
+		}
+
+		if err := fn(txStores); err != nil {
+			return err
+		}
+
+		return tx.Commit(ctx)
+	}
+
+	return s, nil
+}
+
 func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.Stores, error) {
 	db, err := New(ctx, dsn, maxOpen, maxIdle)
 	if err != nil {

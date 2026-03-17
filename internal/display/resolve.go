@@ -53,8 +53,8 @@ type ResolvedItem struct {
 }
 
 var (
-	placeholderRe    = regexp.MustCompile(`\{\{([^}]+)\}\}`)
-	validFormatters  = map[string]bool{"currency": true, "date": true, "number": true, "truncate": true}
+	placeholderRe   = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+	validFormatters = map[string]bool{"currency": true, "date": true, "number": true, "truncate": true}
 )
 
 // ValidateTemplate checks that a display template has a valid structure.

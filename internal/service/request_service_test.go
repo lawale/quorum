@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -1592,5 +1594,118 @@ func TestCanViewerAct_AuthorizationModeAll(t *testing.T) {
 	// Has only permission — should fail
 	if svc.CanViewerAct(context.Background(), req, "checker-1", []string{"employee"}, []string{"approve_transfer"}) {
 		t.Error("expected false: viewer only has permission but not role (all mode)")
+	}
+}
+
+func TestApprove_ConcurrentGoroutines_OnlyOneWins(t *testing.T) {
+	req := testutil.NewRequest()
+	policy := testutil.NewPolicy() // 1 stage, 1 required approval
+
+	requestStore := &testutil.MockRequestStore{
+		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+			r := *req
+			return &r, nil
+		},
+	}
+	approvalStore := &testutil.MockApprovalStore{
+		ExistsByCheckerAndStageFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
+			return false, nil
+		},
+		ListByRequestIDFunc: func(ctx context.Context, id uuid.UUID) ([]model.Approval, error) {
+			return []model.Approval{}, nil
+		},
+	}
+	policyStore := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	auditStore := &testutil.MockAuditStore{
+		CreateFunc: func(ctx context.Context, log *model.AuditLog) error { return nil },
+	}
+
+	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
+
+	// Simulate DB-level serialization: a mutex guards the transaction, and
+	// only the first caller sees the request as pending.
+	var mu sync.Mutex
+	resolved := false
+
+	svc.SetWebhookDispatch(
+		func(ctx context.Context, fn func(tx *store.Stores) error) error {
+			mu.Lock()
+			defer mu.Unlock()
+
+			currentStatus := model.StatusPending
+			if resolved {
+				currentStatus = model.StatusApproved
+			}
+
+			txStores := &store.Stores{
+				Requests: &testutil.MockRequestStore{
+					GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Request, error) {
+						r := *req
+						r.Status = currentStatus
+						return &r, nil
+					},
+					UpdateStatusFunc: func(ctx context.Context, id uuid.UUID, status model.RequestStatus) error {
+						if resolved {
+							return store.ErrStatusConflict
+						}
+						resolved = true
+						return nil
+					},
+				},
+				Approvals: &testutil.MockApprovalStore{
+					CreateFunc: func(ctx context.Context, approval *model.Approval) error {
+						return nil
+					},
+					CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
+						if decision == model.DecisionApproved {
+							return 1, nil
+						}
+						return 0, nil
+					},
+					ListByRequestIDFunc: func(ctx context.Context, id uuid.UUID) ([]model.Approval, error) {
+						return []model.Approval{}, nil
+					},
+				},
+				Outbox:   &testutil.MockOutboxStore{},
+				Webhooks: &testutil.MockWebhookStore{},
+			}
+			return fn(txStores)
+		},
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+			return nil
+		},
+		func() {},
+	)
+
+	const numGoroutines = 5
+	var wg sync.WaitGroup
+	results := make([]error, numGoroutines)
+
+	for i := range numGoroutines {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			checkerID := fmt.Sprintf("checker-%d", idx)
+			_, err := svc.Approve(context.Background(), req.ID, checkerID, nil, nil)
+			results[idx] = err
+		}(i)
+	}
+	wg.Wait()
+
+	successCount := 0
+	for _, err := range results {
+		if err == nil {
+			successCount++
+		} else if !errors.Is(err, ErrRequestNotPending) {
+			t.Errorf("unexpected error: %v (expected nil or ErrRequestNotPending)", err)
+		}
+	}
+
+	if successCount != 1 {
+		t.Errorf("expected exactly 1 successful approval, got %d", successCount)
 	}
 }

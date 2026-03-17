@@ -812,7 +812,9 @@ make build-all
 | `build-embed` | Build widget frontend + Go binary with embeddable widgets |
 | `build-all` | Build both frontends + Go binary with console and widgets |
 | `run` | Build and start the server |
-| `test` | Run all tests with race detector |
+| `test` | Run unit tests with race detector |
+| `test-integration` | Run store integration tests (requires Docker for testcontainers) |
+| `test-all` | Run both unit and integration tests |
 | `lint` | Run golangci-lint |
 | `migrate-up` | Run PostgreSQL migrations |
 | `migrate-down` | Roll back one PostgreSQL migration |

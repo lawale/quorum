@@ -106,3 +106,12 @@ func TestMSSQLOperatorStore(t *testing.T) {
 	db := setupMSSQL(t)
 	storetest.TestOperatorStore(t, mssql.NewOperatorStore(db))
 }
+
+func TestMSSQLConcurrentApprovals(t *testing.T) {
+	db := setupMSSQL(t)
+	stores, err := mssql.NewStoresFromDB(db)
+	if err != nil {
+		t.Fatalf("NewStoresFromDB: %v", err)
+	}
+	storetest.TestConcurrentApprovals(t, stores.Requests, stores.Approvals, stores.RunInTx)
+}

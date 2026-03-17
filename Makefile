@@ -1,4 +1,4 @@
-.PHONY: build run test lint migrate-up migrate-down docker-up docker-down clean \
+.PHONY: build run test test-integration test-all lint migrate-up migrate-down docker-up docker-down clean \
        console-deps console-build console-dev build-console \
        embed-deps embed-build embed-dev build-embed build-all \
        seed demo
@@ -14,6 +14,11 @@ run: build
 
 test:
 	go test -v -race -cover ./...
+
+test-integration:
+	go test -v -race -tags integration ./internal/store/...
+
+test-all: test test-integration
 
 lint:
 	golangci-lint run ./...

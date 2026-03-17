@@ -6,6 +6,9 @@ package storetest
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -1000,4 +1003,83 @@ func TestAuditStore(t *testing.T, as store.AuditStore, rs store.RequestStore) {
 			t.Errorf("TenantID = %q, want %q (context should override)", logs[0].TenantID, "tenant-enforce")
 		}
 	})
+}
+
+// TestConcurrentApprovals exercises the FOR UPDATE lock and CAS guard by
+// launching multiple goroutines that each try to approve the same request
+// inside a transaction. Only one should succeed in updating the status.
+func TestConcurrentApprovals(t *testing.T, rs store.RequestStore, as store.ApprovalStore, runInTx func(ctx context.Context, fn func(tx *store.Stores) error) error) {
+	ctx := context.Background()
+
+	req := &model.Request{
+		Type:    "concurrent-test",
+		Payload: json.RawMessage(`{"test": true}`),
+		Status:  model.StatusPending,
+		MakerID: "maker",
+	}
+	if err := rs.Create(ctx, req); err != nil {
+		t.Fatalf("Create request: %v", err)
+	}
+
+	const numGoroutines = 5
+	var wg sync.WaitGroup
+	results := make([]error, numGoroutines)
+
+	for i := range numGoroutines {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			results[idx] = runInTx(ctx, func(tx *store.Stores) error {
+				locked, err := tx.Requests.GetByIDForUpdate(ctx, req.ID)
+				if err != nil {
+					return fmt.Errorf("GetByIDForUpdate: %w", err)
+				}
+				if locked.Status != model.StatusPending {
+					return store.ErrStatusConflict
+				}
+
+				checkerID := fmt.Sprintf("checker-%d", idx)
+				approval := &model.Approval{
+					RequestID: req.ID,
+					CheckerID: checkerID,
+					Decision:  model.DecisionApproved,
+				}
+				if err := tx.Approvals.Create(ctx, approval); err != nil {
+					return fmt.Errorf("create approval: %w", err)
+				}
+
+				return tx.Requests.UpdateStatus(ctx, req.ID, model.StatusApproved)
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	successCount := 0
+	for _, err := range results {
+		if err == nil {
+			successCount++
+		} else if !errors.Is(err, store.ErrStatusConflict) {
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+
+	if successCount != 1 {
+		t.Errorf("expected exactly 1 successful status update, got %d", successCount)
+	}
+
+	got, err := rs.GetByID(ctx, req.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.Status != model.StatusApproved {
+		t.Errorf("status = %v, want approved", got.Status)
+	}
+
+	approvals, err := as.ListByRequestID(ctx, req.ID)
+	if err != nil {
+		t.Fatalf("ListByRequestID: %v", err)
+	}
+	if len(approvals) < 1 {
+		t.Error("expected at least 1 approval to be recorded")
+	}
 }

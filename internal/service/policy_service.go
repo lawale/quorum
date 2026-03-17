@@ -80,13 +80,14 @@ func validateAndDefaultStages(stages []model.ApprovalStage) error {
 		hasPermissions := isNonEmptyJSONArray(stages[i].AllowedPermissions)
 		mode := stages[i].AuthorizationMode
 
-		if hasRoles && hasPermissions {
+		switch {
+		case hasRoles && hasPermissions:
 			if mode != model.AuthModeAny && mode != model.AuthModeAll {
 				return fmt.Errorf("%w (stage %d)", ErrInvalidAuthorizationMode, i)
 			}
-		} else if hasRoles && !hasPermissions && mode == model.AuthModePermission {
+		case hasRoles && !hasPermissions && mode == model.AuthModePermission:
 			return fmt.Errorf("%w (stage %d)", ErrInvalidAuthorizationMode, i)
-		} else if hasPermissions && !hasRoles && mode == model.AuthModeRole {
+		case hasPermissions && !hasRoles && mode == model.AuthModeRole:
 			return fmt.Errorf("%w (stage %d)", ErrInvalidAuthorizationMode, i)
 		}
 	}

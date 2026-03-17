@@ -1,0 +1,48 @@
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - console
+    - embed
+    - integration
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gocritic
+    - misspell
+  settings:
+    errcheck:
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - (*database/sql.DB).Close
+    gocritic:
+      disabled-checks:
+        - exitAfterDefer
+  exclusions:
+    rules:
+      - linters:
+          - errcheck
+        source: "defer.*\\.(Close|Rollback|Terminate)"
+      - linters:
+          - errcheck
+        path: "_test\\.go$"
+      - linters:
+          - errcheck
+        path: "internal/store/storetest/"
+    paths:
+      - console/frontend
+      - widgets/frontend
+      - examples
+
+formatters:
+  enable:
+    - gofmt
