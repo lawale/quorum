@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/store"
 )
 
@@ -55,6 +56,9 @@ func (db *DB) Close() {
 	db.pool.Close()
 }
 
+func (db *DB) Name() string                     { return "postgres" }
+func (db *DB) Health(ctx context.Context) error { return db.pool.Ping(ctx) }
+
 // withTx returns a new DB that uses the given transaction for all queries.
 func (db *DB) withTx(tx pgx.Tx) *DB {
 	return &DB{pool: db.pool, Pool: tx}
@@ -67,15 +71,16 @@ func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.St
 	}
 
 	s := &store.Stores{
-		Requests:  NewRequestStore(db),
-		Approvals: NewApprovalStore(db),
-		Policies:  NewPolicyStore(db),
-		Webhooks:  NewWebhookStore(db),
-		Audits:    NewAuditStore(db),
-		Operators: NewOperatorStore(db),
-		Tenants:   NewTenantStore(db),
-		Outbox:    NewOutboxStore(db),
-		Close:     db.Close,
+		Requests:       NewRequestStore(db),
+		Approvals:      NewApprovalStore(db),
+		Policies:       NewPolicyStore(db),
+		Webhooks:       NewWebhookStore(db),
+		Audits:         NewAuditStore(db),
+		Operators:      NewOperatorStore(db),
+		Tenants:        NewTenantStore(db),
+		Outbox:         NewOutboxStore(db),
+		Close:          db.Close,
+		HealthCheckers: []health.HealthChecker{db},
 	}
 
 	s.RunInTx = func(ctx context.Context, fn func(tx *store.Stores) error) error {

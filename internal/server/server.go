@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/service"
 	"github.com/lawale/quorum/internal/sse"
@@ -30,6 +31,7 @@ type Server struct {
 	tenantService   *service.TenantService
 	authProvider    auth.Provider
 	consoleEnabled  bool
+	healthCheckers  []health.HealthChecker
 	metrics         *metrics.Metrics
 	metricsPath     string
 	registry        *prometheus.Registry
@@ -49,6 +51,7 @@ type Config struct {
 	SecureCookies   bool
 	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
 	EmbedHandler    http.Handler // Widget JS handler from widgets package (nil when built without tag)
+	HealthCheckers  []health.HealthChecker
 	Metrics         *metrics.Metrics
 	EventHub        *sse.Hub
 	MetricsPath     string
@@ -70,6 +73,7 @@ func New(cfg Config) *Server {
 		consoleSPA:      cfg.ConsoleSPA,
 		embedHandler:    cfg.EmbedHandler,
 		operatorService: cfg.OperatorService,
+		healthCheckers:  cfg.HealthCheckers,
 		metrics:         cfg.Metrics,
 		metricsPath:     cfg.MetricsPath,
 		registry:        cfg.Registry,
@@ -96,7 +100,14 @@ func (s *Server) setupRoutes() {
 
 	// Health check — no auth
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		ok, components := health.Check(r.Context(), s.healthCheckers)
+		status := http.StatusOK
+		statusStr := "healthy"
+		if !ok {
+			status = http.StatusServiceUnavailable
+			statusStr = "unhealthy"
+		}
+		writeJSON(w, status, map[string]any{"status": statusStr, "components": components})
 	})
 
 	// Metrics endpoint — no auth

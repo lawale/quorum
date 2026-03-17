@@ -23,15 +23,16 @@ func TestNew_RegistersAllCollectors(t *testing.T) {
 	m.HTTPRequestDuration.WithLabelValues("GET", "/test", "200")
 	m.RequestsTotal.WithLabelValues("created")
 	m.WebhookDeliveriesTotal.WithLabelValues("success")
+	m.AuthHookTotal.WithLabelValues("allowed")
 
 	families, err := reg.Gather()
 	if err != nil {
 		t.Fatalf("gather: %v", err)
 	}
 
-	// 7 collectors registered
-	if len(families) != 7 {
-		t.Errorf("registered families = %d, want 7", len(families))
+	// 10 collectors registered (7 original + auth_hook_total + auth_hook_duration + expiry_errors_total)
+	if len(families) != 10 {
+		t.Errorf("registered families = %d, want 10", len(families))
 		for _, f := range families {
 			t.Logf("  %s", *f.Name)
 		}

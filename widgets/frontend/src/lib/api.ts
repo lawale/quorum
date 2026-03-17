@@ -112,6 +112,8 @@ export function createClient(config: ClientConfig): QuorumClient {
     connectSSE(requestId, onEvent, onDisconnect) {
       const controller = new AbortController();
       const url = `${base}/requests/${requestId}/events`;
+      const SSE_HEARTBEAT_TIMEOUT = 45_000;
+      let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
 
       // Use fetch (not EventSource) because EventSource cannot set custom headers.
       (async () => {
@@ -133,11 +135,22 @@ export function createClient(config: ClientConfig): QuorumClient {
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           let buffer = '';
+          let lastDataTime = Date.now();
+
+          heartbeatTimer = setInterval(() => {
+            if (Date.now() - lastDataTime > SSE_HEARTBEAT_TIMEOUT) {
+              clearInterval(heartbeatTimer);
+              heartbeatTimer = undefined;
+              controller.abort();
+              onDisconnect();
+            }
+          }, 10_000);
 
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
+            lastDataTime = Date.now();
             buffer += decoder.decode(value, { stream: true });
 
             // Parse SSE frames (delimited by double newline)
@@ -155,14 +168,21 @@ export function createClient(config: ClientConfig): QuorumClient {
           }
 
           // Stream ended (server closed connection)
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
           onDisconnect();
         } catch (e) {
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
           if (e instanceof DOMException && e.name === 'AbortError') return;
           onDisconnect();
         }
       })();
 
-      return { close: () => controller.abort() };
+      return {
+        close: () => {
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+          controller.abort();
+        },
+      };
     },
   };
 }

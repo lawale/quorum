@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"time"
 
+	"errors"
+
+	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/signing"
 )
@@ -21,7 +24,12 @@ var (
 // AuthorizationHook calls the consuming system's dynamic authorization endpoint
 // to determine if a checker is allowed to act on a request.
 type AuthorizationHook struct {
-	client *http.Client
+	client  *http.Client
+	metrics *metrics.Metrics
+}
+
+func (h *AuthorizationHook) SetMetrics(m *metrics.Metrics) {
+	h.metrics = m
 }
 
 func NewAuthorizationHook(timeout time.Duration) *AuthorizationHook {
@@ -31,6 +39,25 @@ func NewAuthorizationHook(timeout time.Duration) *AuthorizationHook {
 }
 
 func (h *AuthorizationHook) Check(ctx context.Context, hookURL string, secret string, hookReq model.AuthorizationHookRequest) error {
+	start := time.Now()
+	err := h.check(ctx, hookURL, secret, hookReq)
+
+	if h.metrics != nil {
+		h.metrics.AuthHookDuration.Observe(time.Since(start).Seconds())
+		switch {
+		case err == nil:
+			h.metrics.AuthHookTotal.WithLabelValues("allowed").Inc()
+		case errors.Is(err, ErrAuthorizationDenied):
+			h.metrics.AuthHookTotal.WithLabelValues("denied").Inc()
+		default:
+			h.metrics.AuthHookTotal.WithLabelValues("error").Inc()
+		}
+	}
+
+	return err
+}
+
+func (h *AuthorizationHook) check(ctx context.Context, hookURL string, secret string, hookReq model.AuthorizationHookRequest) error {
 	body, err := json.Marshal(hookReq)
 	if err != nil {
 		return fmt.Errorf("marshaling authorization hook request: %w", err)

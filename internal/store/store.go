@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/model"
 )
 
@@ -164,6 +165,10 @@ type Stores struct {
 	Tenants   TenantStore
 	Outbox    OutboxStore
 	Close     func()
+
+	// HealthCheckers exposes the underlying dependencies (database, etc.)
+	// for component-level health monitoring via the /health endpoint.
+	HealthCheckers []health.HealthChecker
 
 	// RunInTx executes fn within a database transaction. The callback receives
 	// a Stores instance whose stores are bound to the transaction. If fn returns

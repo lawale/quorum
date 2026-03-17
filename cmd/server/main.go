@@ -40,7 +40,12 @@ func main() {
 	))
 	slog.SetDefault(logger)
 
-	cfg, err := config.Load(*configPath)
+	cfgFile := *configPath
+	if envPath := os.Getenv("QUORUM_CONFIG_PATH"); envPath != "" {
+		cfgFile = envPath
+	}
+
+	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
@@ -113,6 +118,7 @@ func main() {
 		requestService.SetMetrics(metricsInstance)
 		expiryWorker.SetMetrics(metricsInstance)
 		dispatcher.SetMetrics(metricsInstance)
+		authorizationHook.SetMetrics(metricsInstance)
 		slog.Info("metrics enabled", "path", cfg.Metrics.Path)
 	}
 
@@ -156,6 +162,7 @@ func main() {
 		SecureCookies:   cfg.Console.SecureCookies,
 		ConsoleSPA:      console.Handler(),
 		EmbedHandler:    widgets.Handler(),
+		HealthCheckers:  stores.HealthCheckers,
 		Metrics:         metricsInstance,
 		MetricsPath:     cfg.Metrics.Path,
 		Registry:        metricsRegistry,

@@ -62,10 +62,10 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 
-	var body map[string]string
+	var body map[string]any
 	json.NewDecoder(rec.Body).Decode(&body)
-	if body["status"] != "ok" {
-		t.Errorf("body status = %q, want %q", body["status"], "ok")
+	if body["status"] != "healthy" {
+		t.Errorf("body status = %q, want %q", body["status"], "healthy")
 	}
 }
 

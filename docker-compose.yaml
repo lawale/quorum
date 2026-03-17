@@ -42,6 +42,12 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # Uncomment to use MSSQL instead of Postgres.
   # Set database.driver to "mssql" in config.docker.yaml.
@@ -66,7 +72,7 @@ services:
     image: curlimages/curl:latest
     depends_on:
       server:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ./scripts/setup.sh:/setup.sh:ro
     entrypoint: ["sh", "/setup.sh"]

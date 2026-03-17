@@ -16,6 +16,13 @@ type Metrics struct {
 	// Webhook dispatcher
 	WebhookDeliveriesTotal  *prometheus.CounterVec
 	WebhookDeliveryDuration prometheus.Observer
+
+	// Authorization hook
+	AuthHookTotal    *prometheus.CounterVec
+	AuthHookDuration prometheus.Observer
+
+	// Expiry worker
+	ExpiryErrorsTotal prometheus.Counter
 }
 
 // New creates a Metrics instance and registers all collectors with the given registerer.
@@ -26,6 +33,14 @@ func New(reg prometheus.Registerer) *Metrics {
 		Name:      "resolution_duration_seconds",
 		Help:      "Time from request creation to terminal state.",
 		Buckets:   []float64{1, 5, 15, 30, 60, 300, 900, 1800, 3600, 7200, 86400},
+	})
+
+	authHookDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "quorum",
+		Subsystem: "auth_hook",
+		Name:      "duration_seconds",
+		Help:      "Authorization hook call duration.",
+		Buckets:   prometheus.DefBuckets,
 	})
 
 	webhookDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
@@ -86,6 +101,26 @@ func New(reg prometheus.Registerer) *Metrics {
 			[]string{"outcome"},
 		),
 		WebhookDeliveryDuration: webhookDuration,
+
+		AuthHookTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "quorum",
+				Subsystem: "auth_hook",
+				Name:      "total",
+				Help:      "Total authorization hook calls by outcome.",
+			},
+			[]string{"outcome"},
+		),
+		AuthHookDuration: authHookDuration,
+
+		ExpiryErrorsTotal: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: "quorum",
+				Subsystem: "expiry",
+				Name:      "errors_total",
+				Help:      "Total errors during expiry processing.",
+			},
+		),
 	}
 
 	reg.MustRegister(
@@ -96,6 +131,9 @@ func New(reg prometheus.Registerer) *Metrics {
 		m.PendingRequestsGauge,
 		m.WebhookDeliveriesTotal,
 		webhookDuration,
+		m.AuthHookTotal,
+		authHookDuration,
+		m.ExpiryErrorsTotal,
 	)
 
 	return m

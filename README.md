@@ -398,7 +398,7 @@ All endpoints are under `/api/v1` and require authentication (configurable via t
 | `POST` | `/api/v1/webhooks` | Register a webhook |
 | `GET` | `/api/v1/webhooks` | List webhooks (`?page=`, `?per_page=`) |
 | `DELETE` | `/api/v1/webhooks/{id}` | Delete a webhook |
-| `GET` | `/health` | Health check (no auth) |
+| `GET` | `/health` | Health check with component status (no auth) |
 | `GET` | `/metrics` | Prometheus metrics (no auth, when enabled) |
 
 ---
@@ -423,6 +423,37 @@ See [`config.example.yaml`](config.example.yaml) for all available options.
 | `metrics.enabled` | `false` | Enable Prometheus metrics |
 | `console.enabled` | `false` | Enable admin console API routes |
 | `console.jwt_secret` | (auto) | JWT signing secret for console sessions |
+
+#### Environment Variable Overrides
+
+Every config field can be overridden via environment variables using the `QUORUM_` prefix. Variable names are derived from the config path in SCREAMING_SNAKE_CASE:
+
+| Env Var | Config Field |
+|---------|-------------|
+| `QUORUM_SERVER_HOST` | `server.host` |
+| `QUORUM_SERVER_PORT` | `server.port` |
+| `QUORUM_DATABASE_DRIVER` | `database.driver` |
+| `QUORUM_DATABASE_HOST` | `database.host` |
+| `QUORUM_DATABASE_PORT` | `database.port` |
+| `QUORUM_DATABASE_USER` | `database.user` |
+| `QUORUM_DATABASE_PASSWORD` | `database.password` |
+| `QUORUM_DATABASE_NAME` | `database.name` |
+| `QUORUM_DATABASE_MAX_OPEN_CONNS` | `database.max_open_conns` |
+| `QUORUM_DATABASE_MAX_IDLE_CONNS` | `database.max_idle_conns` |
+| `QUORUM_AUTH_MODE` | `auth.mode` |
+| `QUORUM_WEBHOOK_MAX_RETRIES` | `webhook.max_retries` |
+| `QUORUM_WEBHOOK_TIMEOUT` | `webhook.timeout` |
+| `QUORUM_WEBHOOK_HEARTBEAT` | `webhook.heartbeat` |
+| `QUORUM_EXPIRY_CHECK_INTERVAL` | `expiry.check_interval` |
+| `QUORUM_METRICS_ENABLED` | `metrics.enabled` |
+| `QUORUM_METRICS_PATH` | `metrics.path` |
+| `QUORUM_CONSOLE_ENABLED` | `console.enabled` |
+| `QUORUM_CONSOLE_JWT_SECRET` | `console.jwt_secret` |
+| `QUORUM_CONSOLE_SECURE_COOKIES` | `console.secure_cookies` |
+
+**Precedence:** Environment variables take the highest priority, overriding both YAML config values and defaults. Duration values use Go syntax (e.g., `30s`, `5m`, `1h`). Invalid values are ignored with a warning log.
+
+The config file path itself can be set via `QUORUM_CONFIG_PATH`, which overrides the `-config` CLI flag.
 
 ### Authentication Modes
 
@@ -618,6 +649,34 @@ A configurable heartbeat (default 30s) acts as a safety net, even if a signal is
 
 **Webhook signature:** Every webhook request includes an `X-Signature-256` header containing `sha256=<hex>`, computed using HMAC-SHA256 with the webhook's secret. Verify this on your end to ensure the request came from Quorum.
 
+### Health Endpoint
+
+The `/health` endpoint returns component-level health status and does not require authentication. It checks all registered dependencies (database, and any future additions like Redis).
+
+**Healthy response** (HTTP 200):
+
+```json
+{
+  "status": "healthy",
+  "components": {
+    "postgres": { "status": "healthy" }
+  }
+}
+```
+
+**Unhealthy response** (HTTP 503):
+
+```json
+{
+  "status": "unhealthy",
+  "components": {
+    "postgres": { "status": "unhealthy", "error": "connection refused" }
+  }
+}
+```
+
+Use this endpoint for load balancer health checks and container orchestration readiness probes.
+
 ### Docker
 
 **Docker Compose (recommended)** — starts PostgreSQL, runs migrations, and launches Quorum with the admin console and widgets in one command:
@@ -626,7 +685,7 @@ A configurable heartbeat (default 30s) acts as a safety net, even if a signal is
 docker compose up
 ```
 
-The console is available at `http://localhost:8080/console/` once the server is ready.
+The server container includes a built-in healthcheck that polls `/health` every 10 seconds. Dependent services (like the seed/setup containers) wait for the server to be healthy before starting.
 
 To start only the database (useful during local development):
 
@@ -771,8 +830,9 @@ make build-all
 cmd/server/          — Entry point
 internal/
   auth/              — Authentication providers and authorization hook
-  config/            — Configuration loading
+  config/            — Configuration loading (YAML + env var overrides)
   display/           — Display template resolution
+  health/            — HealthChecker interface and component health aggregation
   metrics/           — Prometheus metrics
   model/             — Domain models
   server/            — HTTP handlers and routing

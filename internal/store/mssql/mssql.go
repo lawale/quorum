@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/store"
 	_ "github.com/microsoft/go-mssqldb"
 )
@@ -44,6 +45,9 @@ func (db *DB) Close() {
 	db.pool.Close()
 }
 
+func (db *DB) Name() string                     { return "mssql" }
+func (db *DB) Health(ctx context.Context) error { return db.pool.PingContext(ctx) }
+
 // withTx returns a new DB that uses the given transaction for all queries.
 func (db *DB) withTx(tx *sql.Tx) *DB {
 	return &DB{pool: db.pool, Pool: tx}
@@ -66,15 +70,16 @@ func NewStores(ctx context.Context, dsn string, maxOpen, maxIdle int) (*store.St
 	}
 
 	s := &store.Stores{
-		Requests:  NewRequestStore(db),
-		Approvals: NewApprovalStore(db),
-		Policies:  NewPolicyStore(db),
-		Webhooks:  NewWebhookStore(db),
-		Audits:    NewAuditStore(db),
-		Operators: NewOperatorStore(db),
-		Tenants:   NewTenantStore(db),
-		Outbox:    NewOutboxStore(db),
-		Close:     db.Close,
+		Requests:       NewRequestStore(db),
+		Approvals:      NewApprovalStore(db),
+		Policies:       NewPolicyStore(db),
+		Webhooks:       NewWebhookStore(db),
+		Audits:         NewAuditStore(db),
+		Operators:      NewOperatorStore(db),
+		Tenants:        NewTenantStore(db),
+		Outbox:         NewOutboxStore(db),
+		Close:          db.Close,
+		HealthCheckers: []health.HealthChecker{db},
 	}
 
 	s.RunInTx = func(ctx context.Context, fn func(tx *store.Stores) error) error {

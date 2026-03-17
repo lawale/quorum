@@ -2,9 +2,14 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
+	"reflect"
+	"strconv"
+	"strings"
 	"time"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 )
@@ -136,8 +141,99 @@ func Load(path string) (*Config, error) {
 	}
 
 	setDefaults(cfg)
+	applyEnvOverrides(cfg)
 
 	return cfg, nil
+}
+
+// applyEnvOverrides walks the Config struct tree via reflection and applies
+// environment variable overrides. Env var names are derived from the struct
+// path: Config.Server.Host → QUORUM_SERVER_HOST. CamelCase field names are
+// converted to SCREAMING_SNAKE_CASE (e.g., MaxOpenConns → MAX_OPEN_CONNS).
+func applyEnvOverrides(cfg *Config) {
+	walkStruct(reflect.ValueOf(cfg).Elem(), []string{"QUORUM"})
+}
+
+func walkStruct(v reflect.Value, prefix []string) {
+	t := v.Type()
+	for i := range t.NumField() {
+		field := t.Field(i)
+		fv := v.Field(i)
+
+		if !field.IsExported() {
+			continue
+		}
+
+		segment := camelToScreamingSnake(field.Name)
+		path := append(prefix, segment)
+
+		switch fv.Kind() {
+		case reflect.Struct:
+			if fv.Type() == reflect.TypeFor[time.Duration]() {
+				applyEnvValue(fv, strings.Join(path, "_"))
+			} else {
+				walkStruct(fv, path)
+			}
+		case reflect.Map:
+			continue
+		default:
+			applyEnvValue(fv, strings.Join(path, "_"))
+		}
+	}
+}
+
+func applyEnvValue(fv reflect.Value, envKey string) {
+	val := os.Getenv(envKey)
+	if val == "" {
+		return
+	}
+
+	switch fv.Kind() {
+	case reflect.String:
+		fv.SetString(val)
+	case reflect.Int, reflect.Int64:
+		if fv.Type() == reflect.TypeFor[time.Duration]() {
+			d, err := time.ParseDuration(val)
+			if err != nil {
+				slog.Warn("ignoring invalid duration env var", "key", envKey, "value", val, "error", err)
+				return
+			}
+			fv.Set(reflect.ValueOf(d))
+		} else {
+			n, err := strconv.Atoi(val)
+			if err != nil {
+				slog.Warn("ignoring invalid int env var", "key", envKey, "value", val, "error", err)
+				return
+			}
+			fv.SetInt(int64(n))
+		}
+	case reflect.Bool:
+		b, err := strconv.ParseBool(val)
+		if err != nil {
+			slog.Warn("ignoring invalid bool env var", "key", envKey, "value", val, "error", err)
+			return
+		}
+		fv.SetBool(b)
+	}
+}
+
+// camelToScreamingSnake converts a CamelCase identifier to SCREAMING_SNAKE_CASE.
+// Examples: "MaxOpenConns" → "MAX_OPEN_CONNS", "Host" → "HOST", "JWTSecret" → "JWT_SECRET".
+func camelToScreamingSnake(s string) string {
+	var b strings.Builder
+	runes := []rune(s)
+	for i, r := range runes {
+		if unicode.IsUpper(r) && i > 0 {
+			prev := runes[i-1]
+			if unicode.IsLower(prev) {
+				b.WriteRune('_')
+			} else if unicode.IsUpper(prev) && i+1 < len(runes) && unicode.IsLower(runes[i+1]) {
+				b.WriteRune('_')
+			}
+		}
+		b.WriteRune(unicode.ToUpper(r))
+	}
+	return b.String()
 }
 
 func setDefaults(cfg *Config) {

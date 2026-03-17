@@ -75,6 +75,9 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 	expired, err := w.requests.ListExpired(ctx)
 	if err != nil {
 		slog.Error("failed to list expired requests", "error", err)
+		if w.metrics != nil {
+			w.metrics.ExpiryErrorsTotal.Inc()
+		}
 		return
 	}
 
@@ -101,6 +104,9 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 					continue
 				}
 				slog.Error("failed to expire request", "error", err, "request_id", req.ID)
+				if w.metrics != nil {
+					w.metrics.ExpiryErrorsTotal.Inc()
+				}
 				continue
 			}
 			if w.signalWebhooks != nil {
@@ -116,6 +122,9 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 					continue
 				}
 				slog.Error("failed to expire request", "error", err, "request_id", req.ID)
+				if w.metrics != nil {
+					w.metrics.ExpiryErrorsTotal.Inc()
+				}
 				continue
 			}
 		}
@@ -129,6 +138,9 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 		}
 		if err := w.audits.Create(tenantCtx, log); err != nil {
 			slog.Error("failed to audit expiry", "error", err, "request_id", req.ID)
+			if w.metrics != nil {
+				w.metrics.ExpiryErrorsTotal.Inc()
+			}
 		}
 
 		if w.metrics != nil {
