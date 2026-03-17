@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/testutil"
 )
 
@@ -65,8 +66,8 @@ func TestWebhookHandler_Create_ValidationError(t *testing.T) {
 
 func TestWebhookHandler_List_Success(t *testing.T) {
 	webhooks := &testutil.MockWebhookStore{
-		ListFunc: func(ctx context.Context) ([]model.Webhook, error) {
-			return []model.Webhook{*testutil.NewWebhook()}, nil
+		ListFunc: func(ctx context.Context, filter store.WebhookFilter) ([]model.Webhook, int, error) {
+			return []model.Webhook{*testutil.NewWebhook()}, 1, nil
 		},
 	}
 	handler := newTestWebhookHandler(webhooks)

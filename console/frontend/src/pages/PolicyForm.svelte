@@ -19,6 +19,7 @@
   let submitting = $state(false);
   let error = $state('');
   let isEdit = $derived(!!id);
+  let validationErrors: Record<string, string> = $state({});
 
   $effect(() => {
     if (id) loadPolicy(id);
@@ -47,9 +48,65 @@
     stages = stages.filter((_, i) => i !== idx).map((s, i) => ({ ...s, index: i }));
   }
 
+  function validate(): boolean {
+    validationErrors = {};
+
+    if (!name.trim() || name.trim().length > 100) {
+      validationErrors.name = 'Name is required (max 100 characters)';
+    }
+
+    if (!requestType.trim()) {
+      validationErrors.requestType = 'Request type is required';
+    } else if (requestType.trim().length > 100) {
+      validationErrors.requestType = 'Request type must be at most 100 characters';
+    } else if (!/^[a-zA-Z0-9_.\-]+$/.test(requestType.trim())) {
+      validationErrors.requestType = 'Request type can only contain letters, numbers, underscores, dots, and hyphens';
+    }
+
+    for (let i = 0; i < stages.length; i++) {
+      if (!stages[i].required_approvals || stages[i].required_approvals < 1) {
+        validationErrors[`stage_${i}_approvals`] = 'Required approvals must be at least 1';
+      }
+    }
+
+    if (identityFields.trim()) {
+      const fields = identityFields.split(',').map((s) => s.trim()).filter(Boolean);
+      for (let i = 0; i < fields.length; i++) {
+        if (!fields[i]) {
+          validationErrors.identityFields = 'Identity fields must not contain empty values';
+          break;
+        }
+      }
+    }
+
+    if (dynamicAuthorizationUrl.trim()) {
+      try {
+        new URL(dynamicAuthorizationUrl.trim());
+      } catch {
+        validationErrors.dynamicAuthorizationUrl = 'Must be a valid URL';
+      }
+    }
+
+    if (autoExpireDuration.trim()) {
+      if (!/^(\d+h)?(\d+m)?(\d+s)?$/.test(autoExpireDuration.trim()) || autoExpireDuration.trim() === '') {
+        validationErrors.autoExpireDuration = 'Must be a valid Go duration (e.g. 24h, 30m, 1h30m)';
+      }
+    }
+
+    return Object.keys(validationErrors).length === 0;
+  }
+
+  function clearFieldError(field: string) {
+    validationErrors = { ...validationErrors };
+    delete validationErrors[field];
+  }
+
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     error = '';
+
+    if (!validate()) return;
+
     submitting = true;
 
     const payload: Partial<Policy> = {
@@ -110,11 +167,17 @@
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-          <input id="name" type="text" bind:value={name} required class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+          <input id="name" type="text" bind:value={name} oninput={() => clearFieldError('name')} required class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.name ? 'border-red-300' : 'border-gray-300'}" />
+          {#if validationErrors.name}
+            <p class="mt-1 text-xs text-red-600">{validationErrors.name}</p>
+          {/if}
         </div>
         <div>
           <label for="requestType" class="block text-sm font-medium text-gray-700 mb-1">Request Type</label>
-          <input id="requestType" type="text" bind:value={requestType} required disabled={isEdit} class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100" />
+          <input id="requestType" type="text" bind:value={requestType} oninput={() => clearFieldError('requestType')} required disabled={isEdit} class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 {validationErrors.requestType ? 'border-red-300' : 'border-gray-300'}" />
+          {#if validationErrors.requestType}
+            <p class="mt-1 text-xs text-red-600">{validationErrors.requestType}</p>
+          {/if}
         </div>
       </div>
 
@@ -140,7 +203,10 @@
                 </div>
                 <div>
                   <label class="block text-xs text-gray-500 mb-1">Required Approvals</label>
-                  <input type="number" min="1" bind:value={stages[i].required_approvals} class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                  <input type="number" min="1" bind:value={stages[i].required_approvals} oninput={() => clearFieldError(`stage_${i}_approvals`)} class="w-full px-2 py-1.5 text-sm border rounded-md {validationErrors[`stage_${i}_approvals`] ? 'border-red-300' : 'border-gray-300'}" />
+                  {#if validationErrors[`stage_${i}_approvals`]}
+                    <p class="mt-1 text-xs text-red-600">{validationErrors[`stage_${i}_approvals`]}</p>
+                  {/if}
                 </div>
                 <div>
                   <label class="block text-xs text-gray-500 mb-1">Rejection Policy</label>
@@ -158,18 +224,27 @@
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label for="identityFields" class="block text-sm font-medium text-gray-700 mb-1">Identity Fields <span class="text-gray-400">(comma-separated)</span></label>
-          <input id="identityFields" type="text" bind:value={identityFields} placeholder="account_id, user_id" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+          <input id="identityFields" type="text" bind:value={identityFields} oninput={() => clearFieldError('identityFields')} placeholder="account_id, user_id" class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.identityFields ? 'border-red-300' : 'border-gray-300'}" />
+          {#if validationErrors.identityFields}
+            <p class="mt-1 text-xs text-red-600">{validationErrors.identityFields}</p>
+          {/if}
         </div>
         <div>
           <label for="autoExpire" class="block text-sm font-medium text-gray-700 mb-1">Auto Expire Duration</label>
-          <input id="autoExpire" type="text" bind:value={autoExpireDuration} placeholder="24h, 30m" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+          <input id="autoExpire" type="text" bind:value={autoExpireDuration} oninput={() => clearFieldError('autoExpireDuration')} placeholder="24h, 30m" class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.autoExpireDuration ? 'border-red-300' : 'border-gray-300'}" />
+          {#if validationErrors.autoExpireDuration}
+            <p class="mt-1 text-xs text-red-600">{validationErrors.autoExpireDuration}</p>
+          {/if}
         </div>
       </div>
 
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label for="permUrl" class="block text-sm font-medium text-gray-700 mb-1">Dynamic Authorization URL <span class="text-gray-400">(optional)</span></label>
-          <input id="permUrl" type="url" bind:value={dynamicAuthorizationUrl} placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+          <input id="permUrl" type="url" bind:value={dynamicAuthorizationUrl} oninput={() => clearFieldError('dynamicAuthorizationUrl')} placeholder="https://..." class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.dynamicAuthorizationUrl ? 'border-red-300' : 'border-gray-300'}" />
+          {#if validationErrors.dynamicAuthorizationUrl}
+            <p class="mt-1 text-xs text-red-600">{validationErrors.dynamicAuthorizationUrl}</p>
+          {/if}
         </div>
         <div>
           <label for="permSecret" class="block text-sm font-medium text-gray-700 mb-1">Authorization Secret <span class="text-gray-400">(optional)</span></label>

@@ -42,7 +42,7 @@ func NewTenantService(tenants store.TenantStore) *TenantService {
 // LoadCache pre-populates the in-memory slug set from the database.
 // Call this once during server startup.
 func (s *TenantService) LoadCache(ctx context.Context) error {
-	list, err := s.tenants.List(ctx)
+	list, _, err := s.tenants.List(ctx, store.TenantFilter{Page: 1, PerPage: 10000})
 	if err != nil {
 		return fmt.Errorf("loading tenant cache: %w", err)
 	}
@@ -133,8 +133,8 @@ func (s *TenantService) GetBySlug(ctx context.Context, slug string) (*model.Tena
 	return tenant, nil
 }
 
-func (s *TenantService) List(ctx context.Context) ([]model.Tenant, error) {
-	return s.tenants.List(ctx)
+func (s *TenantService) List(ctx context.Context, filter store.TenantFilter) ([]model.Tenant, int, error) {
+	return s.tenants.List(ctx, filter)
 }
 
 func (s *TenantService) Delete(ctx context.Context, id uuid.UUID) error {

@@ -22,13 +22,13 @@ func newTestServer() *Server {
 		},
 	}
 	policies := &testutil.MockPolicyStore{
-		ListFunc: func(ctx context.Context) ([]model.Policy, error) {
-			return nil, nil
+		ListFunc: func(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error) {
+			return nil, 0, nil
 		},
 	}
 	webhooks := &testutil.MockWebhookStore{
-		ListFunc: func(ctx context.Context) ([]model.Webhook, error) {
-			return nil, nil
+		ListFunc: func(ctx context.Context, filter store.WebhookFilter) ([]model.Webhook, int, error) {
+			return nil, 0, nil
 		},
 	}
 	audits := &testutil.MockAuditStore{}

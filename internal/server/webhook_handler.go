@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type WebhookHandler struct {
@@ -53,13 +54,20 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
-	webhooks, err := h.webhookService.List(r.Context())
+	perPage := intParam(r, "per_page", 20)
+	if perPage > maxPerPage {
+		perPage = maxPerPage
+	}
+	filter := store.WebhookFilter{
+		Page:    intParam(r, "page", 1),
+		PerPage: perPage,
+	}
+	webhooks, total, err := h.webhookService.List(r.Context(), filter)
 	if err != nil {
 		writeServerError(w, r, err, "failed to list webhooks")
 		return
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"data": webhooks})
+	writeJSON(w, http.StatusOK, map[string]any{"data": webhooks, "total": total, "page": filter.Page})
 }
 
 func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {

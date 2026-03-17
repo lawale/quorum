@@ -156,14 +156,18 @@ func TestAuthorizationHook_Check_RequestPayload(t *testing.T) {
 func TestAuthorizationHook_Check_WithSecret_SendsSignature(t *testing.T) {
 	var receivedSig string
 	var receivedBody []byte
+	secret := "test-hook-secret"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedSig = r.Header.Get("X-Signature-256")
 		receivedBody, _ = io.ReadAll(r.Body)
-		json.NewEncoder(w).Encode(model.AuthorizationHookResponse{Allowed: true})
+		respBody, _ := json.Marshal(model.AuthorizationHookResponse{Allowed: true})
+		respSig := "sha256=" + signing.ComputeHMAC(respBody, secret)
+		w.Header().Set("X-Signature-256", respSig)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(respBody)
 	}))
 	defer server.Close()
 
-	secret := "test-hook-secret"
 	hook := NewAuthorizationHook(5 * time.Second)
 	err := hook.Check(context.Background(), server.URL, secret, newTestHookReq())
 	if err != nil {
@@ -171,7 +175,7 @@ func TestAuthorizationHook_Check_WithSecret_SendsSignature(t *testing.T) {
 	}
 
 	if receivedSig == "" {
-		t.Fatal("expected X-Signature-256 header")
+		t.Fatal("expected X-Signature-256 header on request")
 	}
 	if len(receivedSig) < 7 || receivedSig[:7] != "sha256=" {
 		t.Errorf("signature should start with sha256=, got %q", receivedSig)
@@ -179,7 +183,7 @@ func TestAuthorizationHook_Check_WithSecret_SendsSignature(t *testing.T) {
 
 	expectedSig := "sha256=" + signing.ComputeHMAC(receivedBody, secret)
 	if receivedSig != expectedSig {
-		t.Errorf("signature mismatch: got %q, want %q", receivedSig, expectedSig)
+		t.Errorf("request signature mismatch: got %q, want %q", receivedSig, expectedSig)
 	}
 }
 
@@ -199,5 +203,37 @@ func TestAuthorizationHook_Check_EmptySecret_NoSignature(t *testing.T) {
 
 	if receivedSig != "" {
 		t.Errorf("expected no X-Signature-256 header when secret is empty, got %q", receivedSig)
+	}
+}
+
+func TestAuthorizationHook_Check_ResponseMissingSignature_Error(t *testing.T) {
+	// Server does not sign its response
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(model.AuthorizationHookResponse{Allowed: true})
+	}))
+	defer server.Close()
+
+	hook := NewAuthorizationHook(5 * time.Second)
+	err := hook.Check(context.Background(), server.URL, "my-secret", newTestHookReq())
+	if err == nil {
+		t.Fatal("expected error when response signature is missing")
+	}
+}
+
+func TestAuthorizationHook_Check_ResponseInvalidSignature_Error(t *testing.T) {
+	// Server signs its response with the wrong secret
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		respBody, _ := json.Marshal(model.AuthorizationHookResponse{Allowed: true})
+		wrongSig := "sha256=" + signing.ComputeHMAC(respBody, "wrong-secret")
+		w.Header().Set("X-Signature-256", wrongSig)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(respBody)
+	}))
+	defer server.Close()
+
+	hook := NewAuthorizationHook(5 * time.Second)
+	err := hook.Check(context.Background(), server.URL, "correct-secret", newTestHookReq())
+	if err == nil {
+		t.Fatal("expected error when response signature is invalid")
 	}
 }

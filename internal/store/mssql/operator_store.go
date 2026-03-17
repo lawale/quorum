@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 const operatorColumns = `id, username, password_hash, display_name, must_change_password, created_at, updated_at`
@@ -54,12 +55,24 @@ func (s *OperatorStore) GetByUsername(ctx context.Context, username string) (*mo
 	return s.scanOne(ctx, query, username)
 }
 
-func (s *OperatorStore) List(ctx context.Context) ([]model.Operator, error) {
-	query := `SELECT ` + operatorColumns + ` FROM [quorum].[operators] ORDER BY created_at ASC`
+func (s *OperatorStore) List(ctx context.Context, filter store.OperatorFilter) ([]model.Operator, int, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PerPage < 1 {
+		filter.PerPage = 20
+	}
+	offset := (filter.Page - 1) * filter.PerPage
 
-	rows, err := s.db.Pool.QueryContext(ctx, query)
+	var total int
+	if err := s.db.Pool.QueryRowContext(ctx, "SELECT COUNT(*) FROM [quorum].[operators]").Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting operators: %w", err)
+	}
+
+	query := `SELECT ` + operatorColumns + ` FROM [quorum].[operators] ORDER BY created_at DESC OFFSET @p1 ROWS FETCH NEXT @p2 ROWS ONLY`
+	rows, err := s.db.Pool.QueryContext(ctx, query, offset, filter.PerPage)
 	if err != nil {
-		return nil, fmt.Errorf("listing operators: %w", err)
+		return nil, 0, fmt.Errorf("listing operators: %w", err)
 	}
 	defer rows.Close()
 
@@ -70,12 +83,12 @@ func (s *OperatorStore) List(ctx context.Context) ([]model.Operator, error) {
 			&op.ID, &op.Username, &op.PasswordHash, &op.DisplayName,
 			&op.MustChangePassword, &op.CreatedAt, &op.UpdatedAt,
 		); err != nil {
-			return nil, fmt.Errorf("scanning operator: %w", err)
+			return nil, 0, fmt.Errorf("scanning operator: %w", err)
 		}
 		operators = append(operators, op)
 	}
 
-	return operators, nil
+	return operators, total, nil
 }
 
 func (s *OperatorStore) Update(ctx context.Context, operator *model.Operator) error {

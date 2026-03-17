@@ -79,20 +79,41 @@ func (s *PolicyStore) GetByRequestType(ctx context.Context, requestType string) 
 	return s.scanPolicy(ctx, "SELECT "+policyColumns+" FROM [quorum].[policies] WHERE request_type = @p1", requestType)
 }
 
-func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
-	var query string
-	var args []any
+func (s *PolicyStore) List(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PerPage < 1 {
+		filter.PerPage = 20
+	}
+	offset := (filter.Page - 1) * filter.PerPage
+
 	tenantID := auth.TenantIDFromContext(ctx)
+
+	var where string
+	var args []any
+	argIdx := 1
 	if tenantID != "" {
-		query = `SELECT ` + policyColumns + ` FROM [quorum].[policies] WHERE tenant_id = @p1 ORDER BY created_at DESC`
+		where = fmt.Sprintf("WHERE tenant_id = @p%d", argIdx)
 		args = append(args, tenantID)
-	} else {
-		query = `SELECT ` + policyColumns + ` FROM [quorum].[policies] ORDER BY created_at DESC`
+		argIdx++
 	}
 
-	rows, err := s.db.Pool.QueryContext(ctx, query, args...)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM [quorum].[policies] %s", where)
+	var total int
+	if err := s.db.Pool.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting policies: %w", err)
+	}
+
+	dataQuery := fmt.Sprintf(
+		`SELECT %s FROM [quorum].[policies] %s ORDER BY created_at DESC OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY`,
+		policyColumns, where, argIdx, argIdx+1,
+	)
+	args = append(args, offset, filter.PerPage)
+
+	rows, err := s.db.Pool.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("listing policies: %w", err)
+		return nil, 0, fmt.Errorf("listing policies: %w", err)
 	}
 	defer rows.Close()
 
@@ -100,12 +121,12 @@ func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
 	for rows.Next() {
 		p, err := s.scanPolicyRow(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		policies = append(policies, *p)
 	}
 
-	return policies, nil
+	return policies, total, nil
 }
 
 func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {

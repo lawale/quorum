@@ -63,7 +63,13 @@ function withTenant(path: string): string {
 // --- Tenants ---
 
 export const tenants = {
-  list: () => request<ListResponse<Tenant>>('/tenants'),
+  list: (params?: { page?: number; per_page?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.per_page) query.set('per_page', String(params.per_page));
+    const qs = query.toString();
+    return request<PaginatedListResponse<Tenant>>(qs ? `/tenants?${qs}` : '/tenants');
+  },
   create: (slug: string, name: string) =>
     request<Tenant>('/tenants', {
       method: 'POST',
@@ -98,7 +104,13 @@ export const operators = {
       method: 'PUT',
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     }),
-  list: () => request<ListResponse<Operator>>('/operators'),
+  list: (params?: { page?: number; per_page?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.per_page) query.set('per_page', String(params.per_page));
+    const qs = query.toString();
+    return request<PaginatedListResponse<Operator>>(qs ? `/operators?${qs}` : '/operators');
+  },
   create: (username: string, password: string, displayName: string) =>
     request<Operator>('/operators', {
       method: 'POST',
@@ -110,7 +122,14 @@ export const operators = {
 // --- Policies ---
 
 export const policies = {
-  list: () => request<ListResponse<Policy>>(withTenant('/policies')),
+  list: (params?: { page?: number; per_page?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.per_page) query.set('per_page', String(params.per_page));
+    const qs = query.toString();
+    const base = withTenant('/policies');
+    return request<PaginatedListResponse<Policy>>(qs ? `${base}${base.includes('?') ? '&' : '?'}${qs}` : base);
+  },
   get: (id: string) => request<Policy>(`/policies/${id}`),
   create: (policy: Partial<Policy>) =>
     request<Policy>(withTenant('/policies'), {
@@ -128,7 +147,14 @@ export const policies = {
 // --- Webhooks ---
 
 export const webhooks = {
-  list: () => request<ListResponse<Webhook>>(withTenant('/webhooks')),
+  list: (params?: { page?: number; per_page?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.per_page) query.set('per_page', String(params.per_page));
+    const qs = query.toString();
+    const base = withTenant('/webhooks');
+    return request<PaginatedListResponse<Webhook>>(qs ? `${base}${base.includes('?') ? '&' : '?'}${qs}` : base);
+  },
   create: (webhook: Partial<Webhook>) =>
     request<Webhook>(withTenant('/webhooks'), {
       method: 'POST',

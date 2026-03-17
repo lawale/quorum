@@ -21,3 +21,6 @@ CREATE INDEX idx_requests_type ON [quorum].[requests] (type);
 CREATE INDEX idx_requests_maker_id ON [quorum].[requests] (maker_id);
 CREATE INDEX idx_requests_tenant_id ON [quorum].[requests] (tenant_id);
 CREATE UNIQUE INDEX idx_requests_fingerprint ON [quorum].[requests] (tenant_id, type, fingerprint) WHERE status = 'pending';
+
+CREATE INDEX idx_requests_tenant_status ON [quorum].[requests] (tenant_id, status);
+CREATE INDEX idx_requests_tenant_type ON [quorum].[requests] (tenant_id, type);

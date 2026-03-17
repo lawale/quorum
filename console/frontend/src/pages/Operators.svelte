@@ -11,12 +11,12 @@
   let isLoading = $state(true);
   let showCreateModal = $state(false);
 
-  // Create form state
   let newUsername = $state('');
   let newPassword = $state('');
   let newDisplayName = $state('');
   let creating = $state(false);
   let createError = $state('');
+  let validationErrors: Record<string, string> = $state({});
 
   $effect(() => {
     loadOperators();
@@ -39,17 +39,44 @@
     newPassword = '';
     newDisplayName = '';
     createError = '';
+    validationErrors = {};
     showCreateModal = true;
+  }
+
+  function validate(): boolean {
+    validationErrors = {};
+
+    if (newUsername.trim().length < 3) {
+      validationErrors.username = 'Username must be at least 3 characters';
+    } else if (!/^[a-zA-Z0-9_]+$/.test(newUsername.trim())) {
+      validationErrors.username = 'Username can only contain letters, numbers, and underscores';
+    }
+
+    if (newPassword.length < 8) {
+      validationErrors.password = 'Password must be at least 8 characters';
+    } else if (!/[A-Z]/.test(newPassword)) {
+      validationErrors.password = 'Password must contain at least one uppercase letter';
+    } else if (!/[0-9]/.test(newPassword)) {
+      validationErrors.password = 'Password must contain at least one digit';
+    }
+
+    if (newDisplayName.trim().length > 0 && newDisplayName.trim().length < 1) {
+      validationErrors.displayName = 'Display name must not be empty';
+    }
+
+    return Object.keys(validationErrors).length === 0;
+  }
+
+  function clearFieldError(field: string) {
+    validationErrors = { ...validationErrors };
+    delete validationErrors[field];
   }
 
   async function handleCreate(e: SubmitEvent) {
     e.preventDefault();
     createError = '';
 
-    if (!newUsername.trim() || !newPassword.trim()) {
-      createError = 'Username and password are required';
-      return;
-    }
+    if (!validate()) return;
 
     creating = true;
     try {
@@ -129,9 +156,13 @@
         id="newUsername"
         type="text"
         bind:value={newUsername}
+        oninput={() => clearFieldError('username')}
         required
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.username ? 'border-red-300' : 'border-gray-300'}"
       />
+      {#if validationErrors.username}
+        <p class="mt-1 text-xs text-red-600">{validationErrors.username}</p>
+      {/if}
     </div>
 
     <div>
@@ -140,8 +171,12 @@
         id="newDisplayName"
         type="text"
         bind:value={newDisplayName}
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        oninput={() => clearFieldError('displayName')}
+        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.displayName ? 'border-red-300' : 'border-gray-300'}"
       />
+      {#if validationErrors.displayName}
+        <p class="mt-1 text-xs text-red-600">{validationErrors.displayName}</p>
+      {/if}
     </div>
 
     <div>
@@ -150,9 +185,13 @@
         id="newPassword"
         type="password"
         bind:value={newPassword}
+        oninput={() => clearFieldError('password')}
         required
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.password ? 'border-red-300' : 'border-gray-300'}"
       />
+      {#if validationErrors.password}
+        <p class="mt-1 text-xs text-red-600">{validationErrors.password}</p>
+      {/if}
     </div>
 
     <div class="flex items-center gap-3 pt-2">

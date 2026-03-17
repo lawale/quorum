@@ -67,8 +67,8 @@ func (s *WebhookService) Create(ctx context.Context, webhook *model.Webhook) err
 	return s.webhooks.Create(ctx, webhook)
 }
 
-func (s *WebhookService) List(ctx context.Context) ([]model.Webhook, error) {
-	return s.webhooks.List(ctx)
+func (s *WebhookService) List(ctx context.Context, filter store.WebhookFilter) ([]model.Webhook, int, error) {
+	return s.webhooks.List(ctx, filter)
 }
 
 func (s *WebhookService) Delete(ctx context.Context, id uuid.UUID) error {

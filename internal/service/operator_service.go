@@ -151,9 +151,8 @@ func (s *OperatorService) ChangePassword(ctx context.Context, operatorID uuid.UU
 	return nil
 }
 
-// ListOperators returns all operators.
-func (s *OperatorService) ListOperators(ctx context.Context) ([]model.Operator, error) {
-	return s.operators.List(ctx)
+func (s *OperatorService) ListOperators(ctx context.Context, filter store.OperatorFilter) ([]model.Operator, int, error) {
+	return s.operators.List(ctx, filter)
 }
 
 // DeleteOperator deletes an operator. Cannot delete yourself or the last operator.

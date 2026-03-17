@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/testutil"
 )
 
@@ -229,8 +230,8 @@ func TestPolicyHandler_Get_NotFound(t *testing.T) {
 
 func TestPolicyHandler_List_Success(t *testing.T) {
 	policies := &testutil.MockPolicyStore{
-		ListFunc: func(ctx context.Context) ([]model.Policy, error) {
-			return []model.Policy{*testutil.NewPolicy()}, nil
+		ListFunc: func(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error) {
+			return []model.Policy{*testutil.NewPolicy()}, 1, nil
 		},
 	}
 	handler := newTestPolicyHandler(policies)

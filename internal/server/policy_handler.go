@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type PolicyHandler struct {
@@ -132,13 +133,20 @@ func (h *PolicyHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
-	policies, err := h.policyService.List(r.Context())
+	perPage := intParam(r, "per_page", 20)
+	if perPage > maxPerPage {
+		perPage = maxPerPage
+	}
+	filter := store.PolicyFilter{
+		Page:    intParam(r, "page", 1),
+		PerPage: perPage,
+	}
+	policies, total, err := h.policyService.List(r.Context(), filter)
 	if err != nil {
 		writeServerError(w, r, err, "failed to list policies")
 		return
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"data": policies})
+	writeJSON(w, http.StatusOK, map[string]any{"data": policies, "total": total, "page": filter.Page})
 }
 
 type updatePolicyBody struct {

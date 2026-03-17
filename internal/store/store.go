@@ -59,11 +59,31 @@ type ApprovalStore interface {
 	ExistsByCheckerAndStage(ctx context.Context, requestID uuid.UUID, checkerID string, stageIndex int) (bool, error)
 }
 
+type PolicyFilter struct {
+	Page    int
+	PerPage int
+}
+
+type WebhookFilter struct {
+	Page    int
+	PerPage int
+}
+
+type TenantFilter struct {
+	Page    int
+	PerPage int
+}
+
+type OperatorFilter struct {
+	Page    int
+	PerPage int
+}
+
 type PolicyStore interface {
 	Create(ctx context.Context, policy *model.Policy) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Policy, error)
 	GetByRequestType(ctx context.Context, requestType string) (*model.Policy, error)
-	List(ctx context.Context) ([]model.Policy, error)
+	List(ctx context.Context, filter PolicyFilter) ([]model.Policy, int, error)
 	Update(ctx context.Context, policy *model.Policy) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -71,7 +91,7 @@ type PolicyStore interface {
 type WebhookStore interface {
 	Create(ctx context.Context, webhook *model.Webhook) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Webhook, error)
-	List(ctx context.Context) ([]model.Webhook, error)
+	List(ctx context.Context, filter WebhookFilter) ([]model.Webhook, int, error)
 	ListByEventAndType(ctx context.Context, event string, requestType string) ([]model.Webhook, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -86,7 +106,7 @@ type TenantStore interface {
 	Create(ctx context.Context, tenant *model.Tenant) error
 	GetBySlug(ctx context.Context, slug string) (*model.Tenant, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Tenant, error)
-	List(ctx context.Context) ([]model.Tenant, error)
+	List(ctx context.Context, filter TenantFilter) ([]model.Tenant, int, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -94,7 +114,7 @@ type OperatorStore interface {
 	Create(ctx context.Context, operator *model.Operator) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Operator, error)
 	GetByUsername(ctx context.Context, username string) (*model.Operator, error)
-	List(ctx context.Context) ([]model.Operator, error)
+	List(ctx context.Context, filter OperatorFilter) ([]model.Operator, int, error)
 	Update(ctx context.Context, operator *model.Operator) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	Count(ctx context.Context) (int, error)

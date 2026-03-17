@@ -11,20 +11,46 @@
   let displayName = $state('');
   let error = $state('');
   let submitting = $state(false);
+  let validationErrors: Record<string, string> = $state({});
+
+  function validate(): boolean {
+    validationErrors = {};
+
+    if (username.trim().length < 3) {
+      validationErrors.username = 'Username must be at least 3 characters';
+    } else if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
+      validationErrors.username = 'Username can only contain letters, numbers, and underscores';
+    }
+
+    if (password.length < 8) {
+      validationErrors.password = 'Password must be at least 8 characters';
+    } else if (!/[A-Z]/.test(password)) {
+      validationErrors.password = 'Password must contain at least one uppercase letter';
+    } else if (!/[0-9]/.test(password)) {
+      validationErrors.password = 'Password must contain at least one digit';
+    }
+
+    if (password !== confirmPassword) {
+      validationErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (displayName.trim().length > 0 && displayName.trim().length < 1) {
+      validationErrors.displayName = 'Display name must not be empty';
+    }
+
+    return Object.keys(validationErrors).length === 0;
+  }
+
+  function clearFieldError(field: string) {
+    validationErrors = { ...validationErrors };
+    delete validationErrors[field];
+  }
 
   async function handleSetup(e: SubmitEvent) {
     e.preventDefault();
     error = '';
 
-    if (password !== confirmPassword) {
-      error = 'Passwords do not match';
-      return;
-    }
-
-    if (password.length < 6) {
-      error = 'Password must be at least 6 characters';
-      return;
-    }
+    if (!validate()) return;
 
     submitting = true;
 
@@ -65,10 +91,14 @@
           id="username"
           type="text"
           bind:value={username}
+          oninput={() => clearFieldError('username')}
           required
           autocomplete="username"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.username ? 'border-red-300' : 'border-gray-300'}"
         />
+        {#if validationErrors.username}
+          <p class="mt-1 text-xs text-red-600">{validationErrors.username}</p>
+        {/if}
       </div>
 
       <div>
@@ -77,9 +107,13 @@
           id="display-name"
           type="text"
           bind:value={displayName}
+          oninput={() => clearFieldError('displayName')}
           autocomplete="name"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.displayName ? 'border-red-300' : 'border-gray-300'}"
         />
+        {#if validationErrors.displayName}
+          <p class="mt-1 text-xs text-red-600">{validationErrors.displayName}</p>
+        {/if}
       </div>
 
       <div>
@@ -88,10 +122,14 @@
           id="password"
           type="password"
           bind:value={password}
+          oninput={() => clearFieldError('password')}
           required
           autocomplete="new-password"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.password ? 'border-red-300' : 'border-gray-300'}"
         />
+        {#if validationErrors.password}
+          <p class="mt-1 text-xs text-red-600">{validationErrors.password}</p>
+        {/if}
       </div>
 
       <div>
@@ -100,10 +138,14 @@
           id="confirm-password"
           type="password"
           bind:value={confirmPassword}
+          oninput={() => clearFieldError('confirmPassword')}
           required
           autocomplete="new-password"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.confirmPassword ? 'border-red-300' : 'border-gray-300'}"
         />
+        {#if validationErrors.confirmPassword}
+          <p class="mt-1 text-xs text-red-600">{validationErrors.confirmPassword}</p>
+        {/if}
       </div>
 
       <button

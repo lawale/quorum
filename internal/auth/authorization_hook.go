@@ -3,8 +3,10 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -56,8 +58,24 @@ func (h *AuthorizationHook) Check(ctx context.Context, hookURL string, secret st
 		return fmt.Errorf("authorization hook endpoint returned status %d", resp.StatusCode)
 	}
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading authorization hook response: %w", err)
+	}
+
+	if secret != "" {
+		respSig := resp.Header.Get("X-Signature-256")
+		if respSig == "" {
+			return fmt.Errorf("authorization hook response missing X-Signature-256 header")
+		}
+		expectedSig := "sha256=" + signing.ComputeHMAC(bodyBytes, secret)
+		if !hmac.Equal([]byte(respSig), []byte(expectedSig)) {
+			return fmt.Errorf("authorization hook response signature mismatch")
+		}
+	}
+
 	var hookResp model.AuthorizationHookResponse
-	if err := json.NewDecoder(resp.Body).Decode(&hookResp); err != nil {
+	if err := json.Unmarshal(bodyBytes, &hookResp); err != nil {
 		return fmt.Errorf("decoding authorization hook response: %w", err)
 	}
 

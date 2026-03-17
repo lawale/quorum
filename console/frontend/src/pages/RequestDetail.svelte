@@ -17,6 +17,10 @@
   let showRawPayload = $state(false);
   let retryingId: string | null = $state(null);
   let retryingAll = $state(false);
+  let deliveryPage = $state(1);
+  let deliveryTotal = $state(0);
+  const deliveryPerPage = 20;
+  let loadingMore = $state(false);
 
   $effect(() => {
     loadRequest(id);
@@ -24,20 +28,36 @@
 
   async function loadRequest(requestId: string) {
     isLoading = true;
+    deliveryPage = 1;
     try {
       const [requestData, auditData, deliveryData] = await Promise.all([
         requestsApi.get(requestId),
         requestsApi.audit(requestId),
-        deliveriesApi.list({ request_id: requestId, per_page: 50 }).catch(() => ({ data: [], total: 0 })),
+        deliveriesApi.list({ request_id: requestId, per_page: deliveryPerPage, page: 1 }).catch(() => ({ data: [], total: 0 })),
       ]);
       req = requestData;
       auditLogs = auditData.data || [];
       outboxEntries = deliveryData.data || [];
+      deliveryTotal = deliveryData.total || 0;
     } catch {
       addToast('Failed to load request', 'error');
       window.location.hash = '#/requests';
     } finally {
       isLoading = false;
+    }
+  }
+
+  async function loadMoreDeliveries() {
+    loadingMore = true;
+    try {
+      const nextPage = deliveryPage + 1;
+      const deliveryData = await deliveriesApi.list({ request_id: id, per_page: deliveryPerPage, page: nextPage });
+      outboxEntries = [...outboxEntries, ...(deliveryData.data || [])];
+      deliveryPage = nextPage;
+    } catch {
+      addToast('Failed to load more deliveries', 'error');
+    } finally {
+      loadingMore = false;
     }
   }
 
@@ -321,6 +341,17 @@
             </tbody>
           </table>
         </div>
+        {#if outboxEntries.length < deliveryTotal}
+          <div class="mt-3 flex justify-center">
+            <button
+              onclick={loadMoreDeliveries}
+              disabled={loadingMore}
+              class="text-sm text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-md px-4 py-2 disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : `Load more (${outboxEntries.length} of ${deliveryTotal})`}
+            </button>
+          </div>
+        {/if}
       {/if}
     {/if}
   {/if}

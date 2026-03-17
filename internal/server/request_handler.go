@@ -48,6 +48,16 @@ func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(body.Payload, &obj); err != nil {
+		writeError(w, http.StatusBadRequest, "payload must be a JSON object")
+		return
+	}
+	if len(obj) == 0 {
+		writeError(w, http.StatusBadRequest, "payload must not be empty")
+		return
+	}
+
 	makerID := auth.UserIDFromContext(r.Context())
 
 	req := &model.Request{

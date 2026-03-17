@@ -77,21 +77,41 @@ func (s *PolicyStore) GetByRequestType(ctx context.Context, requestType string) 
 	return s.scanPolicy(ctx, query, requestType)
 }
 
-func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
-	query := `SELECT id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at FROM policies`
+func (s *PolicyStore) List(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PerPage < 1 {
+		filter.PerPage = 20
+	}
+	offset := (filter.Page - 1) * filter.PerPage
 
 	tenant := auth.TenantIDFromContext(ctx)
-	var rows pgx.Rows
-	var err error
+
+	var where string
+	var args []any
+	argIdx := 1
 	if tenant != "" {
-		query += " WHERE tenant_id = $1 ORDER BY created_at DESC"
-		rows, err = s.db.Pool.Query(ctx, query, tenant)
-	} else {
-		query += " ORDER BY created_at DESC"
-		rows, err = s.db.Pool.Query(ctx, query)
+		where = fmt.Sprintf("WHERE tenant_id = $%d", argIdx)
+		args = append(args, tenant)
+		argIdx++
 	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM policies %s", where)
+	var total int
+	if err := s.db.Pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting policies: %w", err)
+	}
+
+	dataQuery := fmt.Sprintf(
+		`SELECT id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at FROM policies %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		where, argIdx, argIdx+1,
+	)
+	args = append(args, filter.PerPage, offset)
+
+	rows, err := s.db.Pool.Query(ctx, dataQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("listing policies: %w", err)
+		return nil, 0, fmt.Errorf("listing policies: %w", err)
 	}
 	defer rows.Close()
 
@@ -99,12 +119,12 @@ func (s *PolicyStore) List(ctx context.Context) ([]model.Policy, error) {
 	for rows.Next() {
 		p, err := s.scanPolicyRow(rows)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		policies = append(policies, *p)
 	}
 
-	return policies, nil
+	return policies, total, nil
 }
 
 func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {

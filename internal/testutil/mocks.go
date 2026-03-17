@@ -133,7 +133,7 @@ type MockPolicyStore struct {
 	CreateFunc           func(ctx context.Context, policy *model.Policy) error
 	GetByIDFunc          func(ctx context.Context, id uuid.UUID) (*model.Policy, error)
 	GetByRequestTypeFunc func(ctx context.Context, requestType string) (*model.Policy, error)
-	ListFunc             func(ctx context.Context) ([]model.Policy, error)
+	ListFunc             func(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error)
 	UpdateFunc           func(ctx context.Context, policy *model.Policy) error
 	DeleteFunc           func(ctx context.Context, id uuid.UUID) error
 }
@@ -159,9 +159,9 @@ func (m *MockPolicyStore) GetByRequestType(ctx context.Context, requestType stri
 	panic("MockPolicyStore.GetByRequestType not set up")
 }
 
-func (m *MockPolicyStore) List(ctx context.Context) ([]model.Policy, error) {
+func (m *MockPolicyStore) List(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error) {
 	if m.ListFunc != nil {
-		return m.ListFunc(ctx)
+		return m.ListFunc(ctx, filter)
 	}
 	panic("MockPolicyStore.List not set up")
 }
@@ -184,7 +184,7 @@ func (m *MockPolicyStore) Delete(ctx context.Context, id uuid.UUID) error {
 type MockWebhookStore struct {
 	CreateFunc             func(ctx context.Context, webhook *model.Webhook) error
 	GetByIDFunc            func(ctx context.Context, id uuid.UUID) (*model.Webhook, error)
-	ListFunc               func(ctx context.Context) ([]model.Webhook, error)
+	ListFunc               func(ctx context.Context, filter store.WebhookFilter) ([]model.Webhook, int, error)
 	ListByEventAndTypeFunc func(ctx context.Context, event string, requestType string) ([]model.Webhook, error)
 	DeleteFunc             func(ctx context.Context, id uuid.UUID) error
 }
@@ -203,9 +203,9 @@ func (m *MockWebhookStore) GetByID(ctx context.Context, id uuid.UUID) (*model.We
 	panic("MockWebhookStore.GetByID not set up")
 }
 
-func (m *MockWebhookStore) List(ctx context.Context) ([]model.Webhook, error) {
+func (m *MockWebhookStore) List(ctx context.Context, filter store.WebhookFilter) ([]model.Webhook, int, error) {
 	if m.ListFunc != nil {
-		return m.ListFunc(ctx)
+		return m.ListFunc(ctx, filter)
 	}
 	panic("MockWebhookStore.List not set up")
 }
@@ -249,7 +249,7 @@ type MockOperatorStore struct {
 	CreateFunc        func(ctx context.Context, operator *model.Operator) error
 	GetByIDFunc       func(ctx context.Context, id uuid.UUID) (*model.Operator, error)
 	GetByUsernameFunc func(ctx context.Context, username string) (*model.Operator, error)
-	ListFunc          func(ctx context.Context) ([]model.Operator, error)
+	ListFunc          func(ctx context.Context, filter store.OperatorFilter) ([]model.Operator, int, error)
 	UpdateFunc        func(ctx context.Context, operator *model.Operator) error
 	DeleteFunc        func(ctx context.Context, id uuid.UUID) error
 	CountFunc         func(ctx context.Context) (int, error)
@@ -276,9 +276,9 @@ func (m *MockOperatorStore) GetByUsername(ctx context.Context, username string) 
 	panic("MockOperatorStore.GetByUsername not set up")
 }
 
-func (m *MockOperatorStore) List(ctx context.Context) ([]model.Operator, error) {
+func (m *MockOperatorStore) List(ctx context.Context, filter store.OperatorFilter) ([]model.Operator, int, error) {
 	if m.ListFunc != nil {
-		return m.ListFunc(ctx)
+		return m.ListFunc(ctx, filter)
 	}
 	panic("MockOperatorStore.List not set up")
 }

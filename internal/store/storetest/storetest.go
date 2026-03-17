@@ -598,12 +598,15 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 	})
 
 	t.Run("List", func(t *testing.T) {
-		list, err := s.List(ctx)
+		list, total, err := s.List(ctx, store.PolicyFilter{Page: 1, PerPage: 20})
 		if err != nil {
 			t.Fatalf("List: %v", err)
 		}
 		if len(list) == 0 {
 			t.Error("expected at least one policy")
+		}
+		if total < len(list) {
+			t.Errorf("total = %d, want >= %d", total, len(list))
 		}
 	})
 
@@ -714,12 +717,15 @@ func TestWebhookStore(t *testing.T, s store.WebhookStore) {
 	})
 
 	t.Run("List", func(t *testing.T) {
-		list, err := s.List(ctx)
+		list, total, err := s.List(ctx, store.WebhookFilter{Page: 1, PerPage: 20})
 		if err != nil {
 			t.Fatalf("List: %v", err)
 		}
 		if len(list) == 0 {
 			t.Error("expected at least one webhook")
+		}
+		if total < len(list) {
+			t.Errorf("total = %d, want >= %d", total, len(list))
 		}
 	})
 
@@ -812,12 +818,15 @@ func TestOperatorStore(t *testing.T, s store.OperatorStore) {
 	})
 
 	t.Run("List", func(t *testing.T) {
-		list, err := s.List(ctx)
+		list, total, err := s.List(ctx, store.OperatorFilter{Page: 1, PerPage: 20})
 		if err != nil {
 			t.Fatalf("List: %v", err)
 		}
 		if len(list) == 0 {
 			t.Error("expected at least one operator")
+		}
+		if total < len(list) {
+			t.Errorf("total = %d, want >= %d", total, len(list))
 		}
 	})
 

@@ -391,12 +391,12 @@ All endpoints are under `/api/v1` and require authentication (configurable via t
 | `GET` | `/api/v1/requests/{id}/audit` | Get audit trail for a request |
 | `GET` | `/api/v1/requests/{id}/events` | SSE stream for real-time status updates |
 | `POST` | `/api/v1/policies` | Create a policy |
-| `GET` | `/api/v1/policies` | List all policies |
+| `GET` | `/api/v1/policies` | List policies (`?page=`, `?per_page=`) |
 | `GET` | `/api/v1/policies/{id}` | Get a policy by ID |
 | `PUT` | `/api/v1/policies/{id}` | Update a policy |
 | `DELETE` | `/api/v1/policies/{id}` | Delete a policy |
 | `POST` | `/api/v1/webhooks` | Register a webhook |
-| `GET` | `/api/v1/webhooks` | List webhooks |
+| `GET` | `/api/v1/webhooks` | List webhooks (`?page=`, `?per_page=`) |
 | `DELETE` | `/api/v1/webhooks/{id}` | Delete a webhook |
 | `GET` | `/health` | Health check (no auth) |
 | `GET` | `/metrics` | Prometheus metrics (no auth, when enabled) |

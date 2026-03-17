@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/testutil"
 )
 
@@ -217,18 +218,21 @@ func TestPolicyGetByRequestType_NotFound(t *testing.T) {
 func TestPolicyList_Success(t *testing.T) {
 	expected := []model.Policy{*testutil.NewPolicy(), *testutil.NewPolicy()}
 	policies := &testutil.MockPolicyStore{
-		ListFunc: func(ctx context.Context) ([]model.Policy, error) {
-			return expected, nil
+		ListFunc: func(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error) {
+			return expected, len(expected), nil
 		},
 	}
 	svc := NewPolicyService(policies)
 
-	result, err := svc.List(context.Background())
+	result, total, err := svc.List(context.Background(), store.PolicyFilter{Page: 1, PerPage: 20})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(result) != 2 {
 		t.Errorf("expected 2 policies, got %d", len(result))
+	}
+	if total != 2 {
+		t.Errorf("expected total=2, got %d", total)
 	}
 }
 

@@ -11,11 +11,11 @@
   let isLoading = $state(true);
   let showCreateModal = $state(false);
 
-  // Create form state
   let newSlug = $state('');
   let newName = $state('');
   let creating = $state(false);
   let createError = $state('');
+  let validationErrors: Record<string, string> = $state({});
 
   $effect(() => {
     loadTenants();
@@ -26,7 +26,6 @@
     try {
       const res = await tenantsApi.list();
       items = res.data || [];
-      // Keep the global store in sync
       availableTenants.set(items);
     } catch {
       addToast('Failed to load tenants', 'error');
@@ -39,17 +38,38 @@
     newSlug = '';
     newName = '';
     createError = '';
+    validationErrors = {};
     showCreateModal = true;
+  }
+
+  function validate(): boolean {
+    validationErrors = {};
+
+    const slug = newSlug.trim();
+    if (slug.length < 2 || slug.length > 50) {
+      validationErrors.slug = 'Slug must be between 2 and 50 characters';
+    } else if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(slug)) {
+      validationErrors.slug = 'Slug must contain only lowercase letters, numbers, and hyphens, and start/end with an alphanumeric character';
+    }
+
+    const name = newName.trim();
+    if (name.length < 1 || name.length > 100) {
+      validationErrors.name = 'Name must be between 1 and 100 characters';
+    }
+
+    return Object.keys(validationErrors).length === 0;
+  }
+
+  function clearFieldError(field: string) {
+    validationErrors = { ...validationErrors };
+    delete validationErrors[field];
   }
 
   async function handleCreate(e: SubmitEvent) {
     e.preventDefault();
     createError = '';
 
-    if (!newSlug.trim() || !newName.trim()) {
-      createError = 'Slug and name are required';
-      return;
-    }
+    if (!validate()) return;
 
     creating = true;
     try {
@@ -138,11 +158,16 @@
         id="newSlug"
         type="text"
         bind:value={newSlug}
+        oninput={() => clearFieldError('slug')}
         required
         placeholder="e.g. banking, expenses"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.slug ? 'border-red-300' : 'border-gray-300'}"
       />
-      <p class="mt-1 text-xs text-gray-500">Lowercase letters, numbers, and hyphens only. Used as the X-Tenant-ID header value.</p>
+      {#if validationErrors.slug}
+        <p class="mt-1 text-xs text-red-600">{validationErrors.slug}</p>
+      {:else}
+        <p class="mt-1 text-xs text-gray-500">Lowercase letters, numbers, and hyphens only. Used as the X-Tenant-ID header value.</p>
+      {/if}
     </div>
 
     <div>
@@ -151,10 +176,14 @@
         id="newName"
         type="text"
         bind:value={newName}
+        oninput={() => clearFieldError('name')}
         required
         placeholder="e.g. Banking App"
-        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.name ? 'border-red-300' : 'border-gray-300'}"
       />
+      {#if validationErrors.name}
+        <p class="mt-1 text-xs text-red-600">{validationErrors.name}</p>
+      {/if}
     </div>
 
     <div class="flex items-center gap-3 pt-2">

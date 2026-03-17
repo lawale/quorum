@@ -127,8 +127,8 @@ func (s *PolicyService) GetByRequestType(ctx context.Context, requestType string
 	return policy, nil
 }
 
-func (s *PolicyService) List(ctx context.Context) ([]model.Policy, error) {
-	return s.policies.List(ctx)
+func (s *PolicyService) List(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error) {
+	return s.policies.List(ctx, filter)
 }
 
 func (s *PolicyService) Update(ctx context.Context, policy *model.Policy) error {

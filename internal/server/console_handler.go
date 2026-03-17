@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/service"
+	"github.com/lawale/quorum/internal/store"
 )
 
 const consoleCookieName = "quorum_session"
@@ -202,15 +203,21 @@ func (h *ConsoleHandler) ChangePassword(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "password changed successfully"})
 }
 
-// ListOperators returns all operators.
 func (h *ConsoleHandler) ListOperators(w http.ResponseWriter, r *http.Request) {
-	operators, err := h.operatorService.ListOperators(r.Context())
+	perPage := intParam(r, "per_page", 20)
+	if perPage > maxPerPage {
+		perPage = maxPerPage
+	}
+	filter := store.OperatorFilter{
+		Page:    intParam(r, "page", 1),
+		PerPage: perPage,
+	}
+	operators, total, err := h.operatorService.ListOperators(r.Context(), filter)
 	if err != nil {
 		writeServerError(w, r, err, "failed to list operators")
 		return
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"data": operators})
+	writeJSON(w, http.StatusOK, map[string]any{"data": operators, "total": total, "page": filter.Page})
 }
 
 // CreateOperator creates a new operator.
@@ -280,15 +287,21 @@ type createTenantBody struct {
 	Name string `json:"name"`
 }
 
-// ListTenants returns all registered tenants.
 func (h *ConsoleHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
-	tenants, err := h.tenantService.List(r.Context())
+	perPage := intParam(r, "per_page", 20)
+	if perPage > maxPerPage {
+		perPage = maxPerPage
+	}
+	filter := store.TenantFilter{
+		Page:    intParam(r, "page", 1),
+		PerPage: perPage,
+	}
+	tenants, total, err := h.tenantService.List(r.Context(), filter)
 	if err != nil {
 		writeServerError(w, r, err, "failed to list tenants")
 		return
 	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"data": tenants})
+	writeJSON(w, http.StatusOK, map[string]any{"data": tenants, "total": total, "page": filter.Page})
 }
 
 // CreateTenant registers a new tenant.

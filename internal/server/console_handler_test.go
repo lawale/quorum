@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/service"
+	storepkg "github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/testutil"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -303,11 +304,11 @@ func TestConsoleHandler_DeleteOperator_CannotDeleteSelf(t *testing.T) {
 
 func TestConsoleHandler_ListOperators(t *testing.T) {
 	store := &testutil.MockOperatorStore{
-		ListFunc: func(ctx context.Context) ([]model.Operator, error) {
+		ListFunc: func(ctx context.Context, filter storepkg.OperatorFilter) ([]model.Operator, int, error) {
 			return []model.Operator{
 				{ID: uuid.New(), Username: "admin", DisplayName: "Admin"},
 				{ID: uuid.New(), Username: "dev", DisplayName: "Dev"},
-			}, nil
+			}, 2, nil
 		},
 	}
 	svc := setupOperatorService(store)

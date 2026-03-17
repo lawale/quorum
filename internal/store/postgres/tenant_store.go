@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 type TenantStore struct {
@@ -60,22 +61,35 @@ func (s *TenantStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Tenant,
 	return t, nil
 }
 
-func (s *TenantStore) List(ctx context.Context) ([]model.Tenant, error) {
-	query := `SELECT id, slug, name, created_at, updated_at FROM tenants ORDER BY created_at ASC`
-	rows, err := s.db.Pool.Query(ctx, query)
+func (s *TenantStore) List(ctx context.Context, filter store.TenantFilter) ([]model.Tenant, int, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PerPage < 1 {
+		filter.PerPage = 20
+	}
+	offset := (filter.Page - 1) * filter.PerPage
+
+	var total int
+	if err := s.db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM tenants").Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting tenants: %w", err)
+	}
+
+	query := `SELECT id, slug, name, created_at, updated_at FROM tenants ORDER BY created_at DESC LIMIT $1 OFFSET $2`
+	rows, err := s.db.Pool.Query(ctx, query, filter.PerPage, offset)
 	if err != nil {
-		return nil, fmt.Errorf("listing tenants: %w", err)
+		return nil, 0, fmt.Errorf("listing tenants: %w", err)
 	}
 	defer rows.Close()
 	var tenants []model.Tenant
 	for rows.Next() {
 		var t model.Tenant
 		if err := rows.Scan(&t.ID, &t.Slug, &t.Name, &t.CreatedAt, &t.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("scanning tenant: %w", err)
+			return nil, 0, fmt.Errorf("scanning tenant: %w", err)
 		}
 		tenants = append(tenants, t)
 	}
-	return tenants, nil
+	return tenants, total, nil
 }
 
 func (s *TenantStore) Delete(ctx context.Context, id uuid.UUID) error {

@@ -79,20 +79,41 @@ func (s *WebhookStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Webhoo
 	return w, nil
 }
 
-func (s *WebhookStore) List(ctx context.Context) ([]model.Webhook, error) {
-	var query string
-	var args []any
+func (s *WebhookStore) List(ctx context.Context, filter store.WebhookFilter) ([]model.Webhook, int, error) {
+	if filter.Page < 1 {
+		filter.Page = 1
+	}
+	if filter.PerPage < 1 {
+		filter.PerPage = 20
+	}
+	offset := (filter.Page - 1) * filter.PerPage
+
 	tenantID := auth.TenantIDFromContext(ctx)
+
+	var where string
+	var args []any
+	argIdx := 1
 	if tenantID != "" {
-		query = `SELECT id, tenant_id, url, events, secret, request_type, active, created_at FROM [quorum].[webhooks] WHERE tenant_id = @p1 ORDER BY created_at DESC`
+		where = fmt.Sprintf("WHERE tenant_id = @p%d", argIdx)
 		args = append(args, tenantID)
-	} else {
-		query = `SELECT id, tenant_id, url, events, secret, request_type, active, created_at FROM [quorum].[webhooks] ORDER BY created_at DESC`
+		argIdx++
 	}
 
-	rows, err := s.db.Pool.QueryContext(ctx, query, args...)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM [quorum].[webhooks] %s", where)
+	var total int
+	if err := s.db.Pool.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting webhooks: %w", err)
+	}
+
+	dataQuery := fmt.Sprintf(
+		`SELECT id, tenant_id, url, events, secret, request_type, active, created_at FROM [quorum].[webhooks] %s ORDER BY created_at DESC OFFSET @p%d ROWS FETCH NEXT @p%d ROWS ONLY`,
+		where, argIdx, argIdx+1,
+	)
+	args = append(args, offset, filter.PerPage)
+
+	rows, err := s.db.Pool.QueryContext(ctx, dataQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("listing webhooks: %w", err)
+		return nil, 0, fmt.Errorf("listing webhooks: %w", err)
 	}
 	defer rows.Close()
 
@@ -101,15 +122,15 @@ func (s *WebhookStore) List(ctx context.Context) ([]model.Webhook, error) {
 		var w model.Webhook
 		var eventsJSON string
 		if err := rows.Scan(&w.ID, &w.TenantID, &w.URL, &eventsJSON, &w.Secret, &w.RequestType, &w.Active, &w.CreatedAt); err != nil {
-			return nil, fmt.Errorf("scanning webhook: %w", err)
+			return nil, 0, fmt.Errorf("scanning webhook: %w", err)
 		}
 		if err := unmarshalJSON([]byte(eventsJSON), &w.Events); err != nil {
-			return nil, fmt.Errorf("unmarshaling events: %w", err)
+			return nil, 0, fmt.Errorf("unmarshaling events: %w", err)
 		}
 		webhooks = append(webhooks, w)
 	}
 
-	return webhooks, nil
+	return webhooks, total, nil
 }
 
 func (s *WebhookStore) ListByEventAndType(ctx context.Context, event string, requestType string) ([]model.Webhook, error) {

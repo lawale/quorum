@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/testutil"
 )
 
@@ -58,18 +59,21 @@ func TestWebhookCreate_MissingSecret(t *testing.T) {
 func TestWebhookList_Success(t *testing.T) {
 	expected := []model.Webhook{*testutil.NewWebhook(), *testutil.NewWebhook()}
 	webhooks := &testutil.MockWebhookStore{
-		ListFunc: func(ctx context.Context) ([]model.Webhook, error) {
-			return expected, nil
+		ListFunc: func(ctx context.Context, filter store.WebhookFilter) ([]model.Webhook, int, error) {
+			return expected, len(expected), nil
 		},
 	}
 	svc := NewWebhookService(webhooks)
 
-	result, err := svc.List(context.Background())
+	result, total, err := svc.List(context.Background(), store.WebhookFilter{Page: 1, PerPage: 20})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(result) != 2 {
 		t.Errorf("expected 2 webhooks, got %d", len(result))
+	}
+	if total != 2 {
+		t.Errorf("expected total 2, got %d", total)
 	}
 }
 
