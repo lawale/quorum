@@ -1,4 +1,4 @@
-import { getToken, clearToken } from './auth';
+import { clearSession } from './auth';
 import { get } from 'svelte/store';
 import { selectedTenant } from './stores';
 import type {
@@ -26,20 +26,15 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) ?? {}),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: 'include' });
 
   if (res.status === 401) {
-    clearToken();
+    clearSession();
     window.location.hash = '#/login';
     throw new ApiError(401, 'Unauthorized');
   }
@@ -91,6 +86,7 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     }),
+  logout: () => request<void>('/auth/logout', { method: 'POST' }),
 };
 
 // --- Operator ---

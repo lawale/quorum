@@ -19,7 +19,7 @@ func issueTestToken(t *testing.T) (*service.OperatorService, string) {
 		CountFunc:  func(ctx context.Context) (int, error) { return 0, nil },
 		CreateFunc: func(ctx context.Context, op *model.Operator) error { op.ID = uuid.New(); return nil },
 	}
-	svc := service.NewOperatorService(store, "test-jwt-secret-for-middleware")
+	svc := service.NewOperatorService(store, "test-jwt-secret-for-middleware-32b!")
 	_, token, err := svc.Setup(context.Background(), "admin", "pass", "Admin")
 	if err != nil {
 		t.Fatalf("issuing test token: %v", err)
@@ -120,12 +120,12 @@ func TestConsoleJWTMiddleware_WrongSecret(t *testing.T) {
 		CountFunc:  func(ctx context.Context) (int, error) { return 0, nil },
 		CreateFunc: func(ctx context.Context, op *model.Operator) error { op.ID = uuid.New(); return nil },
 	}
-	svc1 := service.NewOperatorService(store, "secret-1")
+	svc1 := service.NewOperatorService(store, "secret-1-must-be-at-least-32-bytes!")
 	_, token, _ := svc1.Setup(context.Background(), "admin", "pass", "Admin")
 
 	store.CountFunc = func(ctx context.Context) (int, error) { return 0, nil }
 	store.CreateFunc = func(ctx context.Context, op *model.Operator) error { op.ID = uuid.New(); return nil }
-	svc2 := service.NewOperatorService(store, "secret-2")
+	svc2 := service.NewOperatorService(store, "secret-2-must-be-at-least-32-bytes!")
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	handler := consoleJWTMiddleware(svc2)(next)

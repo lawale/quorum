@@ -46,6 +46,7 @@ type Config struct {
 	SignalWorker    func()
 	AuthProvider    auth.Provider
 	ConsoleEnabled  bool
+	SecureCookies   bool
 	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
 	EmbedHandler    http.Handler // Widget JS handler from widgets package (nil when built without tag)
 	Metrics         *metrics.Metrics
@@ -75,7 +76,7 @@ func New(cfg Config) *Server {
 	}
 
 	if cfg.OperatorService != nil {
-		s.consoleHandler = NewConsoleHandler(cfg.OperatorService, cfg.TenantService)
+		s.consoleHandler = NewConsoleHandler(cfg.OperatorService, cfg.TenantService, cfg.SecureCookies)
 	}
 
 	s.setupRoutes()
@@ -116,11 +117,12 @@ func (s *Server) setupRoutes() {
 
 	// Console API — JWT auth for admin console
 	if s.consoleEnabled && s.consoleHandler != nil {
-		r.Route("/api/v1/console", func(r chi.Router) {
+		r.Route(consoleBasePath, func(r chi.Router) {
 			// Public endpoints — no auth
 			r.Get("/auth/status", s.consoleHandler.NeedsSetup)
 			r.Post("/auth/setup", s.consoleHandler.Setup)
 			r.Post("/auth/login", s.consoleHandler.Login)
+			r.Post("/auth/logout", s.consoleHandler.Logout)
 
 			// Authenticated endpoints — JWT required
 			r.Group(func(r chi.Router) {

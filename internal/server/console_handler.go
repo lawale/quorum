@@ -10,14 +10,30 @@ import (
 	"github.com/lawale/quorum/internal/service"
 )
 
+const consoleCookieName = "quorum_session"
+const consoleBasePath = "/api/v1/console"
+
 // ConsoleHandler handles admin console API endpoints for operator management.
 type ConsoleHandler struct {
 	operatorService *service.OperatorService
 	tenantService   *service.TenantService
+	secureCookies   bool
 }
 
-func NewConsoleHandler(os *service.OperatorService, ts *service.TenantService) *ConsoleHandler {
-	return &ConsoleHandler{operatorService: os, tenantService: ts}
+func NewConsoleHandler(os *service.OperatorService, ts *service.TenantService, secureCookies bool) *ConsoleHandler {
+	return &ConsoleHandler{operatorService: os, tenantService: ts, secureCookies: secureCookies}
+}
+
+func (h *ConsoleHandler) setAuthCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     consoleCookieName,
+		Value:    token,
+		Path:     consoleBasePath,
+		HttpOnly: true,
+		Secure:   h.secureCookies,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   86400,
+	})
 }
 
 type setupBody struct {
@@ -65,6 +81,7 @@ func (h *ConsoleHandler) Setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.setAuthCookie(w, token)
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"operator": op,
 		"token":    token,
@@ -94,10 +111,25 @@ func (h *ConsoleHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.setAuthCookie(w, token)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"operator": op,
 		"token":    token,
 	})
+}
+
+// Logout clears the session cookie.
+func (h *ConsoleHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     consoleCookieName,
+		Value:    "",
+		Path:     consoleBasePath,
+		HttpOnly: true,
+		Secure:   h.secureCookies,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   -1,
+	})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // NeedsSetup returns whether the system needs initial setup.

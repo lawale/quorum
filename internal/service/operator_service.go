@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,14 +16,14 @@ import (
 )
 
 var (
-	ErrOperatorNotFound    = errors.New("operator not found")
-	ErrUsernameExists      = errors.New("username already exists")
-	ErrInvalidCredentials  = errors.New("invalid credentials")
-	ErrSetupAlreadyDone    = errors.New("setup has already been completed")
-	ErrNoOperatorsExist    = errors.New("no operators exist; run setup first")
-	ErrIncorrectPassword   = errors.New("current password is incorrect")
-	ErrCannotDeleteSelf    = errors.New("cannot delete yourself")
-	ErrLastOperator        = errors.New("cannot delete the last operator")
+	ErrOperatorNotFound   = errors.New("operator not found")
+	ErrUsernameExists     = errors.New("username already exists")
+	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrSetupAlreadyDone   = errors.New("setup has already been completed")
+	ErrNoOperatorsExist   = errors.New("no operators exist; run setup first")
+	ErrIncorrectPassword  = errors.New("current password is incorrect")
+	ErrCannotDeleteSelf   = errors.New("cannot delete yourself")
+	ErrLastOperator       = errors.New("cannot delete the last operator")
 )
 
 // OperatorTokenClaims are the JWT claims for console operator sessions.
@@ -47,6 +48,9 @@ func NewOperatorService(operators store.OperatorStore, jwtSecret string) *Operat
 		if _, err := rand.Read(secret); err != nil {
 			panic("failed to generate random JWT secret: " + err.Error())
 		}
+		slog.Warn("no JWT secret configured, using random secret (sessions will not survive restarts)")
+	} else if len(secret) < 32 {
+		panic("JWT secret must be at least 32 bytes long")
 	}
 	return &OperatorService{
 		operators: operators,

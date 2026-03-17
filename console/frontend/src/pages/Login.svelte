@@ -1,6 +1,6 @@
 <script lang="ts">
   import { auth as authApi, ApiError } from '../lib/api';
-  import { setToken, setStoredOperator } from '../lib/auth';
+  import { setStoredOperator } from '../lib/auth';
   import { currentUser, addToast } from '../lib/stores';
 
   let { onSuccess }: { onSuccess?: () => void } = $props();
@@ -17,7 +17,6 @@
 
     try {
       const res = await authApi.login(username, password);
-      setToken(res.token);
       setStoredOperator(res.operator);
       currentUser.set(res.operator);
       onSuccess ? onSuccess() : (window.location.hash = '#/');

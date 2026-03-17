@@ -1,18 +1,8 @@
 import type { Operator } from './types';
 
-const TOKEN_KEY = 'quorum_jwt';
 const OPERATOR_KEY = 'quorum_operator';
 
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+export function clearSession(): void {
   localStorage.removeItem(OPERATOR_KEY);
 }
 
@@ -31,5 +21,5 @@ export function setStoredOperator(op: Operator): void {
 }
 
 export function isAuthenticated(): boolean {
-  return !!getToken();
+  return !!getStoredOperator();
 }

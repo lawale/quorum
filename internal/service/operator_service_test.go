@@ -23,7 +23,7 @@ func TestOperatorService_Setup_Success(t *testing.T) {
 		return nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	op, token, err := svc.Setup(context.Background(), "admin", "password123", "Admin User")
 	if err != nil {
@@ -55,7 +55,7 @@ func TestOperatorService_Setup_AlreadyDone(t *testing.T) {
 	store := newMockOperatorStore()
 	store.CountFunc = func(ctx context.Context) (int, error) { return 1, nil }
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	_, _, err := svc.Setup(context.Background(), "admin", "password123", "Admin")
 	if !errors.Is(err, ErrSetupAlreadyDone) {
@@ -76,7 +76,7 @@ func TestOperatorService_Login_Success(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	op, token, err := svc.Login(context.Background(), "admin", "password123")
 	if err != nil {
@@ -108,7 +108,7 @@ func TestOperatorService_Login_UserNotFound(t *testing.T) {
 		return nil, nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	_, _, err := svc.Login(context.Background(), "nobody", "password123")
 	if !errors.Is(err, ErrInvalidCredentials) {
@@ -128,7 +128,7 @@ func TestOperatorService_Login_WrongPassword(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	_, _, err := svc.Login(context.Background(), "admin", "wrong-password")
 	if !errors.Is(err, ErrInvalidCredentials) {
@@ -146,7 +146,7 @@ func TestOperatorService_CreateOperator_Success(t *testing.T) {
 		return nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	op, err := svc.CreateOperator(context.Background(), "newuser", "pass123", "New User")
 	if err != nil {
@@ -166,7 +166,7 @@ func TestOperatorService_CreateOperator_UsernameExists(t *testing.T) {
 		return &model.Operator{Username: "existing"}, nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	_, err := svc.CreateOperator(context.Background(), "existing", "pass123", "Existing")
 	if !errors.Is(err, ErrUsernameExists) {
@@ -198,7 +198,7 @@ func TestOperatorService_ChangePassword_Success(t *testing.T) {
 		return nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	err := svc.ChangePassword(context.Background(), opID, "old-password", "new-password")
 	if err != nil {
@@ -218,7 +218,7 @@ func TestOperatorService_ChangePassword_WrongCurrent(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	err := svc.ChangePassword(context.Background(), opID, "wrong-current", "new-password")
 	if !errors.Is(err, ErrIncorrectPassword) {
@@ -242,7 +242,7 @@ func TestOperatorService_DeleteOperator_Success(t *testing.T) {
 		return nil
 	}
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	err := svc.DeleteOperator(context.Background(), callerID, targetID)
 	if err != nil {
@@ -254,7 +254,7 @@ func TestOperatorService_DeleteOperator_CannotDeleteSelf(t *testing.T) {
 	selfID := uuid.New()
 
 	store := newMockOperatorStore()
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	err := svc.DeleteOperator(context.Background(), selfID, selfID)
 	if !errors.Is(err, ErrCannotDeleteSelf) {
@@ -269,7 +269,7 @@ func TestOperatorService_DeleteOperator_LastOperator(t *testing.T) {
 	store := newMockOperatorStore()
 	store.CountFunc = func(ctx context.Context) (int, error) { return 1, nil }
 
-	svc := NewOperatorService(store, "test-secret")
+	svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 	err := svc.DeleteOperator(context.Background(), callerID, targetID)
 	if !errors.Is(err, ErrLastOperator) {
@@ -282,7 +282,7 @@ func TestOperatorService_NeedsSetup(t *testing.T) {
 
 	t.Run("true when no operators", func(t *testing.T) {
 		store.CountFunc = func(ctx context.Context) (int, error) { return 0, nil }
-		svc := NewOperatorService(store, "test-secret")
+		svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 		needs, err := svc.NeedsSetup(context.Background())
 		if err != nil {
@@ -295,7 +295,7 @@ func TestOperatorService_NeedsSetup(t *testing.T) {
 
 	t.Run("false when operators exist", func(t *testing.T) {
 		store.CountFunc = func(ctx context.Context) (int, error) { return 1, nil }
-		svc := NewOperatorService(store, "test-secret")
+		svc := NewOperatorService(store, "test-secret-key-that-is-32-bytes!")
 
 		needs, err := svc.NeedsSetup(context.Background())
 		if err != nil {
@@ -308,7 +308,7 @@ func TestOperatorService_NeedsSetup(t *testing.T) {
 }
 
 func TestOperatorService_ValidateToken_Invalid(t *testing.T) {
-	svc := NewOperatorService(newMockOperatorStore(), "test-secret")
+	svc := NewOperatorService(newMockOperatorStore(), "test-secret-key-that-is-32-bytes!")
 
 	_, err := svc.ValidateToken("invalid-token")
 	if err == nil {
@@ -324,8 +324,8 @@ func TestOperatorService_ValidateToken_WrongSecret(t *testing.T) {
 		return nil
 	}
 
-	svc1 := NewOperatorService(store, "secret-1")
-	svc2 := NewOperatorService(store, "secret-2")
+	svc1 := NewOperatorService(store, "secret-1-must-be-at-least-32-bytes!")
+	svc2 := NewOperatorService(store, "secret-2-must-be-at-least-32-bytes!")
 
 	// Issue token with svc1
 	_, token, err := svc1.Setup(context.Background(), "admin", "pass", "Admin")

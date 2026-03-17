@@ -10,10 +10,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/quorum ./cmd/server
 
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata && \
+    addgroup -S quorum && adduser -S quorum -G quorum
 
 COPY --from=builder /bin/quorum /bin/quorum
 COPY --from=builder /app/migrations /migrations
+
+USER quorum
 
 EXPOSE 8080
 

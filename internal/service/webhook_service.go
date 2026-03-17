@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
+	webhookutil "github.com/lawale/quorum/internal/webhook"
 )
 
 var (
@@ -44,6 +46,15 @@ func (s *WebhookService) Create(ctx context.Context, webhook *model.Webhook) err
 	}
 	if parsed.Host == "" {
 		return fmt.Errorf("%w: webhook URL must have a host", ErrWebhookValidation)
+	}
+
+	hostname := parsed.Hostname()
+	if ips, err := net.LookupIP(hostname); err == nil {
+		for _, ip := range ips {
+			if webhookutil.IsPrivateIP(ip) {
+				return fmt.Errorf("%w: webhook URL must not resolve to a private/reserved IP address", ErrWebhookValidation)
+			}
+		}
 	}
 
 	if len(webhook.Events) == 0 {

@@ -153,6 +153,7 @@ func main() {
 		AuthProvider:    authProvider,
 		EventHub:        eventHub,
 		ConsoleEnabled:  cfg.Console.Enabled,
+		SecureCookies:   cfg.Console.SecureCookies,
 		ConsoleSPA:      console.Handler(),
 		EmbedHandler:    widgets.Handler(),
 		Metrics:         metricsInstance,

@@ -20,19 +20,25 @@ const operatorIDCtxKey ctxKey = "operator_id"
 func consoleJWTMiddleware(operatorService *service.OperatorService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			header := r.Header.Get("Authorization")
-			if header == "" {
-				writeError(w, http.StatusUnauthorized, "missing authorization header")
+			var tokenStr string
+
+			if cookie, err := r.Cookie(consoleCookieName); err == nil && cookie.Value != "" {
+				tokenStr = cookie.Value
+			} else if header := r.Header.Get("Authorization"); header != "" {
+				parts := strings.SplitN(header, " ", 2)
+				if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+					writeError(w, http.StatusUnauthorized, "invalid authorization header format")
+					return
+				}
+				tokenStr = parts[1]
+			}
+
+			if tokenStr == "" {
+				writeError(w, http.StatusUnauthorized, "missing authentication")
 				return
 			}
 
-			parts := strings.SplitN(header, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				writeError(w, http.StatusUnauthorized, "invalid authorization header format")
-				return
-			}
-
-			claims, err := operatorService.ValidateToken(parts[1])
+			claims, err := operatorService.ValidateToken(tokenStr)
 			if err != nil {
 				writeError(w, http.StatusUnauthorized, "invalid or expired token")
 				return

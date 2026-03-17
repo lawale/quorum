@@ -1,6 +1,7 @@
 <script lang="ts">
   import { currentUser, selectedTenant, availableTenants } from '../lib/stores';
-  import { clearToken } from '../lib/auth';
+  import { clearSession } from '../lib/auth';
+  import { auth as authApi } from '../lib/api';
   import type { Tenant } from '../lib/types';
 
   interface NavItem {
@@ -36,8 +37,9 @@
     return hash.startsWith(href);
   }
 
-  function handleLogout() {
-    clearToken();
+  async function handleLogout() {
+    try { await authApi.logout(); } catch { /* ignore */ }
+    clearSession();
     currentUser.set(null);
     window.location.hash = '#/login';
   }

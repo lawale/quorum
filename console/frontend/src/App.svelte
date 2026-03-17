@@ -1,6 +1,6 @@
 <script lang="ts">
   import { auth as authApi, tenants as tenantsApi } from './lib/api';
-  import { isAuthenticated, getStoredOperator, clearToken } from './lib/auth';
+  import { isAuthenticated, getStoredOperator, clearSession } from './lib/auth';
   import { currentUser, availableTenants } from './lib/stores';
   import { operators } from './lib/api';
   import Layout from './components/Layout.svelte';
@@ -69,7 +69,7 @@
           window.location.hash = '#/';
         }
       } catch {
-        clearToken();
+        clearSession();
         state = 'login';
       }
     } catch {
