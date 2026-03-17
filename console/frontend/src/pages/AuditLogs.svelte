@@ -1,7 +1,7 @@
 <script lang="ts">
   import { requests as requestsApi } from '../lib/api';
   import { addToast } from '../lib/stores';
-  import { formatDate } from '../lib/utils';
+  import { formatDate, formatDetails } from '../lib/utils';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import type { AuditLog } from '../lib/types';
 
@@ -45,9 +45,6 @@
     }
   }
 
-  function formatJson(obj: unknown): string {
-    return JSON.stringify(obj, null, 2);
-  }
 </script>
 
 <div>
@@ -110,7 +107,7 @@
                 <td class="px-6 py-4 text-sm text-gray-700">{log.actor_id}</td>
                 <td class="px-6 py-4 text-sm text-gray-500">
                   {#if log.details && Object.keys(log.details).length > 0}
-                    <pre class="bg-gray-50 rounded p-2 text-xs font-mono overflow-x-auto max-w-md">{formatJson(log.details)}</pre>
+                    <span class="text-xs text-gray-700 whitespace-pre-line">{formatDetails(log.details, log.action)}</span>
                   {:else}
                     <span class="text-gray-400">—</span>
                   {/if}

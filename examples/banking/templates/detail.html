@@ -51,9 +51,7 @@
     {{if .Transfer.QuorumRequestID}}
     <div class="mb-6">
         <quorum-stage-progress
-            request-id="{{.Transfer.QuorumRequestID}}"
-            api-url="{{.QuorumURL}}"
-            tenant-id="banking">
+            request-id="{{.Transfer.QuorumRequestID}}">
         </quorum-stage-progress>
     </div>
     {{end}}
@@ -63,8 +61,6 @@
     <div class="mb-6">
         <quorum-approval-panel
             request-id="{{.Transfer.QuorumRequestID}}"
-            api-url="{{.QuorumURL}}"
-            tenant-id="banking"
             poll-interval="5000"
             suppress-errors="true">
         </quorum-approval-panel>
@@ -75,17 +71,6 @@
 
 {{define "scripts"}}
 {{if .Transfer.QuorumRequestID}}
-<script>
-    (function() {
-        var p = window.__quorumProfile;
-        if (p) {
-            var headers = JSON.stringify({ 'X-User-Id': p.userId, 'X-User-Roles': p.roles });
-            document.querySelector('quorum-approval-panel')?.setAttribute('auth-headers', headers);
-            document.querySelector('quorum-stage-progress')?.setAttribute('auth-headers', headers);
-        }
-    })();
-</script>
-<script src="{{.QuorumURL}}/assets/embed.js"></script>
 <script>
     var panel = document.querySelector('quorum-approval-panel');
     panel?.addEventListener('quorum:approved', function() {

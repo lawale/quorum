@@ -51,6 +51,9 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
 	)
 	if err != nil {
+		if isDuplicateKeyError(err) {
+			return store.ErrDuplicateRequest
+		}
 		return fmt.Errorf("inserting request: %w", err)
 	}
 

@@ -2,6 +2,7 @@
 
 <script lang="ts">
   import { createClient, ApiError } from '../lib/api';
+  import { getGlobalConfig, hasGlobalApiUrl } from '../lib/config';
   import type { Request } from '../lib/types';
   import { timeAgo, getDisplay } from '../lib/utils';
   import StatusBadge from './internal/StatusBadge.svelte';
@@ -38,7 +39,14 @@
     if (authHeadersStr) {
       try { authHeaders = JSON.parse(authHeadersStr); } catch {}
     }
-    return createClient({ apiUrl, token: token || undefined, tenantId: tenantId || undefined, authHeaders });
+    const global = getGlobalConfig();
+    return createClient({
+      ...global,
+      ...(apiUrl ? { apiUrl } : {}),
+      ...(token ? { token } : {}),
+      ...(tenantId ? { tenantId } : {}),
+      ...(authHeaders ? { authHeaders } : {}),
+    });
   }
 
   function dispatch(name: string, detail: unknown) {
@@ -47,7 +55,7 @@
   }
 
   async function load() {
-    if (!apiUrl) return;
+    if (!apiUrl && !hasGlobalApiUrl()) return;
     loading = true;
     error = null;
     try {
@@ -74,15 +82,22 @@
 
   $effect(() => {
     if (apiUrl) {
-      // Reset to page 1 when filters change
       page = 1;
       load();
     }
   });
 
   $effect(() => {
-    // Reload when page changes (but not from the filter reset above)
     if (apiUrl && page > 0) load();
+  });
+
+  // Re-evaluate after QuorumEmbed.configure() is called
+  $effect(() => {
+    function onConfigured() {
+      if (!apiUrl && hasGlobalApiUrl()) { page = 1; load(); }
+    }
+    document.addEventListener('quorum:configured', onConfigured);
+    return () => document.removeEventListener('quorum:configured', onConfigured);
   });
 </script>
 

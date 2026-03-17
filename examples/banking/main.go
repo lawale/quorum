@@ -295,7 +295,9 @@ func (a *app) handleDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleNewTransferForm(w http.ResponseWriter, r *http.Request) {
-	a.render(w, "new_transfer.html", nil)
+	a.render(w, "new_transfer.html", map[string]any{
+		"QuorumURL": a.cfg.QuorumPublicURL,
+	})
 }
 
 func (a *app) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {

@@ -143,6 +143,9 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 	req.CurrentStage = 0
 
 	if err := s.requests.Create(ctx, req); err != nil {
+		if errors.Is(err, store.ErrDuplicateRequest) {
+			return nil, ErrDuplicateRequest
+		}
 		return nil, err
 	}
 

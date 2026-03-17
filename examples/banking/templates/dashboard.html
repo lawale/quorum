@@ -77,8 +77,6 @@
     <h2 class="text-lg font-semibold text-gray-900 mb-3">Approval Queue</h2>
     <p class="text-sm text-gray-500 mb-4">Live view of all wire transfer requests tracked by Quorum.</p>
     <quorum-request-list
-        api-url="{{.QuorumURL}}"
-        tenant-id="banking"
         type="wire_transfer"
         page-size="10"
         suppress-errors="true">
@@ -87,16 +85,6 @@
 {{end}}
 
 {{define "scripts"}}
-<script>
-    (function() {
-        var p = window.__quorumProfile;
-        if (p) {
-            var headers = JSON.stringify({ 'X-User-Id': p.userId, 'X-User-Roles': p.roles });
-            document.querySelector('quorum-request-list')?.setAttribute('auth-headers', headers);
-        }
-    })();
-</script>
-<script src="{{.QuorumURL}}/assets/embed.js"></script>
 <script>
     var quorumToLocal = { {{range .Transfers}}{{if .QuorumRequestID}}"{{.QuorumRequestID}}": "{{.ID}}",{{end}}{{end}} };
     var list = document.querySelector('quorum-request-list');

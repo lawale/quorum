@@ -19,4 +19,4 @@ CREATE INDEX idx_requests_status ON quorum.requests (status);
 CREATE INDEX idx_requests_type ON quorum.requests (type);
 CREATE INDEX idx_requests_maker_id ON quorum.requests (maker_id);
 CREATE INDEX idx_requests_tenant_id ON quorum.requests (tenant_id);
-CREATE INDEX idx_requests_fingerprint ON quorum.requests (tenant_id, type, fingerprint) WHERE status = 'pending';
+CREATE UNIQUE INDEX idx_requests_fingerprint ON quorum.requests (tenant_id, type, fingerprint) WHERE status = 'pending';

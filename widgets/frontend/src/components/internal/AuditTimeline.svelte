@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { AuditLog } from '../../lib/types';
-  import { timeAgo, capitalize, ACTION_COLORS } from '../../lib/utils';
+  import { timeAgo, capitalize, formatDetails, ACTION_COLORS } from '../../lib/utils';
 
   let { logs }: { logs: AuditLog[] } = $props();
 </script>
@@ -16,8 +16,8 @@
           <span class="time">{timeAgo(log.created_at)}</span>
         </div>
         <div class="actor">by {log.actor_id}</div>
-        {#if log.details}
-          <div class="details">{JSON.stringify(log.details)}</div>
+        {#if log.details && Object.keys(log.details).length > 0}
+          <div class="details">{formatDetails(log.details, log.action)}</div>
         {/if}
       </div>
     </div>
@@ -80,6 +80,7 @@
     color: #9ca3af;
     margin-top: 4px;
     font-family: monospace;
+    white-space: pre-line;
     word-break: break-all;
   }
   .empty {

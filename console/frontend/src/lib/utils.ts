@@ -27,6 +27,35 @@ export function capitalize(s: string): string {
 }
 
 /**
+ * Converts a snake_case key to a Title Case label.
+ * e.g. "from_stage" → "From Stage"
+ */
+export function formatDetailsLabel(key: string): string {
+  return key
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/**
+ * Formats audit log details into a human-readable string.
+ * Handles known action-specific templates (e.g. stage_advanced)
+ * and falls back to "Label: value" pairs for unknown shapes.
+ */
+export function formatDetails(details: Record<string, unknown>, action?: string): string {
+  if (!details || Object.keys(details).length === 0) return '';
+
+  // Known template: stage advancement
+  if (action === 'stage_advanced' && 'from_stage' in details && 'to_stage' in details) {
+    return `Stage ${details.from_stage} → ${details.to_stage}`;
+  }
+
+  return Object.entries(details)
+    .map(([key, value]) => `${formatDetailsLabel(key)}: ${value}`)
+    .join('\n');
+}
+
+/**
  * Status color mapping for badges.
  */
 export function statusColor(status: string): string {

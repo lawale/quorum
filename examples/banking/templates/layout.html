@@ -137,6 +137,19 @@
     ], { accent: '#2563eb', accentLight: '#dbeafe', accentText: '#1e40af' });
     </script>
 
+    <script src="{{.QuorumURL}}/assets/embed.js"></script>
+    <script>
+    QuorumEmbed.configure({
+        apiUrl: '{{.QuorumURL}}',
+        tenantId: 'banking',
+        authHeaders: function() {
+            var p = window.__quorumProfile;
+            if (!p) return {};
+            return { 'X-User-Id': p.userId, 'X-User-Roles': p.roles };
+        }
+    });
+    </script>
+
     {{block "scripts" .}}{{end}}
 </body>
 </html>

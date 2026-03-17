@@ -2,6 +2,7 @@
 
 <script lang="ts">
   import { createClient, ApiError } from '../lib/api';
+  import { getGlobalConfig, hasGlobalApiUrl } from '../lib/config';
   import type { SSEConnection } from '../lib/api';
   import type { Request, Policy, Approval } from '../lib/types';
   import StageBar from './internal/StageBar.svelte';
@@ -41,11 +42,18 @@
     if (authHeadersStr) {
       try { authHeaders = JSON.parse(authHeadersStr); } catch {}
     }
-    return createClient({ apiUrl, token: token || undefined, tenantId: tenantId || undefined, authHeaders });
+    const global = getGlobalConfig();
+    return createClient({
+      ...global,
+      ...(apiUrl ? { apiUrl } : {}),
+      ...(token ? { token } : {}),
+      ...(tenantId ? { tenantId } : {}),
+      ...(authHeaders ? { authHeaders } : {}),
+    });
   }
 
   async function load() {
-    if (!requestId || !apiUrl) return;
+    if (!requestId || (!apiUrl && !hasGlobalApiUrl())) return;
     loading = true;
     error = null;
     try {
@@ -83,6 +91,14 @@
 
   $effect(() => {
     if (requestId && apiUrl) load();
+  });
+
+  $effect(() => {
+    function onConfigured() {
+      if (requestId && !apiUrl && hasGlobalApiUrl()) load();
+    }
+    document.addEventListener('quorum:configured', onConfigured);
+    return () => document.removeEventListener('quorum:configured', onConfigured);
   });
 
   // Listen for ApprovalPanel events (when both widgets are on the same page)

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { requests as requestsApi, deliveries as deliveriesApi } from '../lib/api';
   import { addToast } from '../lib/stores';
-  import { formatDate } from '../lib/utils';
+  import { formatDate, formatDetails } from '../lib/utils';
   import StatusBadge from '../components/StatusBadge.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import type { Request, AuditLog, OutboxEntry } from '../lib/types';
@@ -258,7 +258,7 @@
                 <span class="text-xs text-gray-500">{formatDate(log.created_at)}</span>
               </div>
               {#if log.details && Object.keys(log.details).length > 0}
-                <pre class="mt-2 bg-gray-50 rounded p-3 text-xs font-mono text-gray-700 overflow-x-auto">{formatJson(log.details)}</pre>
+                <span class="mt-2 block text-xs text-gray-600 whitespace-pre-line">{formatDetails(log.details, log.action)}</span>
               {/if}
             </div>
           {/each}
