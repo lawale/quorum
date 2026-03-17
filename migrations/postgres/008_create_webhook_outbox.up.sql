@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS quorum.webhook_outbox (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    request_id UUID NOT NULL REFERENCES quorum.requests(id),
+    request_id UUID NOT NULL REFERENCES quorum.requests(id) ON DELETE CASCADE,
     webhook_url VARCHAR(2048) NOT NULL,
     webhook_secret VARCHAR(255) NOT NULL DEFAULT '',
     payload JSONB NOT NULL,

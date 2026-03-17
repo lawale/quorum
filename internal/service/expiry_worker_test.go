@@ -97,6 +97,11 @@ func TestExpiryWorker_ProcessExpired_CallsWebhookDispatch(t *testing.T) {
 		func(ctx context.Context, fn func(tx *store.Stores) error) error {
 			txStores := &store.Stores{
 				Requests: requests,
+				Approvals: &testutil.MockApprovalStore{
+					ListByRequestIDFunc: func(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error) {
+						return nil, nil
+					},
+				},
 				Outbox:   &testutil.MockOutboxStore{},
 				Webhooks: &testutil.MockWebhookStore{},
 			}
@@ -173,6 +178,11 @@ func TestExpiryWorker_ProcessExpired_UpdateStatusError(t *testing.T) {
 		func(ctx context.Context, fn func(tx *store.Stores) error) error {
 			txStores := &store.Stores{
 				Requests: requests,
+				Approvals: &testutil.MockApprovalStore{
+					ListByRequestIDFunc: func(ctx context.Context, requestID uuid.UUID) ([]model.Approval, error) {
+						return nil, nil
+					},
+				},
 				Outbox:   &testutil.MockOutboxStore{},
 				Webhooks: &testutil.MockWebhookStore{},
 			}

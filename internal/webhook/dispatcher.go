@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/signing"
@@ -205,6 +206,12 @@ func (d *Dispatcher) processBatch(ctx context.Context) {
 }
 
 func (d *Dispatcher) deliverEntry(ctx context.Context, entry model.OutboxEntry) {
+	// Extract tenant from payload so audit logs are tenant-scoped.
+	var wp model.WebhookPayload
+	if err := json.Unmarshal(entry.Payload, &wp); err == nil && wp.Request.TenantID != "" {
+		ctx = auth.WithTenantID(ctx, wp.Request.TenantID)
+	}
+
 	start := time.Now()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, entry.WebhookURL, bytes.NewReader(entry.Payload))

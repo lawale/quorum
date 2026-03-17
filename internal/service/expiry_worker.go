@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -88,7 +89,11 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 				if err := txStores.Requests.UpdateStatus(tenantCtx, req.ID, model.StatusExpired); err != nil {
 					return err
 				}
-				return w.enqueueWebhooks(tenantCtx, txStores.Outbox, txStores.Webhooks, &req, nil)
+				approvals, err := txStores.Approvals.ListByRequestID(tenantCtx, req.ID)
+				if err != nil {
+					return fmt.Errorf("loading approvals for expiry webhook: %w", err)
+				}
+				return w.enqueueWebhooks(tenantCtx, txStores.Outbox, txStores.Webhooks, &req, approvals)
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrStatusConflict) {
@@ -122,7 +127,7 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 			Action:    "expired",
 			ActorID:   "system",
 		}
-		if err := w.audits.Create(ctx, log); err != nil {
+		if err := w.audits.Create(tenantCtx, log); err != nil {
 			slog.Error("failed to audit expiry", "error", err, "request_id", req.ID)
 		}
 

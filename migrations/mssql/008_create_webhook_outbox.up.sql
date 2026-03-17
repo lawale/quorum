@@ -1,7 +1,7 @@
 IF NOT EXISTS (SELECT * FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id WHERE s.name = 'quorum' AND t.name = 'webhook_outbox')
 CREATE TABLE [quorum].[webhook_outbox] (
     id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    request_id UNIQUEIDENTIFIER NOT NULL REFERENCES [quorum].[requests](id),
+    request_id UNIQUEIDENTIFIER NOT NULL REFERENCES [quorum].[requests](id) ON DELETE CASCADE,
     webhook_url NVARCHAR(2048) NOT NULL,
     webhook_secret NVARCHAR(255) NOT NULL DEFAULT '',
     payload NVARCHAR(MAX) NOT NULL,
