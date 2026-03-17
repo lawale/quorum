@@ -51,6 +51,7 @@ type Request struct {
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
 	Approvals         []Approval      `json:"approvals,omitempty"`
+	ViewerCanAct      *bool           `json:"viewer_can_act,omitempty"`
 }
 
 type Approval struct {

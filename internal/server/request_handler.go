@@ -98,6 +98,11 @@ func (h *RequestHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	viewerID := auth.UserIDFromContext(r.Context())
+	roles := auth.RolesFromContext(r.Context())
+	canAct := h.requestService.CanViewerAct(r.Context(), req, viewerID, roles)
+	req.ViewerCanAct = &canAct
+
 	writeJSON(w, http.StatusOK, req)
 }
 
@@ -198,6 +203,9 @@ func (h *RequestHandler) handleDecision(w http.ResponseWriter, r *http.Request, 
 		}
 		return
 	}
+
+	canAct := h.requestService.CanViewerAct(r.Context(), result, checkerID, roles)
+	result.ViewerCanAct = &canAct
 
 	writeJSON(w, http.StatusOK, result)
 }

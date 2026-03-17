@@ -1270,3 +1270,203 @@ func TestApprove_MultiStage_PerStageRoleValidation(t *testing.T) {
 		t.Fatalf("unexpected error with correct role: %v", err)
 	}
 }
+
+// --- CanViewerAct Tests ---
+
+func TestCanViewerAct_ValidChecker(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.Approvals = nil
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.RequestType = req.Type
+	})
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
+
+	if !svc.CanViewerAct(context.Background(), req, "checker-1", nil) {
+		t.Error("expected true for valid checker with no role restrictions")
+	}
+}
+
+func TestCanViewerAct_EmptyViewerID(t *testing.T) {
+	req := testutil.NewRequest()
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, &testutil.MockPolicyStore{}, &testutil.MockAuditStore{}, nil)
+
+	if svc.CanViewerAct(context.Background(), req, "", nil) {
+		t.Error("expected false for empty viewer ID")
+	}
+}
+
+func TestCanViewerAct_NotPending(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.Status = model.StatusApproved
+	})
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, &testutil.MockPolicyStore{}, &testutil.MockAuditStore{}, nil)
+
+	if svc.CanViewerAct(context.Background(), req, "checker-1", nil) {
+		t.Error("expected false for non-pending request")
+	}
+}
+
+func TestCanViewerAct_IsMaker(t *testing.T) {
+	req := testutil.NewRequest()
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, &testutil.MockPolicyStore{}, &testutil.MockAuditStore{}, nil)
+
+	if svc.CanViewerAct(context.Background(), req, req.MakerID, nil) {
+		t.Error("expected false when viewer is the maker")
+	}
+}
+
+func TestCanViewerAct_AlreadyVoted(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.CurrentStage = 0
+		r.Approvals = []model.Approval{
+			{CheckerID: "checker-1", StageIndex: 0, Decision: model.DecisionApproved},
+		}
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.RequestType = req.Type
+	})
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
+
+	if svc.CanViewerAct(context.Background(), req, "checker-1", nil) {
+		t.Error("expected false when viewer already voted on current stage")
+	}
+}
+
+func TestCanViewerAct_VotedOnDifferentStage(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.CurrentStage = 1
+		r.Approvals = []model.Approval{
+			{CheckerID: "checker-1", StageIndex: 0, Decision: model.DecisionApproved},
+		}
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.RequestType = req.Type
+		p.Stages = []model.ApprovalStage{
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+			{Index: 1, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
+		}
+	})
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
+
+	if !svc.CanViewerAct(context.Background(), req, "checker-1", nil) {
+		t.Error("expected true when viewer voted on a different stage")
+	}
+}
+
+func TestCanViewerAct_WrongRole(t *testing.T) {
+	req := testutil.NewRequest()
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.RequestType = req.Type
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:               0,
+				RequiredApprovals:   1,
+				AllowedCheckerRoles: json.RawMessage(`["manager"]`),
+				RejectionPolicy:     model.RejectionPolicyAny,
+			},
+		}
+	})
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
+
+	if svc.CanViewerAct(context.Background(), req, "checker-1", []string{"employee"}) {
+		t.Error("expected false when viewer lacks required role")
+	}
+}
+
+func TestCanViewerAct_CorrectRole(t *testing.T) {
+	req := testutil.NewRequest()
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.RequestType = req.Type
+		p.Stages = []model.ApprovalStage{
+			{
+				Index:               0,
+				RequiredApprovals:   1,
+				AllowedCheckerRoles: json.RawMessage(`["manager"]`),
+				RejectionPolicy:     model.RejectionPolicyAny,
+			},
+		}
+	})
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
+
+	if !svc.CanViewerAct(context.Background(), req, "checker-1", []string{"manager"}) {
+		t.Error("expected true when viewer has required role")
+	}
+}
+
+func TestCanViewerAct_NotInEligibleReviewers(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.EligibleReviewers = []string{"reviewer-a", "reviewer-b"}
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.RequestType = req.Type
+	})
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
+
+	if svc.CanViewerAct(context.Background(), req, "checker-1", nil) {
+		t.Error("expected false when viewer is not in eligible reviewers list")
+	}
+}
+
+func TestCanViewerAct_InEligibleReviewers(t *testing.T) {
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.EligibleReviewers = []string{"reviewer-a", "checker-1"}
+	})
+	policy := testutil.NewPolicy(func(p *model.Policy) {
+		p.RequestType = req.Type
+	})
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return policy, nil
+		},
+	}
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
+
+	if !svc.CanViewerAct(context.Background(), req, "checker-1", nil) {
+		t.Error("expected true when viewer is in eligible reviewers list")
+	}
+}
+
+func TestCanViewerAct_PolicyNotFound(t *testing.T) {
+	req := testutil.NewRequest()
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) {
+			return nil, nil
+		},
+	}
+	svc := newTestRequestService(&testutil.MockRequestStore{}, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
+
+	if svc.CanViewerAct(context.Background(), req, "checker-1", nil) {
+		t.Error("expected false when policy not found")
+	}
+}

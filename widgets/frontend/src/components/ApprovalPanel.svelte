@@ -274,7 +274,7 @@
     </div>
 
     <!-- Actions -->
-    {#if req.status === 'pending'}
+    {#if req.viewer_can_act}
       <div class="actions">
         {#if error && !suppressErrors}
           <div class="action-error">{error}</div>

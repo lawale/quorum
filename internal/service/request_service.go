@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"time"
 
@@ -296,17 +297,8 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 	}
 
 	// Check eligible reviewers (per-request whitelist)
-	if len(req.EligibleReviewers) > 0 {
-		eligible := false
-		for _, r := range req.EligibleReviewers {
-			if r == checkerID {
-				eligible = true
-				break
-			}
-		}
-		if !eligible {
-			return nil, ErrNotEligibleReviewer
-		}
+	if len(req.EligibleReviewers) > 0 && !slices.Contains(req.EligibleReviewers, checkerID) {
+		return nil, ErrNotEligibleReviewer
 	}
 
 	// Permission check callback (dynamic check via consuming system)
@@ -654,4 +646,49 @@ func resolveDisplayTemplate(req *model.Request, policy *model.Policy) {
 		return
 	}
 	req.Metadata = merged
+}
+
+// CanViewerAct determines whether the given viewer can approve or reject
+// the request based on the same permission checks enforced by processDecision.
+// The external permission_check_url is intentionally skipped (HTTP call not
+// suitable for the read path); it is still enforced on actual approve/reject.
+func (s *RequestService) CanViewerAct(ctx context.Context, req *model.Request, viewerID string, viewerRoles []string) bool {
+	if viewerID == "" {
+		return false
+	}
+	if req.Status != model.StatusPending {
+		return false
+	}
+	if req.MakerID == viewerID {
+		return false
+	}
+
+	// Check eligible reviewers (per-request whitelist)
+	if len(req.EligibleReviewers) > 0 && !slices.Contains(req.EligibleReviewers, viewerID) {
+		return false
+	}
+
+	// Check if viewer already voted on the current stage (from attached approvals)
+	for _, a := range req.Approvals {
+		if a.CheckerID == viewerID && a.StageIndex == req.CurrentStage {
+			return false
+		}
+	}
+
+	// Validate roles against the current stage
+	policy, err := s.policies.GetByRequestType(ctx, req.Type)
+	if err != nil || policy == nil {
+		return false
+	}
+
+	stage := policy.StageAt(req.CurrentStage)
+	if stage == nil {
+		return false
+	}
+
+	if err := validateCheckerRoles(stage, viewerRoles); err != nil {
+		return false
+	}
+
+	return true
 }

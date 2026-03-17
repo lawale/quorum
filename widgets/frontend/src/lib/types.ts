@@ -14,6 +14,7 @@ export interface Request {
   created_at: string;
   updated_at: string;
   approvals?: Approval[];
+  viewer_can_act?: boolean;
 }
 
 export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';

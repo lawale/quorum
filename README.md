@@ -535,17 +535,19 @@ const request = await client.getRequest('uuid-here');
   token="Bearer ..."
 ></quorum-request-list>
 
-<!-- Visualize approval stage progress -->
+<!-- Visualize approval stage progress (with real-time SSE updates) -->
 <quorum-stage-progress
   request-id="uuid-here"
   api-url="https://your-quorum-host"
   token="Bearer ..."
+  sse="true"
+  poll-interval="30000"
 ></quorum-stage-progress>
 ```
 
 **Authentication:** Pass a `token` attribute for Bearer authentication, or an `auth-headers` attribute (JSON string) for trust-mode headers like `{"X-User-ID": "alice", "X-User-Roles": "manager"}`.
 
-**Real-time updates:** The approval panel connects via SSE by default for instant push notifications. Set `sse="false"` to disable and use polling only. The `poll-interval` attribute (default 30000ms) controls the fallback polling rate.
+**Real-time updates:** Both the approval panel and stage progress widgets connect via SSE by default for instant push notifications. Set `sse="false"` to disable and use polling only. The `poll-interval` attribute (default 30000ms) controls the fallback polling rate. When both widgets are on the same page, the stage progress widget also reacts to custom events dispatched by the approval panel for immediate cross-widget updates.
 
 **Error handling:** Set `suppress-errors` on the widget to hide inline error messages. Listen for `quorum:error` events to handle errors externally (e.g., toast notifications). The event detail includes `{ action, message, status }` where `action` is `"load"`, `"approve"`, or `"reject"`.
 
