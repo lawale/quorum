@@ -36,7 +36,7 @@
 
   let req: Request | null = $state(null);
   let policy: Policy | null = $state(null);
-  let approvals: Approval[] = $state([]);
+  let approvals: Approval[] = $derived(req?.approvals ?? []);
   let auditLogs: AuditLog[] = $state([]);
   let error: string | null = $state(null);
   let loading = $state(true);
@@ -45,8 +45,8 @@
   let activeTab: 'details' | 'payload' | 'audit' = $state('details');
   let showRawPayload = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | undefined;
-  let sseConnection: SSEConnection | null = $state(null);
-  let sseActive = $state(false);
+  let sseConnection: SSEConnection | null = null;
+  let sseActive = false;
   let sseEnabled = $derived(sseStr !== 'false');
   let isPending = $state(false);
 

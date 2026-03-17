@@ -125,7 +125,8 @@ curl -sf -X POST "${API}/policies" \
         "name": "Compliance Review",
         "required_approvals": 2,
         "allowed_checker_roles": ["compliance_officer", "admin"],
-        "rejection_policy": "any"
+        "rejection_policy": "threshold",
+        "max_checkers": 4
       }
     ],
     "identity_fields": ["source_account_id"],

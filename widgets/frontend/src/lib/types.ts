@@ -13,6 +13,7 @@ export interface Request {
   expires_at?: string;
   created_at: string;
   updated_at: string;
+  approvals?: Approval[];
 }
 
 export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';
