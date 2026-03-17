@@ -198,7 +198,7 @@
     <div class="header">
       <div class="header-left">
         <StatusBadge status={req.status} />
-        <span class="type">{req.type}</span>
+        <span class="type">{policy?.name ?? req.type}</span>
       </div>
       <span class="id" title={req.id}>{req.id.slice(0, 8)}...</span>
     </div>
@@ -336,7 +336,7 @@
     margin-bottom: 8px;
   }
   .header-left { display: flex; align-items: center; gap: 8px; }
-  .type { font-size: 13px; color: #6b7280; font-family: monospace; }
+  .type { font-size: 13px; color: #6b7280; }
   .id { font-size: 11px; color: #9ca3af; font-family: monospace; }
   .meta {
     display: flex;

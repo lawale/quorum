@@ -101,16 +101,24 @@
     align-items: center;
     gap: 0;
     width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #d1d5db transparent;
   }
+  .stage-bar::-webkit-scrollbar { height: 4px; }
+  .stage-bar::-webkit-scrollbar-track { background: transparent; }
+  .stage-bar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
   .stage {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 4px;
-    min-width: 60px;
+    min-width: 72px;
+    flex-shrink: 0;
   }
   .start-stage {
     min-width: 40px;
+    flex-shrink: 0;
   }
   .indicator {
     width: 28px;
@@ -160,7 +168,7 @@
     color: #374151;
     font-weight: 500;
     text-align: center;
-    max-width: 80px;
+    max-width: 100px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -173,7 +181,8 @@
     flex: 1;
     height: 2px;
     background: #e5e7eb;
-    min-width: 20px;
+    min-width: 48px;
+    flex-shrink: 0;
     margin-bottom: 24px;
     transition: background 0.2s;
     position: relative;

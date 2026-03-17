@@ -157,7 +157,7 @@
   {:else if req && policy}
     <div class="header">
       <StatusBadge status={req.status} />
-      <span class="type">{req.type}</span>
+      <span class="type">{policy.name}</span>
     </div>
     <StageBar stages={policy.stages} currentStage={req.current_stage} {approvals} status={req.status} />
   {:else}
@@ -179,7 +179,6 @@
   .type {
     font-size: 13px;
     color: #6b7280;
-    font-family: monospace;
   }
   .loading, .error {
     font-size: 13px;
