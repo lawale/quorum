@@ -129,7 +129,7 @@
       {:else if route.path === 'policies'}
         <Policies />
       {:else if route.path === 'policy-form'}
-        <PolicyForm />
+        <PolicyForm id={route.params.id} />
       {:else if route.path === 'webhooks'}
         <Webhooks />
       {:else if route.path === 'webhook-form'}

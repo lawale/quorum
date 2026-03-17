@@ -14,6 +14,7 @@ import (
 	"github.com/lawale/quorum/console"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/config"
+	"github.com/lawale/quorum/internal/logging"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/server"
 	"github.com/lawale/quorum/internal/service"
@@ -30,9 +31,13 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
-	}))
+	})
+	logger := slog.New(logging.NewContextHandler(jsonHandler,
+		logging.Extractor{Key: "user_id", Extract: auth.UserIDFromContext},
+		logging.Extractor{Key: "tenant_id", Extract: auth.TenantIDFromContext},
+	))
 	slog.SetDefault(logger)
 
 	cfg, err := config.Load(*configPath)

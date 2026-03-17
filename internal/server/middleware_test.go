@@ -1,13 +1,18 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/logging"
 	"github.com/lawale/quorum/internal/testutil"
 )
 
@@ -102,6 +107,112 @@ func TestWriteError_Format(t *testing.T) {
 	json.NewDecoder(rec.Body).Decode(&body)
 	if body["error"] != "something went wrong" {
 		t.Errorf("error = %q, want %q", body["error"], "something went wrong")
+	}
+}
+
+func TestLoggingMiddleware_LogsStartAndEnd(t *testing.T) {
+	var buf bytes.Buffer
+	origLogger := slog.Default()
+	handler := logging.NewContextHandler(slog.NewJSONHandler(&buf, nil))
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(origLogger)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	chain := middleware.RequestID(loggingMiddleware(next))
+	req := httptest.NewRequest("GET", "/api/policies", nil)
+	rec := httptest.NewRecorder()
+	chain.ServeHTTP(rec, req)
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 log lines, got %d: %s", len(lines), buf.String())
+	}
+
+	var startEntry, endEntry map[string]any
+	json.Unmarshal([]byte(lines[0]), &startEntry)
+	json.Unmarshal([]byte(lines[1]), &endEntry)
+
+	if startEntry["msg"] != "request started" {
+		t.Errorf("first log msg = %v, want request started", startEntry["msg"])
+	}
+	if startEntry["method"] != "GET" {
+		t.Errorf("first log method = %v, want GET", startEntry["method"])
+	}
+	if startEntry["path"] != "/api/policies" {
+		t.Errorf("first log path = %v, want /api/policies", startEntry["path"])
+	}
+	if startEntry["request_id"] == nil || startEntry["request_id"] == "" {
+		t.Error("first log should have a request_id")
+	}
+
+	if endEntry["msg"] != "request completed" {
+		t.Errorf("second log msg = %v, want request completed", endEntry["msg"])
+	}
+	if endEntry["status"] != float64(200) {
+		t.Errorf("second log status = %v, want 200", endEntry["status"])
+	}
+	if endEntry["duration_ms"] == nil {
+		t.Error("second log should have duration_ms")
+	}
+	if endEntry["request_id"] != startEntry["request_id"] {
+		t.Errorf("request_id mismatch: start=%v end=%v", startEntry["request_id"], endEntry["request_id"])
+	}
+}
+
+func TestLoggingMiddleware_ErrorStatusLogsAtErrorLevel(t *testing.T) {
+	var buf bytes.Buffer
+	origLogger := slog.Default()
+	handler := logging.NewContextHandler(slog.NewJSONHandler(&buf, nil))
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(origLogger)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	chain := middleware.RequestID(loggingMiddleware(next))
+	req := httptest.NewRequest("GET", "/fail", nil)
+	rec := httptest.NewRecorder()
+	chain.ServeHTTP(rec, req)
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 log lines, got %d", len(lines))
+	}
+
+	var endEntry map[string]any
+	json.Unmarshal([]byte(lines[len(lines)-1]), &endEntry)
+
+	if endEntry["level"] != "ERROR" {
+		t.Errorf("level = %v, want ERROR for 5xx status", endEntry["level"])
+	}
+}
+
+func TestLoggingMiddleware_CorrelatesRequestID(t *testing.T) {
+	var buf bytes.Buffer
+	origLogger := slog.Default()
+	handler := logging.NewContextHandler(slog.NewJSONHandler(&buf, nil))
+	slog.SetDefault(slog.New(handler))
+	defer slog.SetDefault(origLogger)
+
+	var capturedRequestID string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the context has logging attrs set for downstream slog calls
+		attrs := logging.AttrsFromContext(r.Context())
+		capturedRequestID = attrs.RequestID
+		w.WriteHeader(http.StatusOK)
+	})
+
+	chain := middleware.RequestID(loggingMiddleware(next))
+	req := httptest.NewRequest("GET", "/test", nil)
+	rec := httptest.NewRecorder()
+	chain.ServeHTTP(rec, req)
+
+	if capturedRequestID == "" {
+		t.Error("handler should have a request_id in logging context")
 	}
 }
 

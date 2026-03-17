@@ -2,12 +2,13 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/logging"
 	"github.com/lawale/quorum/internal/service"
 )
 
@@ -53,6 +54,21 @@ func authMiddleware(provider auth.Provider) func(http.Handler) http.Handler {
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+
+		// Inject request ID into logging context so all downstream slog
+		// calls automatically include it. User ID and tenant ID are pulled
+		// from context dynamically by the ContextHandler extractors, so they
+		// appear even though auth middleware runs after this point.
+		ctx := logging.WithAttrs(r.Context(), logging.ContextAttrs{
+			RequestID: middleware.GetReqID(r.Context()),
+		})
+		r = r.WithContext(ctx)
+
+		slog.InfoContext(ctx, "request started",
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
+
 		wrapped := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(wrapped, r)
 
@@ -64,10 +80,13 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			level = slog.LevelWarn
 		}
 
-		slog.Log(r.Context(), level,
-			fmt.Sprintf("%s %s %d %s", r.Method, r.URL.Path, wrapped.status, duration),
-			"user_id", auth.UserIDFromContext(r.Context()),
-			"tenant_id", auth.TenantIDFromContext(r.Context()),
+		// Use r.Context() here (not the original ctx) because auth
+		// middleware may have enriched it with user_id and tenant_id.
+		slog.Log(r.Context(), level, "request completed",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", wrapped.status,
+			"duration_ms", float64(duration.Microseconds())/1000.0,
 		)
 	})
 }
@@ -109,14 +128,12 @@ func writeError(w http.ResponseWriter, status int, message string) {
 // writeServerError logs the actual error with request context before returning
 // a generic error message to the client. Use this instead of writeError for all
 // 5xx responses so the root cause is always visible in logs.
+//
+// The request_id, user_id, and tenant_id are automatically included via the
+// context-aware slog handler — no need to pass them explicitly.
 func writeServerError(w http.ResponseWriter, r *http.Request, err error, message string) {
-	slog.Error(message,
+	slog.ErrorContext(r.Context(), message,
 		"error", err,
-		"method", r.Method,
-		"path", r.URL.Path,
-		"query", r.URL.RawQuery,
-		"user_id", auth.UserIDFromContext(r.Context()),
-		"tenant_id", auth.TenantIDFromContext(r.Context()),
 	)
 	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": message})
 }

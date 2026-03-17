@@ -546,7 +546,7 @@ func (s *RequestService) audit(ctx context.Context, requestID uuid.UUID, action 
 		Details:   details,
 	}
 	if err := s.audits.Create(ctx, log); err != nil {
-		slog.Error("failed to create audit log", "error", err, "request_id", requestID, "action", action)
+		slog.ErrorContext(ctx, "failed to create audit log", "error", err, "request_id", requestID, "action", action)
 	}
 }
 
