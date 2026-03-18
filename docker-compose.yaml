@@ -7,6 +7,8 @@ services:
       POSTGRES_DB: quorum
     ports:
       - "5432:5432"
+    networks:
+      - demo
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/00-databases.sh:ro
@@ -27,6 +29,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - demo
     healthcheck:
       test: ["CMD", "/bin/quorum", "-health", "http://localhost:8080"]
       interval: 10s
@@ -62,6 +66,8 @@ services:
     volumes:
       - ./scripts/setup.sh:/setup.sh:ro
     entrypoint: ["sh", "/setup.sh"]
+    networks:
+      - demo
     environment:
       QUORUM_API_URL: http://server:8080
     profiles:
@@ -79,6 +85,8 @@ services:
       SELF_URL: http://banking:3001
       WEBHOOK_SECRET: banking-webhook-secret
       DATABASE_URL: postgres://quorum:quorum@postgres:5432/banking?sslmode=disable
+    networks:
+      - demo
     depends_on:
       setup:
         condition: service_completed_successfully
@@ -102,6 +110,8 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+    networks:
+      - demo
     profiles:
       - demo
 
@@ -120,6 +130,8 @@ services:
         condition: service_completed_successfully
       postgres:
         condition: service_healthy
+    networks:
+      - demo
     profiles:
       - demo
 
@@ -141,6 +153,8 @@ services:
       BANKING_URL: http://banking:3001
       EXPENSES_URL: http://expenses:3002
       ACCESS_PORTAL_URL: http://access-portal:3003
+    networks:
+      - demo
     profiles:
       - seed
       - demo
@@ -148,3 +162,7 @@ services:
 volumes:
   pgdata:
   # mssqldata:
+
+networks:
+  demo:
+    external: true
