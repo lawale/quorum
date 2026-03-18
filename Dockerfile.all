@@ -1,5 +1,5 @@
-# Stage 1: Build the console frontend
-FROM node:22-alpine AS console-frontend
+# Stage 1: Build the console frontend (platform-independent static assets)
+FROM --platform=$BUILDPLATFORM node:22-alpine AS console-frontend
 
 WORKDIR /app/console/frontend
 COPY console/frontend/package.json console/frontend/package-lock.json ./
@@ -7,8 +7,8 @@ RUN npm ci
 COPY console/frontend/ ./
 RUN npm run build
 
-# Stage 2: Build the widget frontend
-FROM node:22-alpine AS widget-frontend
+# Stage 2: Build the widget frontend (platform-independent static assets)
+FROM --platform=$BUILDPLATFORM node:22-alpine AS widget-frontend
 
 WORKDIR /app/widgets/frontend
 COPY widgets/frontend/package.json widgets/frontend/package-lock.json ./
@@ -17,7 +17,8 @@ COPY widgets/frontend/ ./
 RUN npm run build
 
 # Stage 3: Build the Go binary with console + widgets
-FROM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+ARG TARGETOS TARGETARCH
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -29,7 +30,7 @@ COPY . .
 COPY --from=console-frontend /app/console/frontend/dist ./console/frontend/dist
 COPY --from=widget-frontend /app/widgets/frontend/dist ./widgets/frontend/dist
 
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -tags "console,embed" -o /bin/quorum ./cmd/server
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -tags "console,embed" -o /bin/quorum ./cmd/server
 
 # Stage 4: Final image
 FROM scratch

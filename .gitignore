@@ -24,8 +24,8 @@ coverage.txt
 Thumbs.db
 
 # Config (keep example, ignore local)
-config.yaml
-config.local.yaml
+/config.yaml
+/config.local.yaml
 
 # Environment
 .env
