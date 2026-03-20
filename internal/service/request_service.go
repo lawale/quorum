@@ -176,11 +176,39 @@ func (s *RequestService) GetByID(ctx context.Context, id uuid.UUID) (*model.Requ
 	}
 	req.Approvals = approvals
 
+	// Enrich with total stages from the associated policy
+	if policy, err := s.policies.GetByRequestType(ctx, req.Type); err == nil && policy != nil {
+		ts := policy.TotalStages()
+		req.TotalStages = &ts
+	}
+
 	return req, nil
 }
 
 func (s *RequestService) List(ctx context.Context, filter store.RequestFilter) ([]model.Request, int, error) {
-	return s.requests.List(ctx, filter)
+	requests, total, err := s.requests.List(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Batch-enrich with total stages: collect unique types, look up policies once
+	typeSet := make(map[string]struct{})
+	for _, r := range requests {
+		typeSet[r.Type] = struct{}{}
+	}
+	stagesMap := make(map[string]int)
+	for t := range typeSet {
+		if policy, err := s.policies.GetByRequestType(ctx, t); err == nil && policy != nil {
+			stagesMap[t] = policy.TotalStages()
+		}
+	}
+	for i := range requests {
+		if ts, ok := stagesMap[requests[i].Type]; ok {
+			requests[i].TotalStages = &ts
+		}
+	}
+
+	return requests, total, nil
 }
 
 func (s *RequestService) Approve(ctx context.Context, requestID uuid.UUID, checkerID string, roles []string, comment *string) (*model.Request, error) {

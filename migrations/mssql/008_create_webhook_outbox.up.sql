@@ -5,6 +5,7 @@ CREATE TABLE [quorum].[webhook_outbox] (
     webhook_url NVARCHAR(2048) NOT NULL,
     webhook_secret NVARCHAR(255) NOT NULL DEFAULT '',
     payload NVARCHAR(MAX) NOT NULL,
+    event_type NVARCHAR(50) NOT NULL DEFAULT '',
     status NVARCHAR(20) NOT NULL DEFAULT 'pending',
     attempts INT NOT NULL DEFAULT 0,
     max_retries INT NOT NULL DEFAULT 3,

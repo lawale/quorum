@@ -152,6 +152,10 @@ func (s *PolicyService) Update(ctx context.Context, policy *model.Policy) error 
 	return s.policies.Update(ctx, policy)
 }
 
+func (s *PolicyService) DistinctRequestTypes(ctx context.Context) ([]string, error) {
+	return s.policies.DistinctRequestTypes(ctx)
+}
+
 func (s *PolicyService) Delete(ctx context.Context, id uuid.UUID) error {
 	existing, err := s.policies.GetByID(ctx, id)
 	if err != nil {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { requests as requestsApi } from '../lib/api';
+  import { requests as requestsApi, policies as policiesApi } from '../lib/api';
   import { addToast, selectedTenant } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import StatusBadge from '../components/StatusBadge.svelte';
@@ -15,16 +15,28 @@
   let statusFilter = $state('');
   let typeFilter = $state('');
   let searchQuery = $state('');
+  let requestTypes: string[] = $state([]);
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
   let totalPages = $derived(Math.ceil(total / perPage));
 
   // Re-fetch when tenant selection changes
   let currentTenant = $state('');
-  selectedTenant.subscribe((v) => { currentTenant = v; page = 1; loadRequests(); });
+  selectedTenant.subscribe((v) => { currentTenant = v; page = 1; loadRequests(); loadRequestTypes(); });
 
   $effect(() => {
     loadRequests();
+    loadRequestTypes();
   });
+
+  async function loadRequestTypes() {
+    try {
+      const res = await policiesApi.requestTypes();
+      requestTypes = res.data || [];
+    } catch {
+      // silently fail
+    }
+  }
 
   async function loadRequests() {
     isLoading = true;
@@ -34,6 +46,7 @@
         per_page: perPage,
         status: statusFilter || undefined,
         type: typeFilter || undefined,
+        search: searchQuery || undefined,
       });
       items = res.data || [];
       total = res.total ?? 0;
@@ -47,6 +60,14 @@
   function applyFilters() {
     page = 1;
     loadRequests();
+  }
+
+  function onSearchInput() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      page = 1;
+      loadRequests();
+    }, 300);
   }
 
   function clearFilters() {
@@ -65,12 +86,6 @@
   function truncateId(id: string): string {
     return id.length > 8 ? id.slice(0, 8) + '…' : id;
   }
-
-  let filteredItems = $derived(
-    searchQuery
-      ? items.filter((r) => r.id.toLowerCase().includes(searchQuery.toLowerCase()))
-      : items
-  );
 </script>
 
 <div>
@@ -87,8 +102,9 @@
     <div class="flex-1 relative">
       <input
         type="text"
-        placeholder="Search by Request ID (e.g. REQ-9821)..."
+        placeholder="Search by ID, type, or maker..."
         bind:value={searchQuery}
+        oninput={onSearchInput}
         class="w-full px-4 py-2.5 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
       />
     </div>
@@ -110,6 +126,9 @@
       class="px-4 py-2.5 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
     >
       <option value="">All Types</option>
+      {#each requestTypes as rt}
+        <option value={rt}>{rt}</option>
+      {/each}
     </select>
     <button
       onclick={() => { if (statusFilter || typeFilter || searchQuery) clearFilters(); }}
@@ -124,7 +143,7 @@
 
   {#if isLoading}
     <LoadingSpinner />
-  {:else if filteredItems.length === 0}
+  {:else if items.length === 0}
     <EmptyState message="No requests found." />
   {:else}
     <div class="bg-surface-container-lowest shadow-ambient-lg rounded-xl overflow-hidden">
@@ -141,7 +160,7 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-outline-variant/15">
-          {#each filteredItems as req}
+          {#each items as req}
             <tr class="hover:bg-surface-container-low transition-colors">
               <td class="px-6 py-5 text-sm font-mono text-xs text-on-surface">
                 <a href="#/requests/{req.id}" class="text-primary-container hover:text-primary" title={req.id}>{truncateId(req.id)}</a>
@@ -149,7 +168,7 @@
               <td class="px-6 py-5 text-sm text-on-surface">{req.type}</td>
               <td class="px-6 py-5 text-sm"><StatusBadge status={req.status} /></td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{req.maker_id}</td>
-              <td class="px-6 py-5 text-sm text-on-surface-variant">{req.current_stage}</td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{req.current_stage + 1}{req.total_stages ? ` / ${req.total_stages}` : ''}</td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{formatDate(req.created_at)}</td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{req.expires_at ? formatDate(req.expires_at) : '—'}</td>
             </tr>

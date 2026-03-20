@@ -124,6 +124,7 @@ func (d *Dispatcher) Enqueue(ctx context.Context, outbox store.OutboxStore, webh
 			WebhookURL:    wh.URL,
 			WebhookSecret: wh.Secret,
 			Payload:       payloadJSON,
+			EventType:     event,
 			MaxRetries:    d.maxRetries,
 		})
 	}

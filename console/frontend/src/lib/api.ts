@@ -142,6 +142,7 @@ export const policies = {
       body: JSON.stringify(policy),
     }),
   delete: (id: string) => request<void>(`/policies/${id}`, { method: 'DELETE' }),
+  requestTypes: () => request<ListResponse<string>>(withTenant('/request-types')),
 };
 
 // --- Webhooks ---
@@ -166,12 +167,13 @@ export const webhooks = {
 // --- Requests ---
 
 export const requests = {
-  list: (params?: { page?: number; per_page?: number; status?: string; type?: string }) => {
+  list: (params?: { page?: number; per_page?: number; status?: string; type?: string; search?: string }) => {
     const query = new URLSearchParams();
     if (params?.page) query.set('page', String(params.page));
     if (params?.per_page) query.set('per_page', String(params.per_page));
     if (params?.status) query.set('status', params.status);
     if (params?.type) query.set('type', params.type);
+    if (params?.search) query.set('search', params.search);
     const qs = query.toString();
     return request<PaginatedListResponse<Request>>(withTenant(`/requests${qs ? '?' + qs : ''}`));
   },
@@ -182,18 +184,21 @@ export const requests = {
 // --- Deliveries ---
 
 export const deliveries = {
-  list: (params?: { page?: number; per_page?: number; status?: string; request_id?: string }) => {
+  list: (params?: { page?: number; per_page?: number; status?: string; request_id?: string; event?: string }) => {
     const query = new URLSearchParams();
     if (params?.page) query.set('page', String(params.page));
     if (params?.per_page) query.set('per_page', String(params.per_page));
     if (params?.status) query.set('status', params.status);
     if (params?.request_id) query.set('request_id', params.request_id);
+    if (params?.event) query.set('event', params.event);
     const qs = query.toString();
     return request<PaginatedListResponse<OutboxEntry>>(withTenant(`/deliveries${qs ? '?' + qs : ''}`));
   },
   stats: () => request<DeliveryStats>(withTenant('/deliveries/stats')),
   retry: (id: string) =>
     request<{ status: string }>(`/deliveries/${id}/retry`, { method: 'POST' }),
+  retryAllFailed: () =>
+    request<{ reset: number }>(withTenant('/deliveries/retry-all-failed'), { method: 'POST' }),
   retryAllForRequest: (requestId: string) =>
     request<{ reset: number }>(`/requests/${requestId}/retry-deliveries`, { method: 'POST' }),
 };

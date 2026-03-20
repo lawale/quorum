@@ -35,6 +35,7 @@ type RequestFilter struct {
 	Status   *model.RequestStatus
 	Type     *string
 	MakerID  *string
+	Search   *string
 	Page     int
 	PerPage  int
 }
@@ -87,6 +88,9 @@ type PolicyStore interface {
 	List(ctx context.Context, filter PolicyFilter) ([]model.Policy, int, error)
 	Update(ctx context.Context, policy *model.Policy) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	// DistinctRequestTypes returns the unique request_type values across all policies
+	// for the current tenant (or all tenants when no tenant context is set).
+	DistinctRequestTypes(ctx context.Context) ([]string, error)
 }
 
 type WebhookStore interface {
@@ -125,6 +129,7 @@ type OperatorStore interface {
 type OutboxFilter struct {
 	TenantID  *string
 	Status    *string
+	Event     *string
 	RequestID *uuid.UUID
 	Page      int
 	PerPage   int
@@ -145,7 +150,10 @@ type OutboxStore interface {
 	// List returns paginated outbox entries filtered by status, request ID, and tenant.
 	List(ctx context.Context, filter OutboxFilter) ([]model.OutboxEntry, int, error)
 	// CountByStatus returns a count of entries grouped by status, optionally scoped to a tenant.
-	CountByStatus(ctx context.Context, tenantID *string) (map[string]int, error)
+	// When since is non-nil, only entries created at or after that time are counted.
+	CountByStatus(ctx context.Context, tenantID *string, since *time.Time) (map[string]int, error)
+	// ResetAllFailed resets all failed outbox entries to pending for re-delivery.
+	ResetAllFailed(ctx context.Context, tenantID *string) (int64, error)
 	// GetByID fetches a single outbox entry.
 	GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error)
 	// ResetForRetry resets a single failed entry to pending for re-delivery.

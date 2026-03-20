@@ -13,8 +13,7 @@
   let eventFilter = $state('');
   let retryingId: string | null = $state(null);
   let retryingAll = $state(false);
-
-  let failedCount = $derived(entries.filter(e => e.status === 'failed').length);
+  let failedCount = $state(0);
 
   selectedTenant.subscribe(() => { page = 1; loadEntries(); });
 
@@ -25,13 +24,18 @@
   async function loadEntries() {
     isLoading = true;
     try {
-      const res = await deliveriesApi.list({
-        page,
-        per_page: 20,
-        status: statusFilter || undefined,
-      });
+      const [res, stats] = await Promise.all([
+        deliveriesApi.list({
+          page,
+          per_page: 20,
+          status: statusFilter || undefined,
+          event: eventFilter || undefined,
+        }),
+        deliveriesApi.stats().catch(() => ({} as Record<string, number>)),
+      ]);
       entries = res.data || [];
       total = res.total ?? 0;
+      failedCount = (stats as Record<string, number>).failed ?? 0;
     } catch {
       addToast('Failed to load deliveries', 'error');
     } finally {
@@ -55,11 +59,8 @@
   async function retryAllFailed() {
     retryingAll = true;
     try {
-      const failedEntries = entries.filter((e) => e.status === 'failed');
-      for (const entry of failedEntries) {
-        await deliveriesApi.retry(entry.id);
-      }
-      addToast(`Retried ${failedEntries.length} failed deliveries`, 'success');
+      const res = await deliveriesApi.retryAllFailed();
+      addToast(`Retried ${res.reset} failed deliveries`, 'success');
       await loadEntries();
     } catch {
       addToast('Failed to retry deliveries', 'error');
@@ -115,6 +116,7 @@
       type="text"
       placeholder="Filter by event..."
       bind:value={eventFilter}
+      onchange={() => { page = 1; loadEntries(); }}
       class="px-4 py-2.5 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
     />
     <div class="flex-1"></div>
@@ -159,7 +161,7 @@
           {#each entries as entry}
             <tr class="hover:bg-surface-container-low transition-colors">
               <td class="px-6 py-5 text-xs font-mono text-on-surface" title={entry.webhook_url}>{truncateUrl(entry.webhook_url)}</td>
-              <td class="px-6 py-5 text-sm text-on-surface-variant">webhook</td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{entry.event_type || '—'}</td>
               <td class="px-6 py-5 text-xs font-mono">
                 <a href="#/requests/{entry.request_id}" class="text-primary-container hover:text-primary" title={entry.request_id}>{truncateId(entry.request_id)}</a>
               </td>
@@ -190,7 +192,7 @@
 
     <!-- Pagination -->
     <div class="flex items-center justify-between mt-6">
-      <span class="text-sm text-on-surface-variant">Showing {entries.length} of {total} deliveries</span>
+      <span class="text-sm text-on-surface-variant">Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total} deliveries</span>
       {#if totalPages > 1}
         <div class="flex items-center gap-3">
           <span class="text-sm text-on-surface-variant">Page {page} of {totalPages}</span>

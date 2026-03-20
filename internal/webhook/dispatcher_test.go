@@ -43,6 +43,11 @@ func TestDispatcher_Enqueue_WritesMatchingWebhooks(t *testing.T) {
 	if len(createdEntries) != 2 {
 		t.Errorf("expected 2 outbox entries, got %d", len(createdEntries))
 	}
+	for i, entry := range createdEntries {
+		if entry.EventType != "approved" {
+			t.Errorf("entry[%d].EventType = %q, want %q", i, entry.EventType, "approved")
+		}
+	}
 }
 
 func TestDispatcher_Enqueue_NoMatchingWebhooks(t *testing.T) {

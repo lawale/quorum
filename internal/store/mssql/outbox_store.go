@@ -13,9 +13,9 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-const outboxColumns = `id, request_id, webhook_url, webhook_secret, payload, status, attempts, max_retries, last_error, next_retry_at, created_at, delivered_at`
+const outboxColumns = `id, request_id, webhook_url, webhook_secret, payload, event_type, status, attempts, max_retries, last_error, next_retry_at, created_at, delivered_at`
 
-const outboxColumnsQualified = `o.id, o.request_id, o.webhook_url, o.webhook_secret, o.payload, o.status, o.attempts, o.max_retries, o.last_error, o.next_retry_at, o.created_at, o.delivered_at`
+const outboxColumnsQualified = `o.id, o.request_id, o.webhook_url, o.webhook_secret, o.payload, o.event_type, o.status, o.attempts, o.max_retries, o.last_error, o.next_retry_at, o.created_at, o.delivered_at`
 
 type OutboxStore struct {
 	db *DB
@@ -30,8 +30,8 @@ func (s *OutboxStore) CreateBatch(ctx context.Context, entries []model.OutboxEnt
 		return nil
 	}
 
-	query := `INSERT INTO [quorum].[webhook_outbox] (id, request_id, webhook_url, webhook_secret, payload, max_retries)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6)`
+	query := `INSERT INTO [quorum].[webhook_outbox] (id, request_id, webhook_url, webhook_secret, payload, event_type, max_retries)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)`
 
 	for i := range entries {
 		e := &entries[i]
@@ -40,7 +40,7 @@ func (s *OutboxStore) CreateBatch(ctx context.Context, entries []model.OutboxEnt
 		}
 
 		_, err := s.db.Pool.ExecContext(ctx, query,
-			e.ID, e.RequestID, e.WebhookURL, e.WebhookSecret, string(e.Payload), e.MaxRetries,
+			e.ID, e.RequestID, e.WebhookURL, e.WebhookSecret, string(e.Payload), e.EventType, e.MaxRetries,
 		)
 		if err != nil {
 			return fmt.Errorf("inserting outbox entry %d: %w", i, err)
@@ -72,7 +72,7 @@ func (s *OutboxStore) ClaimBatch(ctx context.Context, limit int) ([]model.Outbox
 		var e model.OutboxEntry
 		var payload, lastError sql.NullString
 		if err := rows.Scan(
-			&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &payload, &e.Status,
+			&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &payload, &e.EventType, &e.Status,
 			&e.Attempts, &e.MaxRetries, &lastError, &e.NextRetryAt, &e.CreatedAt, &e.DeliveredAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning outbox entry: %w", err)
@@ -155,6 +155,11 @@ func (s *OutboxStore) List(ctx context.Context, filter store.OutboxFilter) ([]mo
 		args = append(args, *filter.RequestID)
 		argIdx++
 	}
+	if filter.Event != nil {
+		where += fmt.Sprintf(" AND o.event_type = @p%d", argIdx)
+		args = append(args, *filter.Event)
+		argIdx++
+	}
 
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM [quorum].[webhook_outbox] o JOIN [quorum].[requests] r ON r.id = o.request_id %s`, where)
 	var total int
@@ -179,7 +184,7 @@ func (s *OutboxStore) List(ctx context.Context, filter store.OutboxFilter) ([]mo
 		var e model.OutboxEntry
 		var payload, lastError sql.NullString
 		if err := rows.Scan(
-			&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &payload, &e.Status,
+			&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &payload, &e.EventType, &e.Status,
 			&e.Attempts, &e.MaxRetries, &lastError, &e.NextRetryAt, &e.CreatedAt, &e.DeliveredAt,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning outbox entry: %w", err)
@@ -196,13 +201,34 @@ func (s *OutboxStore) List(ctx context.Context, filter store.OutboxFilter) ([]mo
 	return entries, total, nil
 }
 
-func (s *OutboxStore) CountByStatus(ctx context.Context, tenantID *string) (map[string]int, error) {
-	var query string
-	var args []any
+func (s *OutboxStore) CountByStatus(ctx context.Context, tenantID *string, since *time.Time) (map[string]int, error) {
+	where := []string{}
+	args := []any{}
+	argIdx := 1
+	needsJoin := tenantID != nil
 
 	if tenantID != nil {
-		query = `SELECT o.status, COUNT(*) FROM [quorum].[webhook_outbox] o JOIN [quorum].[requests] r ON r.id = o.request_id WHERE r.tenant_id = @p1 GROUP BY o.status`
-		args = []any{*tenantID}
+		where = append(where, fmt.Sprintf("r.tenant_id = @p%d", argIdx))
+		args = append(args, *tenantID)
+		argIdx++
+	}
+	if since != nil {
+		where = append(where, fmt.Sprintf("o.created_at >= @p%d", argIdx))
+		args = append(args, *since)
+		argIdx++
+		needsJoin = true
+	}
+
+	var query string
+	if needsJoin {
+		whereClause := ""
+		if len(where) > 0 {
+			whereClause = " WHERE " + where[0]
+			for _, w := range where[1:] {
+				whereClause += " AND " + w
+			}
+		}
+		query = `SELECT o.status, COUNT(*) FROM [quorum].[webhook_outbox] o JOIN [quorum].[requests] r ON r.id = o.request_id` + whereClause + ` GROUP BY o.status`
 	} else {
 		query = `SELECT status, COUNT(*) FROM [quorum].[webhook_outbox] GROUP BY status`
 	}
@@ -225,6 +251,25 @@ func (s *OutboxStore) CountByStatus(ctx context.Context, tenantID *string) (map[
 	return counts, nil
 }
 
+func (s *OutboxStore) ResetAllFailed(ctx context.Context, tenantID *string) (int64, error) {
+	var query string
+	var args []any
+
+	if tenantID != nil {
+		query = `UPDATE [quorum].[webhook_outbox] SET status = 'pending', attempts = 0, last_error = NULL, next_retry_at = SYSDATETIMEOFFSET()
+			WHERE status = 'failed' AND request_id IN (SELECT id FROM [quorum].[requests] WHERE tenant_id = @p1)`
+		args = []any{*tenantID}
+	} else {
+		query = `UPDATE [quorum].[webhook_outbox] SET status = 'pending', attempts = 0, last_error = NULL, next_retry_at = SYSDATETIMEOFFSET() WHERE status = 'failed'`
+	}
+
+	result, err := s.db.Pool.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("resetting all failed outbox entries: %w", err)
+	}
+	return result.RowsAffected()
+}
+
 func (s *OutboxStore) GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error) {
 	args := []any{id}
 	var query string
@@ -239,7 +284,7 @@ func (s *OutboxStore) GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxE
 	var e model.OutboxEntry
 	var payload, lastError sql.NullString
 	err := s.db.Pool.QueryRowContext(ctx, query, args...).Scan(
-		&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &payload, &e.Status,
+		&e.ID, &e.RequestID, &e.WebhookURL, &e.WebhookSecret, &payload, &e.EventType, &e.Status,
 		&e.Attempts, &e.MaxRetries, &lastError, &e.NextRetryAt, &e.CreatedAt, &e.DeliveredAt,
 	)
 	if err != nil {

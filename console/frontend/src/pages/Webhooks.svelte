@@ -10,6 +10,9 @@
   let items: Webhook[] = $state([]);
   let isLoading = $state(true);
   let totalWebhooks = $state(0);
+  let page = $state(1);
+  const perPage = 20;
+  let totalPages = $derived(Math.max(1, Math.ceil(totalWebhooks / perPage)));
   let deliveryRate = $state('—');
 
   const eventColorMap: Record<string, string> = {
@@ -26,7 +29,7 @@
 
   // Re-fetch when tenant selection changes
   let currentTenant = $state('');
-  selectedTenant.subscribe((v) => { currentTenant = v; loadWebhooks(); });
+  selectedTenant.subscribe((v) => { currentTenant = v; page = 1; loadWebhooks(); });
 
   $effect(() => { loadWebhooks(); });
 
@@ -34,14 +37,14 @@
     isLoading = true;
     try {
       const [webhooksRes, stats] = await Promise.all([
-        webhooksApi.list(),
+        webhooksApi.list({ page, per_page: perPage }),
         deliveriesApi.stats().catch(() => null),
       ]);
       items = webhooksRes.data || [];
       totalWebhooks = webhooksRes.total ?? items.length;
 
       if (stats) {
-        const total = stats.delivered + stats.failed;
+        const total = stats.delivered + stats.failed + stats.pending + stats.processing;
         deliveryRate = total > 0
           ? `${((stats.delivered / total) * 100).toFixed(1)}%`
           : '—';
@@ -126,7 +129,7 @@
   </section>
 
   <!-- Summary Cards -->
-  <section class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+  <section class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-10">
     <div class="bg-surface-container-lowest p-6 rounded-xl shadow-ambient-lg">
       <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Active Subscriptions</p>
       <div class="flex items-baseline gap-2">
@@ -140,13 +143,6 @@
         <p class="text-[44px] font-black tracking-tighter text-on-surface leading-none">{deliveryRate}</p>
       </div>
       <p class="text-on-surface-variant font-medium mt-1">Success</p>
-    </div>
-    <div class="bg-surface-container-lowest p-6 rounded-xl shadow-ambient-lg">
-      <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Avg. Latency</p>
-      <div class="flex items-baseline gap-2">
-        <p class="text-[44px] font-black tracking-tighter text-on-surface leading-none">—</p>
-      </div>
-      <p class="text-on-surface-variant font-medium mt-1">Response Time</p>
     </div>
   </section>
 
@@ -190,7 +186,22 @@
       </table>
     </div>
 
-    <p class="text-xs text-on-surface-variant mt-4">Showing 1–{items.length} of {totalWebhooks} webhooks</p>
+    <div class="flex items-center justify-between mt-6">
+      <span class="text-sm text-on-surface-variant">Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, totalWebhooks)} of {totalWebhooks} webhooks</span>
+      {#if totalPages > 1}
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-on-surface-variant">Page {page} of {totalPages}</span>
+          <div class="flex gap-1">
+            <button onclick={() => { page = Math.max(1, page - 1); loadWebhooks(); }} disabled={page <= 1} class="px-2.5 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors" aria-label="Previous page">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <button onclick={() => { page = Math.min(totalPages, page + 1); loadWebhooks(); }} disabled={page >= totalPages} class="px-2.5 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors" aria-label="Next page">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </div>
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
 

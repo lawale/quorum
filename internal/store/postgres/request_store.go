@@ -143,6 +143,12 @@ func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]
 		args = append(args, *filter.MakerID)
 		argIdx++
 	}
+	if filter.Search != nil {
+		searchPattern := "%" + *filter.Search + "%"
+		conditions = append(conditions, fmt.Sprintf("(id::text ILIKE $%d OR type ILIKE $%d OR maker_id ILIKE $%d)", argIdx, argIdx, argIdx))
+		args = append(args, searchPattern)
+		argIdx++
+	}
 
 	where := ""
 	if len(conditions) > 0 {

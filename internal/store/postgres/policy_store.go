@@ -184,6 +184,33 @@ func (s *PolicyStore) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (s *PolicyStore) DistinctRequestTypes(ctx context.Context) ([]string, error) {
+	query := "SELECT DISTINCT request_type FROM policies"
+	var args []any
+	tenant := auth.TenantIDFromContext(ctx)
+	if tenant != "" {
+		query += " WHERE tenant_id = $1"
+		args = append(args, tenant)
+	}
+	query += " ORDER BY request_type"
+
+	rows, err := s.db.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("listing distinct request types: %w", err)
+	}
+	defer rows.Close()
+
+	var types []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, fmt.Errorf("scanning request type: %w", err)
+		}
+		types = append(types, t)
+	}
+	return types, nil
+}
+
 func (s *PolicyStore) scanPolicy(ctx context.Context, query string, args ...any) (*model.Policy, error) {
 	row := s.db.Pool.QueryRow(ctx, query, args...)
 	p, err := s.scanSingleRow(row)

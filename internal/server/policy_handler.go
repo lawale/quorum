@@ -234,6 +234,15 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, existing)
 }
 
+func (h *PolicyHandler) RequestTypes(w http.ResponseWriter, r *http.Request) {
+	types, err := h.policyService.DistinctRequestTypes(r.Context())
+	if err != nil {
+		writeServerError(w, r, err, "failed to list request types")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": types})
+}
+
 func (h *PolicyHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {

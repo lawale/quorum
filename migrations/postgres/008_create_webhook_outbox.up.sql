@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS quorum.webhook_outbox (
     webhook_url VARCHAR(2048) NOT NULL,
     webhook_secret VARCHAR(255) NOT NULL DEFAULT '',
     payload JSONB NOT NULL,
+    event_type VARCHAR(50) NOT NULL DEFAULT '',
     status VARCHAR(20) NOT NULL DEFAULT 'pending',
     attempts INT NOT NULL DEFAULT 0,
     max_retries INT NOT NULL DEFAULT 3,

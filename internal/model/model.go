@@ -52,6 +52,7 @@ type Request struct {
 	UpdatedAt         time.Time       `json:"updated_at"`
 	Approvals         []Approval      `json:"approvals,omitempty"`
 	ViewerCanAct      *bool           `json:"viewer_can_act,omitempty"`
+	TotalStages       *int            `json:"total_stages,omitempty"`
 }
 
 type Approval struct {
@@ -169,6 +170,7 @@ type OutboxEntry struct {
 	WebhookURL    string          `json:"webhook_url"`
 	WebhookSecret string          `json:"-"`
 	Payload       json.RawMessage `json:"payload"`
+	EventType     string          `json:"event_type"`
 	Status        string          `json:"status"` // pending, delivered, failed
 	Attempts      int             `json:"attempts"`
 	MaxRetries    int             `json:"max_retries"`

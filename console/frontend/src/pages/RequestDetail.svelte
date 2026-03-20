@@ -137,32 +137,28 @@
   }
 
   /**
-   * Derive the total number of stages and how many are completed
-   * from audit logs and the current request state.
+   * Derive the total number of stages and how many are completed.
+   * Prefers the backend-provided total_stages; falls back to heuristic.
    */
   function deriveStages(logs: AuditLog[], request: Request): { total: number; completed: number } {
-    // Count stage_advanced actions to know how many stages have been passed
     const advancedCount = logs.filter(l => l.action === 'stage_advanced').length;
-    // The total stages is at least current_stage, but also consider advanced stages
-    // current_stage is 0-indexed; after all stages pass the request is approved
-    // We estimate total stages as max(current_stage, advancedCount) + 1 if still pending
-    // If approved/rejected, advancedCount tells us how many stages existed
     const isTerminal = request.status === 'approved' || request.status === 'rejected' || request.status === 'cancelled' || request.status === 'expired';
 
+    // Use backend total_stages when available
+    const knownTotal = request.total_stages;
+
     if (isTerminal && request.status === 'approved') {
-      // All stages completed
-      const total = advancedCount > 0 ? advancedCount : request.current_stage + 1;
+      const total = knownTotal ?? (advancedCount > 0 ? advancedCount : request.current_stage + 1);
       return { total, completed: total };
     }
 
     if (isTerminal) {
-      // Rejected/cancelled/expired - stopped at current_stage
-      const total = Math.max(request.current_stage + 1, advancedCount + 1);
+      const total = knownTotal ?? Math.max(request.current_stage + 1, advancedCount + 1);
       return { total, completed: advancedCount };
     }
 
     // Still pending
-    const total = Math.max(request.current_stage + 1, advancedCount + 1);
+    const total = knownTotal ?? Math.max(request.current_stage + 1, advancedCount + 1);
     return { total, completed: advancedCount };
   }
 
@@ -170,6 +166,18 @@
   let displayData = $derived(req ? getDisplay(req.metadata) : null);
   let stages = $derived(req ? deriveStages(auditLogs, req) : { total: 0, completed: 0 });
   let verificationLogs = $derived(auditLogs.filter(l => l.action === 'approved' || l.action === 'rejected'));
+
+  // Group approvals by stage for the breakdown view
+  let approvalsByStage = $derived(() => {
+    if (!req || !req.approvals) return new Map<number, typeof req.approvals>();
+    const map = new Map<number, typeof req.approvals>();
+    for (const a of req.approvals) {
+      const list = map.get(a.stage_index) || [];
+      list.push(a);
+      map.set(a.stage_index, list);
+    }
+    return map;
+  });
 </script>
 
 <div>
@@ -197,9 +205,6 @@
         </div>
       </div>
       <div class="flex gap-3">
-        <button class="bg-surface-container text-on-surface px-4 py-2 rounded-md font-medium text-sm hover:brightness-95 transition-all">
-          Export PDF
-        </button>
         <button
           onclick={() => auditTrailEl?.scrollIntoView({ behavior: 'smooth' })}
           class="bg-surface-container text-on-surface px-4 py-2 rounded-md font-medium text-sm hover:brightness-95 transition-all"
@@ -218,7 +223,6 @@
         <section>
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-xl font-bold tracking-tight text-on-surface">Request Content</h2>
-            <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant bg-surface-container-low px-2 py-1 rounded">Manual Submission</span>
           </div>
           <div class="bg-surface-container-lowest rounded-xl shadow-ambient-lg p-6">
             {#if displayData}
@@ -293,45 +297,39 @@
           </div>
         </section>
 
-        <!-- Verification History -->
+        <!-- Approval Breakdown -->
         <section>
-          <h2 class="text-xl font-bold tracking-tight text-on-surface mb-4">Verification History</h2>
+          <h2 class="text-xl font-bold tracking-tight text-on-surface mb-4">Approval Breakdown</h2>
           <div class="bg-surface-container-lowest rounded-xl shadow-ambient-lg overflow-hidden">
-            {#if verificationLogs.length === 0}
+            {#if !req.approvals || req.approvals.length === 0}
               <div class="p-6">
-                <p class="text-sm text-on-surface-variant">No verification decisions yet.</p>
+                <p class="text-sm text-on-surface-variant">No approval decisions yet.</p>
               </div>
             {:else}
-              <table class="min-w-full divide-y divide-outline-variant/15">
-                <thead class="bg-surface-container-low">
-                  <tr>
-                    <th class="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Checker</th>
-                    <th class="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Decision</th>
-                    <th class="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Stage</th>
-                    <th class="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-outline-variant/15">
-                  {#each verificationLogs as log}
-                    <tr class="hover:bg-surface-container-low transition-colors">
-                      <td class="px-4 py-3 text-sm text-on-surface font-medium">{log.actor_id}</td>
-                      <td class="px-4 py-3">
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {actionColor(log.action)}">
-                          {formatActionLabel(log.action)}
-                        </span>
-                      </td>
-                      <td class="px-4 py-3 text-sm text-on-surface-variant">
-                        {#if log.details && log.details.stage !== undefined}
-                          Stage {log.details.stage}
-                        {:else}
-                          --
-                        {/if}
-                      </td>
-                      <td class="px-4 py-3 text-xs text-on-surface-variant">{formatDate(log.created_at)}</td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
+              {@const grouped = approvalsByStage()}
+              <div class="divide-y divide-outline-variant/15">
+                {#each [...grouped.entries()].sort((a, b) => a[0] - b[0]) as [stageIdx, approvals]}
+                  <div class="p-4">
+                    <h3 class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-3">Stage {stageIdx + 1}</h3>
+                    <div class="space-y-2">
+                      {#each approvals as approval}
+                        <div class="flex items-center justify-between bg-surface-container-low rounded-md px-3 py-2">
+                          <div class="flex items-center gap-3">
+                            <span class="text-sm font-medium text-on-surface">{approval.checker_id}</span>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {approval.decision === 'approved' ? 'bg-status-approved-bg text-status-approved-text' : 'bg-status-rejected-bg text-status-rejected-text'}">
+                              {approval.decision}
+                            </span>
+                            {#if approval.comment}
+                              <span class="text-xs text-on-surface-variant italic">"{approval.comment}"</span>
+                            {/if}
+                          </div>
+                          <span class="text-xs text-on-surface-variant">{formatDate(approval.created_at)}</span>
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                {/each}
+              </div>
             {/if}
           </div>
         </section>

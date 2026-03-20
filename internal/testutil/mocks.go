@@ -130,12 +130,13 @@ func (m *MockApprovalStore) ExistsByCheckerAndStage(ctx context.Context, request
 
 // MockPolicyStore implements store.PolicyStore with configurable function fields.
 type MockPolicyStore struct {
-	CreateFunc           func(ctx context.Context, policy *model.Policy) error
-	GetByIDFunc          func(ctx context.Context, id uuid.UUID) (*model.Policy, error)
-	GetByRequestTypeFunc func(ctx context.Context, requestType string) (*model.Policy, error)
-	ListFunc             func(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error)
-	UpdateFunc           func(ctx context.Context, policy *model.Policy) error
-	DeleteFunc           func(ctx context.Context, id uuid.UUID) error
+	CreateFunc               func(ctx context.Context, policy *model.Policy) error
+	GetByIDFunc              func(ctx context.Context, id uuid.UUID) (*model.Policy, error)
+	GetByRequestTypeFunc     func(ctx context.Context, requestType string) (*model.Policy, error)
+	ListFunc                 func(ctx context.Context, filter store.PolicyFilter) ([]model.Policy, int, error)
+	UpdateFunc               func(ctx context.Context, policy *model.Policy) error
+	DeleteFunc               func(ctx context.Context, id uuid.UUID) error
+	DistinctRequestTypesFunc func(ctx context.Context) ([]string, error)
 }
 
 func (m *MockPolicyStore) Create(ctx context.Context, policy *model.Policy) error {
@@ -178,6 +179,13 @@ func (m *MockPolicyStore) Delete(ctx context.Context, id uuid.UUID) error {
 		return m.DeleteFunc(ctx, id)
 	}
 	panic("MockPolicyStore.Delete not set up")
+}
+
+func (m *MockPolicyStore) DistinctRequestTypes(ctx context.Context) ([]string, error) {
+	if m.DistinctRequestTypesFunc != nil {
+		return m.DistinctRequestTypesFunc(ctx)
+	}
+	return nil, nil
 }
 
 // MockWebhookStore implements store.WebhookStore with configurable function fields.
@@ -313,10 +321,11 @@ type MockOutboxStore struct {
 	MarkFailedFunc               func(ctx context.Context, id uuid.UUID, attempts int, lastError string) error
 	DeleteDeliveredFunc          func(ctx context.Context, olderThan time.Time) (int64, error)
 	ListFunc                     func(ctx context.Context, filter store.OutboxFilter) ([]model.OutboxEntry, int, error)
-	CountByStatusFunc            func(ctx context.Context, tenantID *string) (map[string]int, error)
+	CountByStatusFunc            func(ctx context.Context, tenantID *string, since *time.Time) (map[string]int, error)
 	GetByIDFunc                  func(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error)
 	ResetForRetryFunc            func(ctx context.Context, id uuid.UUID) error
 	ResetAllFailedForRequestFunc func(ctx context.Context, requestID uuid.UUID) (int64, error)
+	ResetAllFailedFunc           func(ctx context.Context, tenantID *string) (int64, error)
 }
 
 func (m *MockOutboxStore) CreateBatch(ctx context.Context, entries []model.OutboxEntry) error {
@@ -368,11 +377,18 @@ func (m *MockOutboxStore) List(ctx context.Context, filter store.OutboxFilter) (
 	return nil, 0, nil
 }
 
-func (m *MockOutboxStore) CountByStatus(ctx context.Context, tenantID *string) (map[string]int, error) {
+func (m *MockOutboxStore) CountByStatus(ctx context.Context, tenantID *string, since *time.Time) (map[string]int, error) {
 	if m.CountByStatusFunc != nil {
-		return m.CountByStatusFunc(ctx, tenantID)
+		return m.CountByStatusFunc(ctx, tenantID, since)
 	}
 	return map[string]int{}, nil
+}
+
+func (m *MockOutboxStore) ResetAllFailed(ctx context.Context, tenantID *string) (int64, error) {
+	if m.ResetAllFailedFunc != nil {
+		return m.ResetAllFailedFunc(ctx, tenantID)
+	}
+	return 0, nil
 }
 
 func (m *MockOutboxStore) GetByID(ctx context.Context, id uuid.UUID) (*model.OutboxEntry, error) {

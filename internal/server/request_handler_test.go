@@ -220,7 +220,14 @@ func TestRequestHandler_Get_Success(t *testing.T) {
 	approvals := &testutil.MockApprovalStore{
 		ListByRequestIDFunc: func(ctx context.Context, id uuid.UUID) ([]model.Approval, error) { return nil, nil },
 	}
-	handler := newTestRequestHandler(requests, approvals, &testutil.MockPolicyStore{}, &testutil.MockAuditStore{})
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, requestType string) (*model.Policy, error) {
+			return &model.Policy{
+				Stages: []model.ApprovalStage{{Index: 0, Name: "review", RequiredApprovals: 1}},
+			}, nil
+		},
+	}
+	handler := newTestRequestHandler(requests, approvals, policies, &testutil.MockAuditStore{})
 
 	req := httptest.NewRequest("GET", "/", nil)
 	req = req.WithContext(chiContext(req.Context(), "id", reqID.String()))

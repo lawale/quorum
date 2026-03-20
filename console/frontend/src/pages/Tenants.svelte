@@ -9,6 +9,10 @@
 
   let items: Tenant[] = $state([]);
   let isLoading = $state(true);
+  let total = $state(0);
+  let page = $state(1);
+  const perPage = 20;
+  let totalPages = $derived(Math.max(1, Math.ceil(total / perPage)));
   let showCreateModal = $state(false);
 
   let newSlug = $state('');
@@ -24,8 +28,9 @@
   async function loadTenants() {
     isLoading = true;
     try {
-      const res = await tenantsApi.list();
+      const res = await tenantsApi.list({ page, per_page: perPage });
       items = res.data || [];
+      total = res.total ?? items.length;
       availableTenants.set(items);
     } catch {
       addToast('Failed to load tenants', 'error');
@@ -152,7 +157,22 @@
       </table>
     </div>
 
-    <p class="text-xs text-on-surface-variant mt-4">Showing {items.length} of {items.length} tenants</p>
+    <div class="flex items-center justify-between mt-6">
+      <span class="text-sm text-on-surface-variant">Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, total)} of {total} tenants</span>
+      {#if totalPages > 1}
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-on-surface-variant">Page {page} of {totalPages}</span>
+          <div class="flex gap-1">
+            <button onclick={() => { page = Math.max(1, page - 1); loadTenants(); }} disabled={page <= 1} class="px-2.5 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors" aria-label="Previous page">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <button onclick={() => { page = Math.min(totalPages, page + 1); loadTenants(); }} disabled={page >= totalPages} class="px-2.5 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors" aria-label="Next page">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </div>
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
 

@@ -45,6 +45,9 @@ func (h *DeliveryHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 		filter.RequestID = &id
 	}
+	if e := r.URL.Query().Get("event"); e != "" {
+		filter.Event = &e
+	}
 
 	entries, total, err := h.outbox.List(r.Context(), filter)
 	if err != nil {
@@ -65,7 +68,7 @@ func (h *DeliveryHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		tenantID = &t
 	}
 
-	counts, err := h.outbox.CountByStatus(r.Context(), tenantID)
+	counts, err := h.outbox.CountByStatus(r.Context(), tenantID, nil)
 	if err != nil {
 		writeServerError(w, r, err, "failed to get delivery stats")
 		return
@@ -103,6 +106,25 @@ func (h *DeliveryHandler) RetryAllForRequest(w http.ResponseWriter, r *http.Requ
 	count, err := h.outbox.ResetAllFailedForRequest(r.Context(), id)
 	if err != nil {
 		writeServerError(w, r, err, "failed to reset deliveries for retry")
+		return
+	}
+
+	if count > 0 && h.signalWorker != nil {
+		h.signalWorker()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"reset": count})
+}
+
+func (h *DeliveryHandler) RetryAllFailed(w http.ResponseWriter, r *http.Request) {
+	var tenantID *string
+	if t := auth.TenantIDFromContext(r.Context()); t != "" {
+		tenantID = &t
+	}
+
+	count, err := h.outbox.ResetAllFailed(r.Context(), tenantID)
+	if err != nil {
+		writeServerError(w, r, err, "failed to reset failed deliveries")
 		return
 	}
 

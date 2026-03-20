@@ -1,6 +1,6 @@
 <script lang="ts">
   import { policies as policiesApi, requests as requestsApi } from '../lib/api';
-  import { addToast, selectedTenant } from '../lib/stores';
+  import { addToast, selectedTenant, availableTenants } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import EmptyState from '../components/EmptyState.svelte';
@@ -10,10 +10,20 @@
   let isLoading = $state(true);
   let totalPolicies = $state(0);
   let pendingRequests = $state(0);
+  let page = $state(1);
+  const perPage = 20;
+  let totalPages = $derived(Math.max(1, Math.ceil(totalPolicies / perPage)));
+
+  let tenantMap: Record<string, string> = $state({});
+  availableTenants.subscribe((tenants) => {
+    const map: Record<string, string> = {};
+    for (const t of tenants) { map[t.id] = t.slug; }
+    tenantMap = map;
+  });
 
   // Re-fetch when tenant selection changes
   let currentTenant = $state('');
-  selectedTenant.subscribe((v) => { currentTenant = v; loadPolicies(); });
+  selectedTenant.subscribe((v) => { currentTenant = v; page = 1; loadPolicies(); });
 
   $effect(() => { loadPolicies(); });
 
@@ -21,7 +31,7 @@
     isLoading = true;
     try {
       const [policiesRes, requestsRes] = await Promise.all([
-        policiesApi.list(),
+        policiesApi.list({ page, per_page: perPage }),
         requestsApi.list({ status: 'pending' }),
       ]);
       items = policiesRes.data || [];
@@ -100,7 +110,7 @@
               <td class="px-6 py-5 text-sm text-on-surface-variant"><code class="bg-surface-container px-2 py-0.5 rounded text-xs">{policy.request_type}</code></td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{policy.stages.length} stage{policy.stages.length !== 1 ? 's' : ''}</td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{policy.auto_expire_duration || '—'}</td>
-              <td class="px-6 py-5 text-sm text-on-surface-variant"><code class="bg-surface-container px-2 py-0.5 rounded text-xs">{policy.tenant_id}</code></td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant"><code class="bg-surface-container px-2 py-0.5 rounded text-xs">{tenantMap[policy.tenant_id] || policy.tenant_id}</code></td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{formatDate(policy.created_at)}</td>
               <td class="px-6 py-5 text-right text-sm">
                 <a href="#/policies/{policy.id}" class="text-primary-container hover:text-primary mr-3">Edit</a>
@@ -112,6 +122,21 @@
       </table>
     </div>
 
-    <p class="text-xs text-on-surface-variant mt-4">Showing 1–{items.length} of {totalPolicies} policies</p>
+    <div class="flex items-center justify-between mt-6">
+      <span class="text-sm text-on-surface-variant">Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, totalPolicies)} of {totalPolicies} policies</span>
+      {#if totalPages > 1}
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-on-surface-variant">Page {page} of {totalPages}</span>
+          <div class="flex gap-1">
+            <button onclick={() => { page = Math.max(1, page - 1); loadPolicies(); }} disabled={page <= 1} class="px-2.5 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors" aria-label="Previous page">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <button onclick={() => { page = Math.min(totalPages, page + 1); loadPolicies(); }} disabled={page >= totalPages} class="px-2.5 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors" aria-label="Next page">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </div>
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>

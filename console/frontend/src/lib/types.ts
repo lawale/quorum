@@ -76,6 +76,7 @@ export interface Request {
   eligible_reviewers?: string[];
   metadata?: Record<string, unknown>;
   current_stage: number;
+  total_stages?: number;
   expires_at?: string;
   created_at: string;
   updated_at: string;
@@ -95,6 +96,7 @@ export interface OutboxEntry {
   id: string;
   request_id: string;
   webhook_url: string;
+  event_type: string;
   status: 'pending' | 'processing' | 'delivered' | 'failed';
   attempts: number;
   max_retries: number;

@@ -142,6 +142,9 @@ func (h *RequestHandler) List(w http.ResponseWriter, r *http.Request) {
 	if m := r.URL.Query().Get("maker_id"); m != "" {
 		filter.MakerID = &m
 	}
+	if q := r.URL.Query().Get("search"); q != "" {
+		filter.Search = &q
+	}
 
 	requests, total, err := h.requestService.List(r.Context(), filter)
 	if err != nil {

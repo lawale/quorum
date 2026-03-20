@@ -161,6 +161,7 @@ func (s *Server) setupRoutes() {
 					r.Get("/policies/{id}", s.policyHandler.Get)
 					r.Put("/policies/{id}", s.policyHandler.Update)
 					r.Delete("/policies/{id}", s.policyHandler.Delete)
+					r.Get("/request-types", s.policyHandler.RequestTypes)
 
 					r.Get("/webhooks", s.webhookHandler.List)
 					r.Post("/webhooks", s.webhookHandler.Create)
@@ -173,6 +174,7 @@ func (s *Server) setupRoutes() {
 					r.Get("/deliveries", s.deliveryHandler.List)
 					r.Get("/deliveries/stats", s.deliveryHandler.Stats)
 					r.Post("/deliveries/{id}/retry", s.deliveryHandler.Retry)
+					r.Post("/deliveries/retry-all-failed", s.deliveryHandler.RetryAllFailed)
 					r.Post("/requests/{id}/retry-deliveries", s.deliveryHandler.RetryAllForRequest)
 				})
 			})

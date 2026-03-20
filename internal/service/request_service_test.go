@@ -341,7 +341,14 @@ func TestGetByID_Success(t *testing.T) {
 			return approvals, nil
 		},
 	}
-	svc := newTestRequestService(requests, approvalStore, &testutil.MockPolicyStore{}, &testutil.MockAuditStore{}, nil)
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, requestType string) (*model.Policy, error) {
+			return &model.Policy{
+				Stages: []model.ApprovalStage{{Index: 0, Name: "review", RequiredApprovals: 1}},
+			}, nil
+		},
+	}
+	svc := newTestRequestService(requests, approvalStore, policies, &testutil.MockAuditStore{}, nil)
 
 	result, err := svc.GetByID(context.Background(), reqID)
 	if err != nil {
@@ -352,6 +359,9 @@ func TestGetByID_Success(t *testing.T) {
 	}
 	if len(result.Approvals) != 1 {
 		t.Errorf("expected 1 approval, got %d", len(result.Approvals))
+	}
+	if result.TotalStages == nil || *result.TotalStages != 1 {
+		t.Errorf("TotalStages = %v, want 1", result.TotalStages)
 	}
 }
 
@@ -378,7 +388,14 @@ func TestList_DelegatesToStore(t *testing.T) {
 			return expected, 1, nil
 		},
 	}
-	svc := newTestRequestService(requests, &testutil.MockApprovalStore{}, &testutil.MockPolicyStore{}, &testutil.MockAuditStore{}, nil)
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, requestType string) (*model.Policy, error) {
+			return &model.Policy{
+				Stages: []model.ApprovalStage{{Index: 0, Name: "review", RequiredApprovals: 1}},
+			}, nil
+		},
+	}
+	svc := newTestRequestService(requests, &testutil.MockApprovalStore{}, policies, &testutil.MockAuditStore{}, nil)
 
 	result, total, err := svc.List(context.Background(), store.RequestFilter{Page: 1, PerPage: 20})
 	if err != nil {
@@ -386,6 +403,9 @@ func TestList_DelegatesToStore(t *testing.T) {
 	}
 	if len(result) != 1 || total != 1 {
 		t.Errorf("expected 1 result with total 1, got %d results with total %d", len(result), total)
+	}
+	if result[0].TotalStages == nil || *result[0].TotalStages != 1 {
+		t.Errorf("TotalStages = %v, want 1", result[0].TotalStages)
 	}
 }
 

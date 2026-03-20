@@ -56,7 +56,8 @@
       failedDeliveries = stats.failed ?? 0;
       pendingDeliveries = stats.pending ?? 0;
       deliveredCount = stats.delivered ?? 0;
-      const totalDeliveries = deliveredCount + failedDeliveries + pendingDeliveries;
+      const processingCount = stats.processing ?? 0;
+      const totalDeliveries = deliveredCount + failedDeliveries + pendingDeliveries + processingCount;
       deliveryRate = totalDeliveries > 0 ? Math.round((deliveredCount / totalDeliveries) * 1000) / 10 : 100;
     } catch {
       // silently fail — cards show 0
@@ -104,6 +105,7 @@
         </div>
         <p class="text-[44px] font-black tracking-tighter text-on-surface leading-none">{pendingCount}</p>
         <p class="text-on-surface-variant font-medium mt-1">Pending Requests</p>
+        <p class="text-[10px] text-on-surface-variant/60 mt-0.5">{totalRequests} total</p>
       </a>
 
       <!-- Total Policies -->
@@ -198,7 +200,7 @@
           <h3 class="text-xl font-bold tracking-tight text-on-surface">Delivery Health</h3>
           <div class="bg-surface-container-lowest p-6 rounded-xl shadow-ambient-lg border-l-4 {failedDeliveries > 0 ? 'border-status-rejected-text' : 'border-emerald-500'}">
             <div class="flex justify-between items-center mb-6">
-              <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Webhooks Last 24h</p>
+              <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Webhook Deliveries</p>
               {#if failedDeliveries === 0}
                 <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
               {:else}
