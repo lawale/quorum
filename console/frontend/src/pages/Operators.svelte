@@ -1,6 +1,6 @@
 <script lang="ts">
   import { operators as operatorsApi } from '../lib/api';
-  import { addToast } from '../lib/stores';
+  import { addToast, currentUser } from '../lib/stores';
   import { formatDate } from '../lib/utils';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import EmptyState from '../components/EmptyState.svelte';
@@ -104,12 +104,15 @@
 </script>
 
 <div>
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-on-surface">Operators</h1>
-    <button onclick={openCreateModal} class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-br from-primary to-primary-container rounded-md hover:brightness-110 transition-all">
-      Create Operator
+  <section class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+    <div>
+      <h1 class="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Operators</h1>
+      <p class="text-on-surface-variant max-w-lg">Manage console users and their access credentials.</p>
+    </div>
+    <button onclick={openCreateModal} class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-5 py-2.5 rounded-md font-semibold text-sm shadow-lg shadow-primary/20 hover:brightness-110 transition-all flex items-center gap-2">
+      + Create Operator
     </button>
-  </div>
+  </section>
 
   {#if isLoading}
     <LoadingSpinner />
@@ -117,29 +120,40 @@
     <EmptyState message="No operators found." actionLabel="Create your first operator" onaction={openCreateModal} />
   {:else}
     <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl overflow-hidden">
-      <table class="min-w-full divide-y divide-outline-variant/15">
-        <thead class="bg-surface-container-low">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Username</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Display Name</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Created</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-on-surface-variant uppercase">Actions</th>
+      <table class="min-w-full">
+        <thead>
+          <tr class="border-b border-outline-variant/15">
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Username</th>
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Display Name</th>
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Created</th>
+            <th class="px-6 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-outline-variant/15">
           {#each items as op}
-            <tr class="hover:bg-surface-container-low">
-              <td class="px-6 py-4 text-sm font-medium text-on-surface">{op.username}</td>
-              <td class="px-6 py-4 text-sm text-on-surface-variant">{op.display_name || '—'}</td>
-              <td class="px-6 py-4 text-sm text-on-surface-variant">{formatDate(op.created_at)}</td>
-              <td class="px-6 py-4 text-right text-sm">
-                <button onclick={() => handleDelete(op)} class="text-status-rejected-text hover:text-red-800">Delete</button>
+            <tr class="hover:bg-surface-container-low transition-colors">
+              <td class="px-6 py-5 text-sm">
+                <span class="font-bold text-on-surface">{op.username}</span>
+                {#if $currentUser?.username === op.username}
+                  <span class="inline-flex px-2 py-0.5 bg-primary-container/10 text-primary-container rounded text-[10px] font-bold uppercase tracking-wider ml-2">You</span>
+                {/if}
+              </td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{op.display_name || '—'}</td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{formatDate(op.created_at)}</td>
+              <td class="px-6 py-5 text-right text-sm">
+                <button onclick={() => handleDelete(op)} class="text-on-surface-variant/40 hover:text-status-rejected-text transition-colors" title="Delete operator">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  </svg>
+                </button>
               </td>
             </tr>
           {/each}
         </tbody>
       </table>
     </div>
+
+    <p class="text-xs text-on-surface-variant mt-4">Showing {items.length} of {items.length} operators</p>
   {/if}
 </div>
 

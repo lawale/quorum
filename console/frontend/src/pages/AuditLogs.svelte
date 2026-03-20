@@ -51,22 +51,24 @@
 </script>
 
 <div>
-  <h1 class="text-2xl font-bold text-on-surface mb-6">Audit Log</h1>
+  <!-- Header -->
+  <section class="mb-10">
+    <h1 class="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Audit Log</h1>
+    <p class="text-on-surface-variant max-w-lg">Inspect the complete event history for any approval request across all tenants and policies.</p>
+  </section>
 
   <!-- Search -->
-  <form onsubmit={handleSearch} class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-4 mb-6">
-    <div class="flex items-end gap-4">
-      <div class="flex-1">
-        <label for="requestId" class="block text-xs font-medium text-on-surface-variant mb-1">Request ID</label>
-        <input
-          id="requestId"
-          type="text"
-          bind:value={requestId}
-          placeholder="Enter request UUID…"
-          class="w-full px-3 py-1.5 text-sm border border-outline-variant/40 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
-        />
-      </div>
-      <button type="submit" class="px-4 py-1.5 text-sm font-medium text-white bg-gradient-to-br from-primary to-primary-container rounded-md hover:brightness-110 transition-all">
+  <form onsubmit={handleSearch} class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-6 mb-8">
+    <label for="requestId" class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">Request ID</label>
+    <div class="flex items-center gap-4">
+      <input
+        id="requestId"
+        type="text"
+        bind:value={requestId}
+        placeholder="Enter request UUID…"
+        class="flex-1 px-3 py-2.5 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
+      />
+      <button type="submit" class="bg-gradient-to-br from-primary to-primary-container text-on-primary px-5 py-2.5 rounded-md font-semibold text-sm shadow-lg shadow-primary/20 hover:brightness-110 transition-all">
         Search
       </button>
     </div>
@@ -93,10 +95,10 @@
         <table class="min-w-full divide-y divide-outline-variant/15">
           <thead class="bg-surface-container-low">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Action</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Actor</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Details</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Timestamp</th>
+              <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/15">Action</th>
+              <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/15">Actor</th>
+              <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/15">Details</th>
+              <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/15">Timestamp</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-outline-variant/15">

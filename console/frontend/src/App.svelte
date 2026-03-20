@@ -10,7 +10,6 @@
   import Policies from './pages/Policies.svelte';
   import PolicyForm from './pages/PolicyForm.svelte';
   import Webhooks from './pages/Webhooks.svelte';
-  import WebhookForm from './pages/WebhookForm.svelte';
   import Requests from './pages/Requests.svelte';
   import RequestDetail from './pages/RequestDetail.svelte';
   import AuditLogs from './pages/AuditLogs.svelte';
@@ -100,9 +99,6 @@
     if (parts.length === 2 && parts[0] === 'policies') {
       return { path: 'policy-form', params: { id: parts[1] } };
     }
-    if (parts.length === 2 && parts[0] === 'webhooks' && parts[1] === 'new') {
-      return { path: 'webhook-form', params: {} };
-    }
 
     return { path: parts[0] || 'dashboard', params: {} };
   }
@@ -132,8 +128,6 @@
         <PolicyForm id={route.params.id} />
       {:else if route.path === 'webhooks'}
         <Webhooks />
-      {:else if route.path === 'webhook-form'}
-        <WebhookForm />
       {:else if route.path === 'requests'}
         <Requests />
       {:else if route.path === 'deliveries'}

@@ -14,6 +14,7 @@
   let perPage = $state(20);
   let statusFilter = $state('');
   let typeFilter = $state('');
+  let searchQuery = $state('');
 
   let totalPages = $derived(Math.ceil(total / perPage));
 
@@ -51,6 +52,7 @@
   function clearFilters() {
     statusFilter = '';
     typeFilter = '';
+    searchQuery = '';
     page = 1;
     loadRequests();
   }
@@ -63,76 +65,93 @@
   function truncateId(id: string): string {
     return id.length > 8 ? id.slice(0, 8) + '…' : id;
   }
+
+  let filteredItems = $derived(
+    searchQuery
+      ? items.filter((r) => r.id.toLowerCase().includes(searchQuery.toLowerCase()))
+      : items
+  );
 </script>
 
 <div>
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-on-surface">Requests</h1>
-  </div>
-
-  <!-- Filters -->
-  <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-4 mb-4">
-    <div class="flex items-end gap-4">
-      <div>
-        <label for="statusFilter" class="block text-xs font-medium text-on-surface-variant mb-1">Status</label>
-        <select id="statusFilter" bind:value={statusFilter} class="px-3 py-1.5 text-sm border border-outline-variant/40 rounded-md">
-          <option value="">All</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="cancelled">Cancelled</option>
-          <option value="expired">Expired</option>
-        </select>
-      </div>
-      <div>
-        <label for="typeFilter" class="block text-xs font-medium text-on-surface-variant mb-1">Type</label>
-        <input id="typeFilter" type="text" bind:value={typeFilter} placeholder="e.g. transfer" class="px-3 py-1.5 text-sm border border-outline-variant/40 rounded-md" />
-      </div>
-      <button onclick={applyFilters} class="px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-br from-primary to-primary-container rounded-md hover:brightness-110 transition-all">
-        Filter
-      </button>
-      {#if statusFilter || typeFilter}
-        <button onclick={clearFilters} class="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface">
-          Clear
-        </button>
-      {/if}
+  <!-- Page Header -->
+  <section class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+    <div>
+      <h1 class="text-4xl font-extrabold tracking-tight text-on-surface mb-2">Requests</h1>
+      <p class="text-on-surface-variant max-w-lg">Monitor and manage access requests across all organizational units.</p>
     </div>
+  </section>
+
+  <!-- Filter Bar -->
+  <div class="flex items-center gap-4 mb-6">
+    <div class="flex-1 relative">
+      <input
+        type="text"
+        placeholder="Search by Request ID (e.g. REQ-9821)..."
+        bind:value={searchQuery}
+        class="w-full px-4 py-2.5 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
+      />
+    </div>
+    <select
+      bind:value={statusFilter}
+      onchange={applyFilters}
+      class="px-4 py-2.5 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
+    >
+      <option value="">All Statuses</option>
+      <option value="pending">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+      <option value="cancelled">Cancelled</option>
+      <option value="expired">Expired</option>
+    </select>
+    <select
+      bind:value={typeFilter}
+      onchange={applyFilters}
+      class="px-4 py-2.5 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
+    >
+      <option value="">All Types</option>
+    </select>
+    <button
+      onclick={() => { if (statusFilter || typeFilter || searchQuery) clearFilters(); }}
+      class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-outline-variant/40 rounded-lg hover:bg-surface-container-low transition-colors"
+    >
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+      </svg>
+      Filters
+    </button>
   </div>
 
   {#if isLoading}
     <LoadingSpinner />
-  {:else if items.length === 0}
+  {:else if filteredItems.length === 0}
     <EmptyState message="No requests found." />
   {:else}
-    <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl overflow-hidden">
-      <table class="min-w-full divide-y divide-outline-variant/15">
-        <thead class="bg-surface-container-low">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">ID</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Tenant</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Type</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Status</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Maker</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Stage</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Created</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-on-surface-variant uppercase">Actions</th>
+    <div class="bg-surface-container-lowest shadow-ambient-lg rounded-xl overflow-hidden">
+      <table class="min-w-full">
+        <thead>
+          <tr class="border-b border-outline-variant/15">
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">ID</th>
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Type</th>
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Status</th>
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Maker</th>
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Stage</th>
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Created</th>
+            <th class="px-6 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Expires</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-outline-variant/15">
-          {#each items as req}
-            <tr class="hover:bg-surface-container-low">
-              <td class="px-6 py-4 text-sm font-mono text-xs text-on-surface">
+          {#each filteredItems as req}
+            <tr class="hover:bg-surface-container-low transition-colors">
+              <td class="px-6 py-5 text-sm font-mono text-xs text-on-surface">
                 <a href="#/requests/{req.id}" class="text-primary-container hover:text-primary" title={req.id}>{truncateId(req.id)}</a>
               </td>
-              <td class="px-6 py-4 text-sm text-on-surface-variant"><code class="bg-surface-container px-2 py-0.5 rounded text-xs">{req.tenant_id}</code></td>
-              <td class="px-6 py-4 text-sm text-on-surface">{req.type}</td>
-              <td class="px-6 py-4 text-sm"><StatusBadge status={req.status} /></td>
-              <td class="px-6 py-4 text-sm text-on-surface-variant">{req.maker_id}</td>
-              <td class="px-6 py-4 text-sm text-on-surface-variant">{req.current_stage}</td>
-              <td class="px-6 py-4 text-sm text-on-surface-variant">{formatDate(req.created_at)}</td>
-              <td class="px-6 py-4 text-right text-sm">
-                <a href="#/requests/{req.id}" class="text-primary-container hover:text-primary">View</a>
-              </td>
+              <td class="px-6 py-5 text-sm text-on-surface">{req.type}</td>
+              <td class="px-6 py-5 text-sm"><StatusBadge status={req.status} /></td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{req.maker_id}</td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{req.current_stage}</td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{formatDate(req.created_at)}</td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{req.expires_at ? formatDate(req.expires_at) : '—'}</td>
             </tr>
           {/each}
         </tbody>
@@ -141,38 +160,33 @@
 
     <!-- Pagination -->
     {#if totalPages > 1}
-      <div class="flex items-center justify-between mt-4">
-        <p class="text-sm text-on-surface-variant">
-          Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, total)} of {total}
-        </p>
-        <div class="flex gap-1">
-          <button
-            onclick={() => goToPage(page - 1)}
-            disabled={page <= 1}
-            class="px-3 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          {#each Array.from({ length: totalPages }, (_, i) => i + 1) as p}
-            {#if totalPages <= 7 || p === 1 || p === totalPages || Math.abs(p - page) <= 1}
-              <button
-                onclick={() => goToPage(p)}
-                class="px-3 py-1.5 text-sm border rounded-md {p === page ? 'bg-gradient-to-br from-primary to-primary-container text-white border-primary-container' : 'border-outline-variant/40 hover:bg-surface-container-low'}"
-              >
-                {p}
-              </button>
-            {:else if p === 2 || p === totalPages - 1}
-              <span class="px-2 py-1.5 text-sm text-on-surface-variant/60">…</span>
-            {/if}
-          {/each}
-          <button
-            onclick={() => goToPage(page + 1)}
-            disabled={page >= totalPages}
-            class="px-3 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
+      <div class="flex items-center justify-between mt-6">
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-on-surface-variant">Page {page} of {totalPages}</span>
+          <div class="flex gap-1">
+            <button
+              onclick={() => goToPage(page - 1)}
+              disabled={page <= 1}
+              class="px-2.5 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              aria-label="Previous page"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onclick={() => goToPage(page + 1)}
+              disabled={page >= totalPages}
+              class="px-2.5 py-1.5 text-sm border border-outline-variant/40 rounded-md hover:bg-surface-container-low disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              aria-label="Next page"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
+        <span class="text-sm text-on-surface-variant">Show {perPage} per page</span>
       </div>
     {/if}
   {/if}
