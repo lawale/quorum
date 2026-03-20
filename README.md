@@ -423,6 +423,9 @@ See [`config.example.yaml`](config.example.yaml) for all available options.
 | `metrics.enabled` | `false` | Enable Prometheus metrics |
 | `console.enabled` | `false` | Enable admin console API routes |
 | `console.jwt_secret` | (auto) | JWT signing secret for console sessions |
+| `console.secure_cookies` | `false` | Set `true` in production (HTTPS) |
+| `console.roles_url` | `""` | External endpoint returning JSON `[]string` of available roles |
+| `console.permissions_url` | `""` | External endpoint returning JSON `[]string` of available permissions |
 
 #### Environment Variable Overrides
 
@@ -450,6 +453,8 @@ Every config field can be overridden via environment variables using the `QUORUM
 | `QUORUM_CONSOLE_ENABLED` | `console.enabled` |
 | `QUORUM_CONSOLE_JWT_SECRET` | `console.jwt_secret` |
 | `QUORUM_CONSOLE_SECURE_COOKIES` | `console.secure_cookies` |
+| `QUORUM_CONSOLE_ROLES_URL` | `console.roles_url` |
+| `QUORUM_CONSOLE_PERMISSIONS_URL` | `console.permissions_url` |
 
 **Precedence:** Environment variables take the highest priority, overriding both YAML config values and defaults. Duration values use Go syntax (e.g., `30s`, `5m`, `1h`). Invalid values are ignored with a warning log.
 
@@ -510,7 +515,16 @@ console:
 
 Visit `http://localhost:8080/console/` after starting the server. On first run, you'll be prompted to create an initial admin operator. Subsequent operators can be added through the UI.
 
-**Console features:** Dashboard overview, policy CRUD with multi-stage editor, webhook management, request browser with status/type filters, request detail with tabbed payload and audit trail, audit log search, and operator management.
+**Role & permission suggestions:** Optionally configure `roles_url` and `permissions_url` to point at your identity provider's API. The console proxies these URLs server-side and populates dropdown suggestions in the policy editor, while still supporting free-text entry. The endpoints must return a JSON array of strings (e.g., `["admin", "manager", "viewer"]`).
+
+```yaml
+console:
+  enabled: true
+  roles_url: "https://your-idp.example.com/api/roles"
+  permissions_url: "https://your-idp.example.com/api/permissions"
+```
+
+**Console features:** Dashboard overview, policy CRUD with multi-stage editor (role/permission inputs with external suggestions, authorization mode dropdown, client-side validation), webhook management with delivery rate color coding, request browser with status/type filters and copy-to-clipboard IDs, request detail with tabbed payload and audit trail, audit log with policy context, delivery browser with partial event matching, and operator management.
 
 ### Embeddable Widgets
 

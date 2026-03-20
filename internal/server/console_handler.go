@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -19,10 +20,20 @@ type ConsoleHandler struct {
 	operatorService *service.OperatorService
 	tenantService   *service.TenantService
 	secureCookies   bool
+	rolesURL        string
+	permissionsURL  string
+	httpClient      *http.Client
 }
 
-func NewConsoleHandler(os *service.OperatorService, ts *service.TenantService, secureCookies bool) *ConsoleHandler {
-	return &ConsoleHandler{operatorService: os, tenantService: ts, secureCookies: secureCookies}
+func NewConsoleHandler(os *service.OperatorService, ts *service.TenantService, secureCookies bool, rolesURL, permissionsURL string) *ConsoleHandler {
+	return &ConsoleHandler{
+		operatorService: os,
+		tenantService:   ts,
+		secureCookies:   secureCookies,
+		rolesURL:        rolesURL,
+		permissionsURL:  permissionsURL,
+		httpClient:      &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 func (h *ConsoleHandler) setAuthCookie(w http.ResponseWriter, token string) {
@@ -352,4 +363,50 @@ func (h *ConsoleHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Suggestions proxy ---
+
+func (h *ConsoleHandler) SuggestionsConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"roles_available":       h.rolesURL != "",
+		"permissions_available": h.permissionsURL != "",
+	})
+}
+
+func (h *ConsoleHandler) ProxySuggestions(w http.ResponseWriter, r *http.Request) {
+	kind := chi.URLParam(r, "kind")
+	var upstream string
+	switch kind {
+	case "roles":
+		upstream = h.rolesURL
+	case "permissions":
+		upstream = h.permissionsURL
+	default:
+		writeError(w, http.StatusBadRequest, "invalid suggestion kind: must be 'roles' or 'permissions'")
+		return
+	}
+	if upstream == "" {
+		writeError(w, http.StatusNotFound, kind+" suggestions not configured")
+		return
+	}
+
+	resp, err := h.httpClient.Get(upstream)
+	if err != nil {
+		writeServerError(w, r, err, "failed to fetch "+kind+" suggestions")
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		writeError(w, http.StatusBadGateway, "upstream returned "+resp.Status)
+		return
+	}
+
+	var items []string
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		writeServerError(w, r, err, "invalid upstream response for "+kind)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": items})
 }

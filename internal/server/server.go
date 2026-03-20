@@ -49,6 +49,8 @@ type Config struct {
 	AuthProvider    auth.Provider
 	ConsoleEnabled  bool
 	SecureCookies   bool
+	RolesURL        string
+	PermissionsURL  string
 	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
 	EmbedHandler    http.Handler // Widget JS handler from widgets package (nil when built without tag)
 	HealthCheckers  []health.HealthChecker
@@ -80,7 +82,7 @@ func New(cfg Config) *Server {
 	}
 
 	if cfg.OperatorService != nil {
-		s.consoleHandler = NewConsoleHandler(cfg.OperatorService, cfg.TenantService, cfg.SecureCookies)
+		s.consoleHandler = NewConsoleHandler(cfg.OperatorService, cfg.TenantService, cfg.SecureCookies, cfg.RolesURL, cfg.PermissionsURL)
 	}
 
 	s.setupRoutes()
@@ -150,6 +152,10 @@ func (s *Server) setupRoutes() {
 				r.Get("/tenants", s.consoleHandler.ListTenants)
 				r.Post("/tenants", s.consoleHandler.CreateTenant)
 				r.Delete("/tenants/{id}", s.consoleHandler.DeleteTenant)
+
+				// Suggestions proxy for policy form
+				r.Get("/suggestions/config", s.consoleHandler.SuggestionsConfig)
+				r.Get("/suggestions/{kind}", s.consoleHandler.ProxySuggestions)
 
 				// Data endpoints — reuse existing handlers via JWT auth
 				// consoleTenantMiddleware injects optional ?tenant_id= into context

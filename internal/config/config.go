@@ -26,9 +26,11 @@ type Config struct {
 }
 
 type ConsoleConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	JWTSecret     string `yaml:"jwt_secret"`
-	SecureCookies bool   `yaml:"secure_cookies"`
+	Enabled        bool   `yaml:"enabled"`
+	JWTSecret      string `yaml:"jwt_secret"`
+	SecureCookies  bool   `yaml:"secure_cookies"`
+	RolesURL       string `yaml:"roles_url"`
+	PermissionsURL string `yaml:"permissions_url"`
 }
 
 type MetricsConfig struct {

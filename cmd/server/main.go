@@ -206,6 +206,8 @@ func main() {
 		EventHub:        eventHub,
 		ConsoleEnabled:  cfg.Console.Enabled,
 		SecureCookies:   cfg.Console.SecureCookies,
+		RolesURL:        cfg.Console.RolesURL,
+		PermissionsURL:  cfg.Console.PermissionsURL,
 		ConsoleSPA:      console.Handler(),
 		EmbedHandler:    widgets.Handler(),
 		HealthCheckers:  stores.HealthCheckers,

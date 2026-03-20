@@ -203,4 +203,11 @@ export const deliveries = {
     request<{ reset: number }>(`/requests/${requestId}/retry-deliveries`, { method: 'POST' }),
 };
 
+// --- Suggestions ---
+
+export const suggestions = {
+  config: () => request<{ roles_available: boolean; permissions_available: boolean }>('/suggestions/config'),
+  list: (kind: 'roles' | 'permissions') => request<ListResponse<string>>(`/suggestions/${kind}`),
+};
+
 export { ApiError };

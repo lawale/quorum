@@ -57,3 +57,6 @@ metrics:
 console:
   enabled: false                 # requires binary built with -tags console
   jwt_secret: ""                 # optional; auto-generated if empty (sessions lost on restart)
+  # secure_cookies: false        # set true in production (behind HTTPS)
+  # roles_url: ""                # optional: external endpoint returning JSON string array of available roles
+  # permissions_url: ""          # optional: external endpoint returning JSON string array of available permissions
