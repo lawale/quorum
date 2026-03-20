@@ -56,6 +56,81 @@ export function formatDetails(details: Record<string, unknown>, action?: string)
 }
 
 /**
+ * Converts a snake_case slug to a human-readable Title Case label.
+ * e.g. "wire_transfer" → "Wire Transfer", "access_request" → "Access Request"
+ */
+export function humanize(slug: string): string {
+  return slug
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/**
+ * Converts a Go time.Duration (nanoseconds) to a human-readable string.
+ * e.g. 86400000000000 → "1d", 259200000000000 → "3d", 90000000000000 → "1d1h"
+ */
+export function formatDuration(ns: number | string): string {
+  let val = typeof ns === 'string' ? Number(ns) : ns;
+  if (!val || isNaN(val) || val <= 0) return '—';
+
+  // Convert nanoseconds to seconds
+  let seconds = Math.floor(val / 1_000_000_000);
+  if (seconds <= 0) return '—';
+
+  const parts: string[] = [];
+
+  const year = 365 * 24 * 3600;
+  const week = 7 * 24 * 3600;
+  const day = 24 * 3600;
+  const hour = 3600;
+  const minute = 60;
+
+  if (seconds >= year) {
+    const y = Math.floor(seconds / year);
+    parts.push(`${y}y`);
+    seconds %= year;
+  }
+  if (seconds >= week) {
+    const w = Math.floor(seconds / week);
+    parts.push(`${w}w`);
+    seconds %= week;
+  }
+  if (seconds >= day) {
+    const d = Math.floor(seconds / day);
+    parts.push(`${d}d`);
+    seconds %= day;
+  }
+  if (seconds >= hour) {
+    const h = Math.floor(seconds / hour);
+    parts.push(`${h}h`);
+    seconds %= hour;
+  }
+  if (seconds >= minute) {
+    const m = Math.floor(seconds / minute);
+    parts.push(`${m}m`);
+    seconds %= minute;
+  }
+  if (seconds > 0 && parts.length === 0) {
+    parts.push(`${seconds}s`);
+  }
+
+  return parts.join('') || '—';
+}
+
+/**
+ * Copy text to clipboard and return true on success.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Status color mapping for badges.
  */
 export function statusColor(status: string): string {

@@ -1,12 +1,14 @@
 <script lang="ts">
   import { requests as requestsApi } from '../lib/api';
   import { addToast } from '../lib/stores';
-  import { formatDate, formatDetails } from '../lib/utils';
+  import { formatDate, formatDetails, humanize } from '../lib/utils';
+  import StatusBadge from '../components/StatusBadge.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
-  import type { AuditLog } from '../lib/types';
+  import type { AuditLog, Request } from '../lib/types';
 
   let requestId = $state('');
   let auditLogs: AuditLog[] = $state([]);
+  let requestInfo: Request | null = $state(null);
   let isLoading = $state(false);
   let searched = $state(false);
   let error = $state('');
@@ -23,9 +25,14 @@
 
     isLoading = true;
     searched = true;
+    requestInfo = null;
     try {
-      const res = await requestsApi.audit(trimmed);
-      auditLogs = res.data || [];
+      const [auditRes, reqData] = await Promise.all([
+        requestsApi.audit(trimmed),
+        requestsApi.get(trimmed).catch(() => null),
+      ]);
+      auditLogs = auditRes.data || [];
+      requestInfo = reqData;
     } catch {
       addToast('Failed to load audit logs', 'error');
       auditLogs = [];
@@ -85,11 +92,38 @@
         <p class="text-sm text-on-surface-variant">No audit entries found for this request.</p>
       </div>
     {:else}
-      <div class="space-y-1 mb-4">
-        <p class="text-sm text-on-surface-variant">{auditLogs.length} audit {auditLogs.length === 1 ? 'entry' : 'entries'} for request
-          <a href="#/requests/{requestId.trim()}" class="text-primary-container hover:text-primary font-mono text-xs">{requestId.trim()}</a>
-        </p>
-      </div>
+      {#if requestInfo}
+        <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-5 mb-6 flex flex-wrap items-center gap-x-8 gap-y-3">
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-0.5">Request</p>
+            <a href="#/requests/{requestId.trim()}" class="text-primary-container hover:text-primary font-mono text-xs">{requestId.trim()}</a>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-0.5">Type</p>
+            <p class="text-sm font-medium text-on-surface">{humanize(requestInfo.type)}</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-0.5">Maker</p>
+            <p class="text-sm text-on-surface">{requestInfo.maker_id}</p>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-0.5">Status</p>
+            <StatusBadge status={requestInfo.status} />
+          </div>
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-0.5">Stage</p>
+            <p class="text-sm text-on-surface">{requestInfo.current_stage + 1}{requestInfo.total_stages ? ` / ${requestInfo.total_stages}` : ''}</p>
+          </div>
+        </div>
+      {:else}
+        <div class="space-y-1 mb-4">
+          <p class="text-sm text-on-surface-variant">{auditLogs.length} audit {auditLogs.length === 1 ? 'entry' : 'entries'} for request
+            <a href="#/requests/{requestId.trim()}" class="text-primary-container hover:text-primary font-mono text-xs">{requestId.trim()}</a>
+          </p>
+        </div>
+      {/if}
+
+      <p class="text-sm text-on-surface-variant mb-3">{auditLogs.length} audit {auditLogs.length === 1 ? 'entry' : 'entries'}</p>
 
       <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl overflow-hidden">
         <table class="min-w-full divide-y divide-outline-variant/15">

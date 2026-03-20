@@ -155,8 +155,8 @@ func (s *OutboxStore) List(ctx context.Context, filter store.OutboxFilter) ([]mo
 		argIdx++
 	}
 	if filter.Event != nil {
-		where += fmt.Sprintf(" AND o.event_type = $%d", argIdx)
-		args = append(args, *filter.Event)
+		where += fmt.Sprintf(" AND o.event_type ILIKE $%d", argIdx)
+		args = append(args, "%"+*filter.Event+"%")
 		argIdx++
 	}
 

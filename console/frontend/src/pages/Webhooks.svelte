@@ -14,6 +14,13 @@
   const perPage = 20;
   let totalPages = $derived(Math.max(1, Math.ceil(totalWebhooks / perPage)));
   let deliveryRate = $state('—');
+  let deliveryRatePct = $state(-1); // -1 means no data
+  let deliveryRateColor = $derived(
+    deliveryRatePct < 0 ? 'text-on-surface'
+    : deliveryRatePct >= 95 ? 'text-status-approved-text'
+    : deliveryRatePct >= 80 ? 'text-status-pending-text'
+    : 'text-status-rejected-text'
+  );
 
   const eventColorMap: Record<string, string> = {
     approved: 'bg-status-approved-bg text-status-approved-text',
@@ -44,11 +51,20 @@
       totalWebhooks = webhooksRes.total ?? items.length;
 
       if (stats) {
-        const total = stats.delivered + stats.failed + stats.pending + stats.processing;
-        deliveryRate = total > 0
-          ? `${((stats.delivered / total) * 100).toFixed(1)}%`
-          : '—';
+        const delivered = stats.delivered || 0;
+        const failed = stats.failed || 0;
+        const pending = stats.pending || 0;
+        const processing = stats.processing || 0;
+        const total = delivered + failed + pending + processing;
+        if (total > 0) {
+          deliveryRatePct = (delivered / total) * 100;
+          deliveryRate = `${deliveryRatePct.toFixed(1)}%`;
+        } else {
+          deliveryRatePct = -1;
+          deliveryRate = '—';
+        }
       } else {
+        deliveryRatePct = -1;
         deliveryRate = '—';
       }
     } catch { addToast('Failed to load webhooks', 'error'); }
@@ -140,7 +156,7 @@
     <div class="bg-surface-container-lowest p-6 rounded-xl shadow-ambient-lg">
       <p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">Delivery Rate</p>
       <div class="flex items-baseline gap-2">
-        <p class="text-[44px] font-black tracking-tighter text-on-surface leading-none">{deliveryRate}</p>
+        <p class="text-[44px] font-black tracking-tighter leading-none {deliveryRateColor}">{deliveryRate}</p>
       </div>
       <p class="text-on-surface-variant font-medium mt-1">Success</p>
     </div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { deliveries as deliveriesApi } from '../lib/api';
   import { selectedTenant, addToast } from '../lib/stores';
-  import { formatDate } from '../lib/utils';
+  import { formatDate, copyToClipboard } from '../lib/utils';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import type { OutboxEntry } from '../lib/types';
 
@@ -14,6 +14,14 @@
   let retryingId: string | null = $state(null);
   let retryingAll = $state(false);
   let failedCount = $state(0);
+  let copiedId: string | null = $state(null);
+
+  async function handleCopyId(id: string) {
+    if (await copyToClipboard(id)) {
+      copiedId = id;
+      setTimeout(() => { copiedId = null; }, 1500);
+    }
+  }
 
   selectedTenant.subscribe(() => { page = 1; loadEntries(); });
 
@@ -163,7 +171,16 @@
               <td class="px-6 py-5 text-xs font-mono text-on-surface" title={entry.webhook_url}>{truncateUrl(entry.webhook_url)}</td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{entry.event_type || '—'}</td>
               <td class="px-6 py-5 text-xs font-mono">
-                <a href="#/requests/{entry.request_id}" class="text-primary-container hover:text-primary" title={entry.request_id}>{truncateId(entry.request_id)}</a>
+                <span class="inline-flex items-center gap-1.5">
+                  <a href="#/requests/{entry.request_id}" class="text-primary-container hover:text-primary" title={entry.request_id}>{truncateId(entry.request_id)}</a>
+                  <button onclick={() => handleCopyId(entry.request_id)} class="text-on-surface-variant/40 hover:text-on-surface transition-colors" title="Copy ID">
+                    {#if copiedId === entry.request_id}
+                      <svg class="w-3.5 h-3.5 text-status-approved-text" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    {:else}
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    {/if}
+                  </button>
+                </span>
               </td>
               <td class="px-6 py-5">
                 <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold {statusBadgeClass(entry.status)}">{entry.status}</span>

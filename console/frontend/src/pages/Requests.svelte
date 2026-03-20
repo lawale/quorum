@@ -1,7 +1,7 @@
 <script lang="ts">
   import { requests as requestsApi, policies as policiesApi } from '../lib/api';
   import { addToast, selectedTenant } from '../lib/stores';
-  import { formatDate } from '../lib/utils';
+  import { formatDate, humanize, copyToClipboard } from '../lib/utils';
   import StatusBadge from '../components/StatusBadge.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import EmptyState from '../components/EmptyState.svelte';
@@ -19,6 +19,15 @@
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
   let totalPages = $derived(Math.ceil(total / perPage));
+  let hasActiveFilters = $derived(!!statusFilter || !!typeFilter || !!searchQuery);
+  let copiedId: string | null = $state(null);
+
+  async function handleCopyId(id: string) {
+    if (await copyToClipboard(id)) {
+      copiedId = id;
+      setTimeout(() => { copiedId = null; }, 1500);
+    }
+  }
 
   // Re-fetch when tenant selection changes
   let currentTenant = $state('');
@@ -127,18 +136,20 @@
     >
       <option value="">All Types</option>
       {#each requestTypes as rt}
-        <option value={rt}>{rt}</option>
+        <option value={rt}>{humanize(rt)}</option>
       {/each}
     </select>
-    <button
-      onclick={() => { if (statusFilter || typeFilter || searchQuery) clearFilters(); }}
-      class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-outline-variant/40 rounded-lg hover:bg-surface-container-low transition-colors"
-    >
-      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-      </svg>
-      Filters
-    </button>
+    {#if hasActiveFilters}
+      <button
+        onclick={clearFilters}
+        class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-status-rejected-text border border-status-rejected-text/30 rounded-lg hover:bg-status-rejected-bg transition-colors"
+      >
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        Clear
+      </button>
+    {/if}
   </div>
 
   {#if isLoading}
@@ -163,7 +174,16 @@
           {#each items as req}
             <tr class="hover:bg-surface-container-low transition-colors">
               <td class="px-6 py-5 text-sm font-mono text-xs text-on-surface">
-                <a href="#/requests/{req.id}" class="text-primary-container hover:text-primary" title={req.id}>{truncateId(req.id)}</a>
+                <span class="inline-flex items-center gap-1.5">
+                  <a href="#/requests/{req.id}" class="text-primary-container hover:text-primary" title={req.id}>{truncateId(req.id)}</a>
+                  <button onclick={() => handleCopyId(req.id)} class="text-on-surface-variant/40 hover:text-on-surface transition-colors" title="Copy ID">
+                    {#if copiedId === req.id}
+                      <svg class="w-3.5 h-3.5 text-status-approved-text" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    {:else}
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    {/if}
+                  </button>
+                </span>
               </td>
               <td class="px-6 py-5 text-sm text-on-surface">{req.type}</td>
               <td class="px-6 py-5 text-sm"><StatusBadge status={req.status} /></td>

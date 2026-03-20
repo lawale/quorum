@@ -1,7 +1,7 @@
 <script lang="ts">
   import { policies as policiesApi, requests as requestsApi } from '../lib/api';
   import { addToast, selectedTenant, availableTenants } from '../lib/stores';
-  import { formatDate } from '../lib/utils';
+  import { formatDate, formatDuration } from '../lib/utils';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import EmptyState from '../components/EmptyState.svelte';
   import type { Policy } from '../lib/types';
@@ -109,7 +109,7 @@
               </td>
               <td class="px-6 py-5 text-sm text-on-surface-variant"><code class="bg-surface-container px-2 py-0.5 rounded text-xs">{policy.request_type}</code></td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{policy.stages.length} stage{policy.stages.length !== 1 ? 's' : ''}</td>
-              <td class="px-6 py-5 text-sm text-on-surface-variant">{policy.auto_expire_duration || '—'}</td>
+              <td class="px-6 py-5 text-sm text-on-surface-variant">{policy.auto_expire_duration ? formatDuration(policy.auto_expire_duration) : '—'}</td>
               <td class="px-6 py-5 text-sm text-on-surface-variant"><code class="bg-surface-container px-2 py-0.5 rounded text-xs">{tenantMap[policy.tenant_id] || policy.tenant_id}</code></td>
               <td class="px-6 py-5 text-sm text-on-surface-variant">{formatDate(policy.created_at)}</td>
               <td class="px-6 py-5 text-right text-sm">
