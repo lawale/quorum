@@ -8,7 +8,7 @@
 
 <div class="flex min-h-screen">
   <Sidebar />
-  <main class="flex-1 bg-gray-50">
+  <main class="flex-1 bg-surface">
     <div class="p-8">
       {@render children()}
     </div>

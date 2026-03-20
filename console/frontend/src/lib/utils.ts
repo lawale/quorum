@@ -60,11 +60,11 @@ export function formatDetails(details: Record<string, unknown>, action?: string)
  */
 export function statusColor(status: string): string {
   switch (status) {
-    case 'pending': return 'bg-yellow-100 text-yellow-800';
-    case 'approved': return 'bg-green-100 text-green-800';
-    case 'rejected': return 'bg-red-100 text-red-800';
-    case 'cancelled': return 'bg-gray-100 text-gray-800';
-    case 'expired': return 'bg-orange-100 text-orange-800';
-    default: return 'bg-gray-100 text-gray-600';
+    case 'pending': return 'bg-status-pending-bg text-status-pending-text';
+    case 'approved': return 'bg-status-approved-bg text-status-approved-text';
+    case 'rejected': return 'bg-status-rejected-bg text-status-rejected-text';
+    case 'cancelled': return 'bg-status-cancelled-bg text-status-cancelled-text';
+    case 'expired': return 'bg-status-expired-bg text-status-expired-text';
+    default: return 'bg-surface-container text-on-surface-variant';
   }
 }

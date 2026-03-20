@@ -144,11 +144,12 @@
 
 <style>
   .list-container {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    border: 1px solid #e5e7eb;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    border: none;
+    box-shadow: 0 4px 24px -4px rgba(25, 28, 29, 0.06);
     border-radius: 8px;
     background: #fff;
-    color: #111827;
+    color: #191c1d;
     overflow: hidden;
   }
   .loading, .error-box, .empty {
@@ -156,9 +157,9 @@
     padding: 24px 16px;
     text-align: center;
   }
-  .loading { color: #6b7280; }
+  .loading { color: #464555; }
   .error-box { color: #ef4444; }
-  .empty { color: #9ca3af; }
+  .empty { color: #464555; }
   .table {
     width: 100%;
     border-collapse: collapse;
@@ -171,41 +172,41 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: #6b7280;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
+    color: #464555;
+    background: #f3f4f5;
+    border-bottom: 1px solid rgba(199, 196, 216, 0.15);
   }
   td {
     padding: 10px 12px;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid #f3f4f5;
   }
   .row {
     cursor: pointer;
     transition: background 0.1s;
   }
-  .row:hover { background: #f9fafb; }
+  .row:hover { background: #f3f4f5; }
   .type-cell { font-family: monospace; font-size: 12px; }
-  .maker-cell { color: #374151; }
-  .stage-cell { color: #6b7280; text-align: center; }
-  .time-cell { color: #9ca3af; white-space: nowrap; font-size: 12px; }
+  .maker-cell { color: #191c1d; }
+  .stage-cell { color: #464555; text-align: center; }
+  .time-cell { color: #464555; white-space: nowrap; font-size: 12px; }
   .pagination {
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid rgba(199, 196, 216, 0.15);
   }
   .page-btn {
     padding: 4px 12px;
     font-size: 12px;
-    border: 1px solid #d1d5db;
+    border: 1px solid rgba(199, 196, 216, 0.40);
     border-radius: 4px;
     background: #fff;
-    color: #374151;
+    color: #191c1d;
     cursor: pointer;
   }
-  .page-btn:hover:not(:disabled) { background: #f3f4f6; }
+  .page-btn:hover:not(:disabled) { background: #f3f4f5; }
   .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .page-info { font-size: 12px; color: #6b7280; }
+  .page-info { font-size: 12px; color: #464555; }
 </style>

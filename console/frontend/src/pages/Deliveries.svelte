@@ -50,11 +50,11 @@
 
   function statusBadgeClass(status: string): string {
     switch (status) {
-      case 'delivered': return 'bg-green-100 text-green-800';
-      case 'failed': return 'bg-red-100 text-red-800';
-      case 'processing': return 'bg-blue-100 text-blue-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-600';
+      case 'delivered': return 'bg-status-approved-bg text-status-approved-text';
+      case 'failed': return 'bg-status-rejected-bg text-status-rejected-text';
+      case 'processing': return 'bg-surface-container text-on-surface-variant';
+      case 'pending': return 'bg-status-pending-bg text-status-pending-text';
+      default: return 'bg-surface-container text-on-surface-variant';
     }
   }
 
@@ -71,12 +71,12 @@
 
 <div>
   <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Deliveries</h1>
+    <h1 class="text-2xl font-bold text-on-surface">Deliveries</h1>
     <div class="flex items-center gap-3">
       <select
         bind:value={statusFilter}
         onchange={() => { page = 1; loadEntries(); }}
-        class="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        class="text-sm border border-outline-variant/40 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary"
       >
         <option value="">All statuses</option>
         <option value="pending">Pending</option>
@@ -90,47 +90,47 @@
   {#if isLoading}
     <LoadingSpinner />
   {:else if entries.length === 0}
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-8 text-center">
-      <p class="text-gray-500">No delivery entries found.</p>
+    <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-8 text-center">
+      <p class="text-on-surface-variant">No delivery entries found.</p>
     </div>
   {:else}
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+    <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl overflow-hidden">
+      <table class="min-w-full divide-y divide-outline-variant/15">
+        <thead class="bg-surface-container-low">
           <tr>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Webhook URL</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attempts</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Error</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">ID</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Webhook URL</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Status</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Attempts</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Last Error</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Created</th>
+            <th class="px-4 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200">
+        <tbody class="divide-y divide-outline-variant/15">
           {#each entries as entry}
-            <tr class="hover:bg-gray-50">
+            <tr class="hover:bg-surface-container-low">
               <td class="px-4 py-3">
-                <a href="#/requests/{entry.request_id}" class="text-xs font-mono text-indigo-600 hover:text-indigo-800">{truncateId(entry.id)}</a>
+                <a href="#/requests/{entry.request_id}" class="text-xs font-mono text-primary-container hover:text-primary">{truncateId(entry.id)}</a>
               </td>
-              <td class="px-4 py-3 text-xs font-mono text-gray-700" title={entry.webhook_url}>{truncateUrl(entry.webhook_url)}</td>
+              <td class="px-4 py-3 text-xs font-mono text-on-surface" title={entry.webhook_url}>{truncateUrl(entry.webhook_url)}</td>
               <td class="px-4 py-3">
                 <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium {statusBadgeClass(entry.status)}">{entry.status}</span>
               </td>
-              <td class="px-4 py-3 text-sm text-gray-700">{entry.attempts} / {entry.max_retries}</td>
-              <td class="px-4 py-3 text-xs text-red-600 max-w-[200px] truncate" title={entry.last_error || ''}>{entry.last_error || '—'}</td>
-              <td class="px-4 py-3 text-xs text-gray-500">{formatDate(entry.created_at)}</td>
+              <td class="px-4 py-3 text-sm text-on-surface">{entry.attempts} / {entry.max_retries}</td>
+              <td class="px-4 py-3 text-xs text-status-rejected-text max-w-[200px] truncate" title={entry.last_error || ''}>{entry.last_error || '—'}</td>
+              <td class="px-4 py-3 text-xs text-on-surface-variant">{formatDate(entry.created_at)}</td>
               <td class="px-4 py-3">
                 {#if entry.status === 'failed'}
                   <button
                     onclick={() => retryEntry(entry.id)}
                     disabled={retryingId === entry.id}
-                    class="text-xs text-indigo-600 hover:text-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="text-xs text-primary-container hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {retryingId === entry.id ? 'Retrying…' : 'Retry'}
                   </button>
                 {:else}
-                  <span class="text-xs text-gray-400">—</span>
+                  <span class="text-xs text-on-surface-variant/60">—</span>
                 {/if}
               </td>
             </tr>
@@ -142,14 +142,14 @@
     <!-- Pagination -->
     {#if totalPages > 1}
       <div class="flex items-center justify-between mt-4">
-        <p class="text-sm text-gray-500">{total} total entries</p>
+        <p class="text-sm text-on-surface-variant">{total} total entries</p>
         <div class="flex gap-2">
           <button
             onclick={() => { page = Math.max(1, page - 1); loadEntries(); }}
             disabled={page <= 1}
             class="px-3 py-1 text-sm border rounded-md disabled:opacity-50"
           >Prev</button>
-          <span class="px-3 py-1 text-sm text-gray-600">Page {page} of {totalPages}</span>
+          <span class="px-3 py-1 text-sm text-on-surface-variant">Page {page} of {totalPages}</span>
           <button
             onclick={() => { page = Math.min(totalPages, page + 1); loadEntries(); }}
             disabled={page >= totalPages}

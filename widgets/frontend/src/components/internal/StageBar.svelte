@@ -103,11 +103,11 @@
     width: 100%;
     overflow-x: auto;
     scrollbar-width: thin;
-    scrollbar-color: #d1d5db transparent;
+    scrollbar-color: #c7c4d8 transparent;
   }
   .stage-bar::-webkit-scrollbar { height: 4px; }
   .stage-bar::-webkit-scrollbar-track { background: transparent; }
-  .stage-bar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+  .stage-bar::-webkit-scrollbar-thumb { background: #c7c4d8; border-radius: 2px; }
   .stage {
     display: flex;
     flex-direction: column;
@@ -129,8 +129,8 @@
     justify-content: center;
     font-size: 12px;
     font-weight: 600;
-    border: 2px solid #d1d5db;
-    color: #9ca3af;
+    border: 2px solid #c7c4d8;
+    color: #464555;
     background: #fff;
     transition: all 0.2s;
   }
@@ -147,9 +147,9 @@
     color: #fff;
   }
   .current .indicator {
-    border-color: #6366f1;
-    color: #6366f1;
-    background: #eef2ff;
+    border-color: #4f46e5;
+    color: #4f46e5;
+    background: rgba(79, 70, 229, 0.08);
   }
   .failed .indicator {
     border-color: #ef4444;
@@ -165,7 +165,7 @@
   }
   .name {
     font-size: 11px;
-    color: #374151;
+    color: #191c1d;
     font-weight: 500;
     text-align: center;
     max-width: 100px;
@@ -175,12 +175,12 @@
   }
   .count {
     font-size: 10px;
-    color: #9ca3af;
+    color: #464555;
   }
   .connector {
     flex: 1;
     height: 2px;
-    background: #e5e7eb;
+    background: #edeeef;
     min-width: 48px;
     flex-shrink: 0;
     margin-bottom: 24px;

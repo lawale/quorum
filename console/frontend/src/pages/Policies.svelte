@@ -36,8 +36,8 @@
 
 <div>
   <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Policies</h1>
-    <a href="#/policies/new" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors">
+    <h1 class="text-2xl font-bold text-on-surface">Policies</h1>
+    <a href="#/policies/new" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-br from-primary to-primary-container rounded-md hover:brightness-110 transition-all">
       Create Policy
     </a>
   </div>
@@ -47,31 +47,31 @@
   {:else if items.length === 0}
     <EmptyState message="No policies configured yet." actionLabel="Create your first policy" onaction={() => { window.location.hash = '#/policies/new'; }} />
   {:else}
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+    <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl overflow-hidden">
+      <table class="min-w-full divide-y divide-outline-variant/15">
+        <thead class="bg-surface-container-low">
           <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenant</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Request Type</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stages</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Name</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Tenant</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Request Type</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Stages</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Created</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-on-surface-variant uppercase">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200">
+        <tbody class="divide-y divide-outline-variant/15">
           {#each items as policy}
-            <tr class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                <a href="#/policies/{policy.id}" class="text-indigo-600 hover:text-indigo-800">{policy.name}</a>
+            <tr class="hover:bg-surface-container-low">
+              <td class="px-6 py-4 text-sm font-medium text-on-surface">
+                <a href="#/policies/{policy.id}" class="text-primary-container hover:text-primary">{policy.name}</a>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-500"><code class="bg-gray-100 px-2 py-0.5 rounded text-xs">{policy.tenant_id}</code></td>
-              <td class="px-6 py-4 text-sm text-gray-500"><code class="bg-gray-100 px-2 py-0.5 rounded text-xs">{policy.request_type}</code></td>
-              <td class="px-6 py-4 text-sm text-gray-500">{policy.stages.length} stage{policy.stages.length !== 1 ? 's' : ''}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">{formatDate(policy.created_at)}</td>
+              <td class="px-6 py-4 text-sm text-on-surface-variant"><code class="bg-surface-container px-2 py-0.5 rounded text-xs">{policy.tenant_id}</code></td>
+              <td class="px-6 py-4 text-sm text-on-surface-variant"><code class="bg-surface-container px-2 py-0.5 rounded text-xs">{policy.request_type}</code></td>
+              <td class="px-6 py-4 text-sm text-on-surface-variant">{policy.stages.length} stage{policy.stages.length !== 1 ? 's' : ''}</td>
+              <td class="px-6 py-4 text-sm text-on-surface-variant">{formatDate(policy.created_at)}</td>
               <td class="px-6 py-4 text-right text-sm">
-                <a href="#/policies/{policy.id}" class="text-indigo-600 hover:text-indigo-800 mr-3">Edit</a>
-                <button onclick={() => handleDelete(policy.id, policy.name)} class="text-red-600 hover:text-red-800">Delete</button>
+                <a href="#/policies/{policy.id}" class="text-primary-container hover:text-primary mr-3">Edit</a>
+                <button onclick={() => handleDelete(policy.id, policy.name)} class="text-status-rejected-text hover:text-red-800">Delete</button>
               </td>
             </tr>
           {/each}

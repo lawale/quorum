@@ -37,7 +37,7 @@
     display: flex;
     gap: 12px;
     padding: 8px 0;
-    border-left: 2px solid #e5e7eb;
+    border-left: 2px solid #edeeef;
     margin-left: 6px;
     padding-left: 16px;
     position: relative;
@@ -67,17 +67,17 @@
   }
   .time {
     font-size: 11px;
-    color: #9ca3af;
+    color: #464555;
     white-space: nowrap;
   }
   .actor {
     font-size: 12px;
-    color: #6b7280;
+    color: #464555;
     margin-top: 1px;
   }
   .details {
     font-size: 11px;
-    color: #9ca3af;
+    color: #464555;
     margin-top: 4px;
     font-family: monospace;
     white-space: pre-line;
@@ -85,7 +85,7 @@
   }
   .empty {
     font-size: 13px;
-    color: #9ca3af;
+    color: #464555;
     padding: 8px 0;
   }
 </style>

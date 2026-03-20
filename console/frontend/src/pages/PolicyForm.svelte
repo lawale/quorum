@@ -152,31 +152,31 @@
 
 <div>
   <div class="mb-6">
-    <a href="#/policies" class="text-sm text-gray-500 hover:text-gray-700">&larr; Back to policies</a>
-    <h1 class="text-2xl font-bold text-gray-900 mt-2">{isEdit ? 'Edit Policy' : 'Create Policy'}</h1>
+    <a href="#/policies" class="text-sm text-on-surface-variant hover:text-on-surface">&larr; Back to policies</a>
+    <h1 class="text-2xl font-bold text-on-surface mt-2">{isEdit ? 'Edit Policy' : 'Create Policy'}</h1>
   </div>
 
   {#if isLoading}
     <LoadingSpinner />
   {:else}
-    <form onsubmit={handleSubmit} class="bg-white shadow-sm rounded-lg border border-gray-200 p-6 space-y-6 max-w-3xl">
+    <form onsubmit={handleSubmit} class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-6 space-y-6 max-w-3xl">
       {#if error}
-        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">{error}</div>
+        <div class="bg-status-rejected-bg border-status-rejected-text/20 text-status-rejected-text px-4 py-3 rounded text-sm">{error}</div>
       {/if}
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label for="name" class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-          <input id="name" type="text" bind:value={name} oninput={() => clearFieldError('name')} required class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.name ? 'border-red-300' : 'border-gray-300'}" />
+          <label for="name" class="block text-sm font-medium text-on-surface mb-1">Name</label>
+          <input id="name" type="text" bind:value={name} oninput={() => clearFieldError('name')} required class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.name ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}" />
           {#if validationErrors.name}
-            <p class="mt-1 text-xs text-red-600">{validationErrors.name}</p>
+            <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.name}</p>
           {/if}
         </div>
         <div>
-          <label for="requestType" class="block text-sm font-medium text-gray-700 mb-1">Request Type</label>
-          <input id="requestType" type="text" bind:value={requestType} oninput={() => clearFieldError('requestType')} required disabled={isEdit} class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 {validationErrors.requestType ? 'border-red-300' : 'border-gray-300'}" />
+          <label for="requestType" class="block text-sm font-medium text-on-surface mb-1">Request Type</label>
+          <input id="requestType" type="text" bind:value={requestType} oninput={() => clearFieldError('requestType')} required disabled={isEdit} class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary disabled:bg-surface-container {validationErrors.requestType ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}" />
           {#if validationErrors.requestType}
-            <p class="mt-1 text-xs text-red-600">{validationErrors.requestType}</p>
+            <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.requestType}</p>
           {/if}
         </div>
       </div>
@@ -184,33 +184,33 @@
       <!-- Stages -->
       <div>
         <div class="flex items-center justify-between mb-3">
-          <label class="block text-sm font-medium text-gray-700">Approval Stages</label>
-          <button type="button" onclick={addStage} class="text-sm text-indigo-600 hover:text-indigo-800">+ Add Stage</button>
+          <label class="block text-sm font-medium text-on-surface">Approval Stages</label>
+          <button type="button" onclick={addStage} class="text-sm text-primary-container hover:text-primary">+ Add Stage</button>
         </div>
         <div class="space-y-3">
           {#each stages as stage, i}
-            <div class="border border-gray-200 rounded-md p-4 bg-gray-50">
+            <div class="rounded-lg p-4 bg-surface-container-low">
               <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-medium text-gray-700">Stage {i + 1}</span>
+                <span class="text-sm font-medium text-on-surface">Stage {i + 1}</span>
                 {#if stages.length > 1}
-                  <button type="button" onclick={() => removeStage(i)} class="text-xs text-red-600 hover:text-red-800">Remove</button>
+                  <button type="button" onclick={() => removeStage(i)} class="text-xs text-status-rejected-text hover:text-red-800">Remove</button>
                 {/if}
               </div>
               <div class="grid grid-cols-3 gap-3">
                 <div>
-                  <label class="block text-xs text-gray-500 mb-1">Name</label>
-                  <input type="text" bind:value={stages[i].name} class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md" />
+                  <label class="block text-xs text-on-surface-variant mb-1">Name</label>
+                  <input type="text" bind:value={stages[i].name} class="w-full px-2 py-1.5 text-sm border border-outline-variant/40 rounded-md" />
                 </div>
                 <div>
-                  <label class="block text-xs text-gray-500 mb-1">Required Approvals</label>
-                  <input type="number" min="1" bind:value={stages[i].required_approvals} oninput={() => clearFieldError(`stage_${i}_approvals`)} class="w-full px-2 py-1.5 text-sm border rounded-md {validationErrors[`stage_${i}_approvals`] ? 'border-red-300' : 'border-gray-300'}" />
+                  <label class="block text-xs text-on-surface-variant mb-1">Required Approvals</label>
+                  <input type="number" min="1" bind:value={stages[i].required_approvals} oninput={() => clearFieldError(`stage_${i}_approvals`)} class="w-full px-2 py-1.5 text-sm border rounded-md {validationErrors[`stage_${i}_approvals`] ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}" />
                   {#if validationErrors[`stage_${i}_approvals`]}
-                    <p class="mt-1 text-xs text-red-600">{validationErrors[`stage_${i}_approvals`]}</p>
+                    <p class="mt-1 text-xs text-status-rejected-text">{validationErrors[`stage_${i}_approvals`]}</p>
                   {/if}
                 </div>
                 <div>
-                  <label class="block text-xs text-gray-500 mb-1">Rejection Policy</label>
-                  <select bind:value={stages[i].rejection_policy} class="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md">
+                  <label class="block text-xs text-on-surface-variant mb-1">Rejection Policy</label>
+                  <select bind:value={stages[i].rejection_policy} class="w-full px-2 py-1.5 text-sm border border-outline-variant/40 rounded-md">
                     <option value="any">Any rejection</option>
                     <option value="threshold">Threshold</option>
                   </select>
@@ -223,56 +223,56 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label for="identityFields" class="block text-sm font-medium text-gray-700 mb-1">Identity Fields <span class="text-gray-400">(comma-separated)</span></label>
-          <input id="identityFields" type="text" bind:value={identityFields} oninput={() => clearFieldError('identityFields')} placeholder="account_id, user_id" class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.identityFields ? 'border-red-300' : 'border-gray-300'}" />
+          <label for="identityFields" class="block text-sm font-medium text-on-surface mb-1">Identity Fields <span class="text-on-surface-variant/60">(comma-separated)</span></label>
+          <input id="identityFields" type="text" bind:value={identityFields} oninput={() => clearFieldError('identityFields')} placeholder="account_id, user_id" class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.identityFields ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}" />
           {#if validationErrors.identityFields}
-            <p class="mt-1 text-xs text-red-600">{validationErrors.identityFields}</p>
+            <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.identityFields}</p>
           {/if}
         </div>
         <div>
-          <label for="autoExpire" class="block text-sm font-medium text-gray-700 mb-1">Auto Expire Duration</label>
-          <input id="autoExpire" type="text" bind:value={autoExpireDuration} oninput={() => clearFieldError('autoExpireDuration')} placeholder="24h, 30m" class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.autoExpireDuration ? 'border-red-300' : 'border-gray-300'}" />
+          <label for="autoExpire" class="block text-sm font-medium text-on-surface mb-1">Auto Expire Duration</label>
+          <input id="autoExpire" type="text" bind:value={autoExpireDuration} oninput={() => clearFieldError('autoExpireDuration')} placeholder="24h, 30m" class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.autoExpireDuration ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}" />
           {#if validationErrors.autoExpireDuration}
-            <p class="mt-1 text-xs text-red-600">{validationErrors.autoExpireDuration}</p>
+            <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.autoExpireDuration}</p>
           {/if}
         </div>
       </div>
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label for="permUrl" class="block text-sm font-medium text-gray-700 mb-1">Dynamic Authorization URL <span class="text-gray-400">(optional)</span></label>
-          <input id="permUrl" type="url" bind:value={dynamicAuthorizationUrl} oninput={() => clearFieldError('dynamicAuthorizationUrl')} placeholder="https://..." class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.dynamicAuthorizationUrl ? 'border-red-300' : 'border-gray-300'}" />
+          <label for="permUrl" class="block text-sm font-medium text-on-surface mb-1">Dynamic Authorization URL <span class="text-on-surface-variant/60">(optional)</span></label>
+          <input id="permUrl" type="url" bind:value={dynamicAuthorizationUrl} oninput={() => clearFieldError('dynamicAuthorizationUrl')} placeholder="https://..." class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.dynamicAuthorizationUrl ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}" />
           {#if validationErrors.dynamicAuthorizationUrl}
-            <p class="mt-1 text-xs text-red-600">{validationErrors.dynamicAuthorizationUrl}</p>
+            <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.dynamicAuthorizationUrl}</p>
           {/if}
         </div>
         <div>
-          <label for="permSecret" class="block text-sm font-medium text-gray-700 mb-1">Authorization Secret <span class="text-gray-400">(optional)</span></label>
-          <input id="permSecret" type="password" bind:value={dynamicAuthorizationSecret} placeholder={isEdit ? 'Leave blank to keep unchanged' : 'HMAC signing secret'} class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+          <label for="permSecret" class="block text-sm font-medium text-on-surface mb-1">Authorization Secret <span class="text-on-surface-variant/60">(optional)</span></label>
+          <input id="permSecret" type="password" bind:value={dynamicAuthorizationSecret} placeholder={isEdit ? 'Leave blank to keep unchanged' : 'HMAC signing secret'} class="w-full px-3 py-2 border border-outline-variant/40 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary" />
         </div>
       </div>
 
       <div>
-        <label for="displayTemplate" class="block text-sm font-medium text-gray-700 mb-1">Display Template <span class="text-gray-400">(optional JSON)</span></label>
+        <label for="displayTemplate" class="block text-sm font-medium text-on-surface mb-1">Display Template <span class="text-on-surface-variant/60">(optional JSON)</span></label>
         <textarea
           id="displayTemplate"
           bind:value={displayTemplateJson}
           oninput={() => displayTemplateError = ''}
           rows="6"
           placeholder="See docs for template format"
-          class="w-full px-3 py-2 border rounded-md shadow-sm font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 {displayTemplateError ? 'border-red-300' : 'border-gray-300'}"
+          class="w-full px-3 py-2 border rounded-md shadow-sm font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary {displayTemplateError ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
         ></textarea>
         {#if displayTemplateError}
-          <p class="mt-1 text-xs text-red-600">{displayTemplateError}</p>
+          <p class="mt-1 text-xs text-status-rejected-text">{displayTemplateError}</p>
         {/if}
-        <p class="mt-1 text-xs text-gray-400">Maps payload fields to human-readable labels for reviewers. Formatters: currency, date, number, truncate.</p>
+        <p class="mt-1 text-xs text-on-surface-variant/60">Maps payload fields to human-readable labels for reviewers. Formatters: currency, date, number, truncate.</p>
       </div>
 
-      <div class="flex items-center gap-3 pt-4 border-t border-gray-200">
-        <button type="submit" disabled={submitting} class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+      <div class="flex items-center gap-3 pt-4 border-t border-outline-variant/15">
+        <button type="submit" disabled={submitting} class="px-4 py-2 text-sm font-medium text-white bg-gradient-to-br from-primary to-primary-container rounded-md hover:brightness-110 disabled:opacity-50 transition-all">
           {submitting ? 'Saving...' : isEdit ? 'Update Policy' : 'Create Policy'}
         </button>
-        <a href="#/policies" class="px-4 py-2 text-sm text-gray-700 hover:text-gray-900">Cancel</a>
+        <a href="#/policies" class="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface">Cancel</a>
       </div>
     </form>
   {/if}

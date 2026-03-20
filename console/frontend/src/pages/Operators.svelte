@@ -105,8 +105,8 @@
 
 <div>
   <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold text-gray-900">Operators</h1>
-    <button onclick={openCreateModal} class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors">
+    <h1 class="text-2xl font-bold text-on-surface">Operators</h1>
+    <button onclick={openCreateModal} class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-br from-primary to-primary-container rounded-md hover:brightness-110 transition-all">
       Create Operator
     </button>
   </div>
@@ -116,24 +116,24 @@
   {:else if items.length === 0}
     <EmptyState message="No operators found." actionLabel="Create your first operator" onaction={openCreateModal} />
   {:else}
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
+    <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl overflow-hidden">
+      <table class="min-w-full divide-y divide-outline-variant/15">
+        <thead class="bg-surface-container-low">
           <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Display Name</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Username</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Display Name</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Created</th>
+            <th class="px-6 py-3 text-right text-xs font-medium text-on-surface-variant uppercase">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200">
+        <tbody class="divide-y divide-outline-variant/15">
           {#each items as op}
-            <tr class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm font-medium text-gray-900">{op.username}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">{op.display_name || '—'}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">{formatDate(op.created_at)}</td>
+            <tr class="hover:bg-surface-container-low">
+              <td class="px-6 py-4 text-sm font-medium text-on-surface">{op.username}</td>
+              <td class="px-6 py-4 text-sm text-on-surface-variant">{op.display_name || '—'}</td>
+              <td class="px-6 py-4 text-sm text-on-surface-variant">{formatDate(op.created_at)}</td>
               <td class="px-6 py-4 text-right text-sm">
-                <button onclick={() => handleDelete(op)} class="text-red-600 hover:text-red-800">Delete</button>
+                <button onclick={() => handleDelete(op)} class="text-status-rejected-text hover:text-red-800">Delete</button>
               </td>
             </tr>
           {/each}
@@ -147,58 +147,58 @@
 <Modal open={showCreateModal} title="Create Operator" onclose={() => showCreateModal = false}>
   <form onsubmit={handleCreate} class="space-y-4">
     {#if createError}
-      <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">{createError}</div>
+      <div class="bg-status-rejected-bg border border-status-rejected-text/20 text-status-rejected-text px-4 py-3 rounded text-sm">{createError}</div>
     {/if}
 
     <div>
-      <label for="newUsername" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+      <label for="newUsername" class="block text-sm font-medium text-on-surface mb-1">Username</label>
       <input
         id="newUsername"
         type="text"
         bind:value={newUsername}
         oninput={() => clearFieldError('username')}
         required
-        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.username ? 'border-red-300' : 'border-gray-300'}"
+        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.username ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
       />
       {#if validationErrors.username}
-        <p class="mt-1 text-xs text-red-600">{validationErrors.username}</p>
+        <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.username}</p>
       {/if}
     </div>
 
     <div>
-      <label for="newDisplayName" class="block text-sm font-medium text-gray-700 mb-1">Display Name</label>
+      <label for="newDisplayName" class="block text-sm font-medium text-on-surface mb-1">Display Name</label>
       <input
         id="newDisplayName"
         type="text"
         bind:value={newDisplayName}
         oninput={() => clearFieldError('displayName')}
-        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.displayName ? 'border-red-300' : 'border-gray-300'}"
+        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.displayName ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
       />
       {#if validationErrors.displayName}
-        <p class="mt-1 text-xs text-red-600">{validationErrors.displayName}</p>
+        <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.displayName}</p>
       {/if}
     </div>
 
     <div>
-      <label for="newPassword" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+      <label for="newPassword" class="block text-sm font-medium text-on-surface mb-1">Password</label>
       <input
         id="newPassword"
         type="password"
         bind:value={newPassword}
         oninput={() => clearFieldError('password')}
         required
-        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.password ? 'border-red-300' : 'border-gray-300'}"
+        class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.password ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
       />
       {#if validationErrors.password}
-        <p class="mt-1 text-xs text-red-600">{validationErrors.password}</p>
+        <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.password}</p>
       {/if}
     </div>
 
     <div class="flex items-center gap-3 pt-2">
-      <button type="submit" disabled={creating} class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+      <button type="submit" disabled={creating} class="px-4 py-2 text-sm font-medium text-white bg-gradient-to-br from-primary to-primary-container rounded-md hover:brightness-110 disabled:opacity-50 transition-all">
         {creating ? 'Creating…' : 'Create Operator'}
       </button>
-      <button type="button" onclick={() => showCreateModal = false} class="px-4 py-2 text-sm text-gray-700 hover:text-gray-900">
+      <button type="button" onclick={() => showCreateModal = false} class="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface">
         Cancel
       </button>
     </div>

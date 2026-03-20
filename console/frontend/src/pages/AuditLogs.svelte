@@ -36,39 +36,42 @@
 
   function actionColor(action: string): string {
     switch (action) {
-      case 'created': return 'bg-blue-100 text-blue-800';
-      case 'approved': return 'bg-green-100 text-green-800';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      case 'cancelled': return 'bg-gray-100 text-gray-800';
-      case 'expired': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-600';
+      case 'created':
+      case 'webhook_sent':
+      case 'webhook_failed': return 'bg-surface-container text-on-surface-variant';
+      case 'approved':
+      case 'stage_advanced': return 'bg-status-approved-bg text-status-approved-text';
+      case 'rejected': return 'bg-status-rejected-bg text-status-rejected-text';
+      case 'cancelled':
+      case 'expired': return 'bg-surface-container text-on-surface-variant';
+      default: return 'bg-surface-container text-on-surface-variant';
     }
   }
 
 </script>
 
 <div>
-  <h1 class="text-2xl font-bold text-gray-900 mb-6">Audit Log</h1>
+  <h1 class="text-2xl font-bold text-on-surface mb-6">Audit Log</h1>
 
   <!-- Search -->
-  <form onsubmit={handleSearch} class="bg-white shadow-sm rounded-lg border border-gray-200 p-4 mb-6">
+  <form onsubmit={handleSearch} class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-4 mb-6">
     <div class="flex items-end gap-4">
       <div class="flex-1">
-        <label for="requestId" class="block text-xs font-medium text-gray-500 mb-1">Request ID</label>
+        <label for="requestId" class="block text-xs font-medium text-on-surface-variant mb-1">Request ID</label>
         <input
           id="requestId"
           type="text"
           bind:value={requestId}
           placeholder="Enter request UUID…"
-          class="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          class="w-full px-3 py-1.5 text-sm border border-outline-variant/40 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
         />
       </div>
-      <button type="submit" class="px-4 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors">
+      <button type="submit" class="px-4 py-1.5 text-sm font-medium text-white bg-gradient-to-br from-primary to-primary-container rounded-md hover:brightness-110 transition-all">
         Search
       </button>
     </div>
     {#if error}
-      <p class="text-sm text-red-600 mt-2">{error}</p>
+      <p class="text-sm text-status-rejected-text mt-2">{error}</p>
     {/if}
   </form>
 
@@ -76,43 +79,43 @@
     <LoadingSpinner />
   {:else if searched}
     {#if auditLogs.length === 0}
-      <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-6 text-center">
-        <p class="text-sm text-gray-500">No audit entries found for this request.</p>
+      <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-6 text-center">
+        <p class="text-sm text-on-surface-variant">No audit entries found for this request.</p>
       </div>
     {:else}
       <div class="space-y-1 mb-4">
-        <p class="text-sm text-gray-500">{auditLogs.length} audit {auditLogs.length === 1 ? 'entry' : 'entries'} for request
-          <a href="#/requests/{requestId.trim()}" class="text-indigo-600 hover:text-indigo-800 font-mono text-xs">{requestId.trim()}</a>
+        <p class="text-sm text-on-surface-variant">{auditLogs.length} audit {auditLogs.length === 1 ? 'entry' : 'entries'} for request
+          <a href="#/requests/{requestId.trim()}" class="text-primary-container hover:text-primary font-mono text-xs">{requestId.trim()}</a>
         </p>
       </div>
 
-      <div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
+      <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl overflow-hidden">
+        <table class="min-w-full divide-y divide-outline-variant/15">
+          <thead class="bg-surface-container-low">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actor</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Action</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Actor</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Details</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-on-surface-variant uppercase">Timestamp</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200">
+          <tbody class="divide-y divide-outline-variant/15">
             {#each auditLogs as log}
-              <tr class="hover:bg-gray-50">
+              <tr class="hover:bg-surface-container-low">
                 <td class="px-6 py-4 text-sm">
                   <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {actionColor(log.action)}">
                     {log.action}
                   </span>
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-700">{log.actor_id}</td>
-                <td class="px-6 py-4 text-sm text-gray-500">
+                <td class="px-6 py-4 text-sm text-on-surface">{log.actor_id}</td>
+                <td class="px-6 py-4 text-sm text-on-surface-variant">
                   {#if log.details && Object.keys(log.details).length > 0}
-                    <span class="text-xs text-gray-700 whitespace-pre-line">{formatDetails(log.details, log.action)}</span>
+                    <span class="text-xs text-on-surface whitespace-pre-line">{formatDetails(log.details, log.action)}</span>
                   {:else}
-                    <span class="text-gray-400">—</span>
+                    <span class="text-on-surface-variant/60">—</span>
                   {/if}
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-500">{formatDate(log.created_at)}</td>
+                <td class="px-6 py-4 text-sm text-on-surface-variant">{formatDate(log.created_at)}</td>
               </tr>
             {/each}
           </tbody>
@@ -120,8 +123,8 @@
       </div>
     {/if}
   {:else}
-    <div class="bg-white shadow-sm rounded-lg border border-gray-200 p-12 text-center">
-      <p class="text-gray-400 text-sm">Enter a request ID above to view its audit trail.</p>
+    <div class="bg-surface-container-lowest shadow-ambient-sm rounded-xl p-12 text-center">
+      <p class="text-on-surface-variant/60 text-sm">Enter a request ID above to view its audit trail.</p>
     </div>
   {/if}
 </div>

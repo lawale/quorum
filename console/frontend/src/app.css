@@ -1,1 +1,56 @@
 @import "tailwindcss";
+
+@theme {
+  /* Font */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Primary */
+  --color-primary: #3525cd;
+  --color-primary-container: #4f46e5;
+  --color-on-primary: #ffffff;
+
+  /* Surface hierarchy (tonal layering) */
+  --color-surface: #f8f9fa;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f3f4f5;
+  --color-surface-container: #edeeef;
+  --color-surface-container-high: #e4e5e7;
+  --color-surface-container-highest: #d8d9dc;
+
+  /* Text hierarchy */
+  --color-on-surface: #191c1d;
+  --color-on-surface-variant: #464555;
+
+  /* Outline */
+  --color-outline-variant: #c7c4d8;
+
+  /* Sidebar */
+  --color-sidebar: #1e293b;
+  --color-sidebar-active: rgba(255, 255, 255, 0.08);
+  --color-sidebar-hover: rgba(255, 255, 255, 0.04);
+
+  /* Status - Pending */
+  --color-status-pending-bg: #fef3c7;
+  --color-status-pending-text: #92400e;
+
+  /* Status - Approved */
+  --color-status-approved-bg: #d1fae5;
+  --color-status-approved-text: #065f46;
+
+  /* Status - Rejected */
+  --color-status-rejected-bg: #fee2e2;
+  --color-status-rejected-text: #991b1b;
+
+  /* Status - Cancelled */
+  --color-status-cancelled-bg: #f3f4f6;
+  --color-status-cancelled-text: #374151;
+
+  /* Status - Expired */
+  --color-status-expired-bg: #ffedd5;
+  --color-status-expired-text: #9a3412;
+
+  /* Ambient shadows */
+  --shadow-ambient-sm: 0 2px 8px -2px rgba(25, 28, 29, 0.06);
+  --shadow-ambient-md: 0 4px 24px -4px rgba(25, 28, 29, 0.06);
+  --shadow-ambient-lg: 0 8px 40px -4px rgba(25, 28, 29, 0.06);
+}

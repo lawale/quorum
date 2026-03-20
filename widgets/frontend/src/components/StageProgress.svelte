@@ -167,7 +167,7 @@
 
 <style>
   .container {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     padding: 12px;
   }
   .header {
@@ -178,12 +178,12 @@
   }
   .type {
     font-size: 13px;
-    color: #6b7280;
+    color: #464555;
   }
   .loading, .error {
     font-size: 13px;
     padding: 8px 0;
   }
-  .loading { color: #6b7280; }
+  .loading { color: #464555; }
   .error { color: #ef4444; }
 </style>

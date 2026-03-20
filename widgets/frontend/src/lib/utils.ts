@@ -28,7 +28,7 @@ export const STATUS_COLORS: Record<RequestStatus, { bg: string; text: string }> 
 };
 
 export const ACTION_COLORS: Record<string, string> = {
-  created: '#6366f1',
+  created: '#4f46e5',
   approved: '#10b981',
   rejected: '#ef4444',
   cancelled: '#6b7280',

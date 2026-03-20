@@ -71,22 +71,22 @@
   }
 </script>
 
-<div class="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+<div class="min-h-screen bg-surface flex items-center justify-center px-4">
   <div class="max-w-md w-full">
     <div class="text-center mb-8">
-      <h1 class="text-3xl font-bold text-gray-900">Quorum Setup</h1>
-      <p class="text-gray-500 mt-2">Create your admin account to get started</p>
+      <h1 class="text-3xl font-bold text-on-surface tracking-tight">Quorum Setup</h1>
+      <p class="text-on-surface-variant mt-2">Create your admin account to get started</p>
     </div>
 
-    <form onsubmit={handleSetup} class="bg-white rounded-lg shadow-sm border border-gray-200 p-8 space-y-6">
+    <form onsubmit={handleSetup} class="bg-surface-container-lowest rounded-xl shadow-ambient-sm p-8 space-y-6">
       {#if error}
-        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        <div class="bg-status-rejected-bg border border-status-rejected-text/20 text-status-rejected-text px-4 py-3 rounded text-sm">
           {error}
         </div>
       {/if}
 
       <div>
-        <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+        <label for="username" class="block text-sm font-medium text-on-surface mb-1">Username</label>
         <input
           id="username"
           type="text"
@@ -94,30 +94,30 @@
           oninput={() => clearFieldError('username')}
           required
           autocomplete="username"
-          class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.username ? 'border-red-300' : 'border-gray-300'}"
+          class="w-full px-3 py-2 border rounded-md shadow-ambient-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.username ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
         />
         {#if validationErrors.username}
-          <p class="mt-1 text-xs text-red-600">{validationErrors.username}</p>
+          <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.username}</p>
         {/if}
       </div>
 
       <div>
-        <label for="display-name" class="block text-sm font-medium text-gray-700 mb-1">Display Name <span class="text-gray-400">(optional)</span></label>
+        <label for="display-name" class="block text-sm font-medium text-on-surface mb-1">Display Name <span class="text-on-surface-variant/60">(optional)</span></label>
         <input
           id="display-name"
           type="text"
           bind:value={displayName}
           oninput={() => clearFieldError('displayName')}
           autocomplete="name"
-          class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.displayName ? 'border-red-300' : 'border-gray-300'}"
+          class="w-full px-3 py-2 border rounded-md shadow-ambient-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.displayName ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
         />
         {#if validationErrors.displayName}
-          <p class="mt-1 text-xs text-red-600">{validationErrors.displayName}</p>
+          <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.displayName}</p>
         {/if}
       </div>
 
       <div>
-        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <label for="password" class="block text-sm font-medium text-on-surface mb-1">Password</label>
         <input
           id="password"
           type="password"
@@ -125,15 +125,15 @@
           oninput={() => clearFieldError('password')}
           required
           autocomplete="new-password"
-          class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.password ? 'border-red-300' : 'border-gray-300'}"
+          class="w-full px-3 py-2 border rounded-md shadow-ambient-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.password ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
         />
         {#if validationErrors.password}
-          <p class="mt-1 text-xs text-red-600">{validationErrors.password}</p>
+          <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.password}</p>
         {/if}
       </div>
 
       <div>
-        <label for="confirm-password" class="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+        <label for="confirm-password" class="block text-sm font-medium text-on-surface mb-1">Confirm Password</label>
         <input
           id="confirm-password"
           type="password"
@@ -141,17 +141,17 @@
           oninput={() => clearFieldError('confirmPassword')}
           required
           autocomplete="new-password"
-          class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 {validationErrors.confirmPassword ? 'border-red-300' : 'border-gray-300'}"
+          class="w-full px-3 py-2 border rounded-md shadow-ambient-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary {validationErrors.confirmPassword ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
         />
         {#if validationErrors.confirmPassword}
-          <p class="mt-1 text-xs text-red-600">{validationErrors.confirmPassword}</p>
+          <p class="mt-1 text-xs text-status-rejected-text">{validationErrors.confirmPassword}</p>
         {/if}
       </div>
 
       <button
         type="submit"
         disabled={submitting}
-        class="w-full py-2 px-4 bg-indigo-600 text-white font-medium rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        class="w-full py-2 px-4 bg-gradient-to-br from-primary to-primary-container text-white font-medium rounded-md hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all"
       >
         {submitting ? 'Creating account...' : 'Create Admin Account'}
       </button>
