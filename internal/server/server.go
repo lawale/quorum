@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/config"
 	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/metrics"
 	"github.com/lawale/quorum/internal/service"
@@ -49,8 +50,7 @@ type Config struct {
 	AuthProvider    auth.Provider
 	ConsoleEnabled  bool
 	SecureCookies   bool
-	RolesURL        string
-	PermissionsURL  string
+	Suggestions     config.SuggestionsConfig
 	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
 	EmbedHandler    http.Handler // Widget JS handler from widgets package (nil when built without tag)
 	HealthCheckers  []health.HealthChecker
@@ -82,7 +82,7 @@ func New(cfg Config) *Server {
 	}
 
 	if cfg.OperatorService != nil {
-		s.consoleHandler = NewConsoleHandler(cfg.OperatorService, cfg.TenantService, cfg.SecureCookies, cfg.RolesURL, cfg.PermissionsURL)
+		s.consoleHandler = NewConsoleHandler(cfg.OperatorService, cfg.TenantService, cfg.SecureCookies, cfg.Suggestions)
 	}
 
 	s.setupRoutes()

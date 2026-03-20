@@ -59,7 +59,7 @@
   }
 </script>
 
-<aside class="w-64 bg-sidebar text-white flex flex-col min-h-screen">
+<aside class="w-64 bg-sidebar text-white flex flex-col sticky top-0 h-screen overflow-y-auto">
   <!-- Logo -->
   <div class="px-6 py-5 flex items-center gap-3">
     <div class="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">

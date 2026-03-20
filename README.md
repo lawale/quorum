@@ -424,8 +424,10 @@ See [`config.example.yaml`](config.example.yaml) for all available options.
 | `console.enabled` | `false` | Enable admin console API routes |
 | `console.jwt_secret` | (auto) | JWT signing secret for console sessions |
 | `console.secure_cookies` | `false` | Set `true` in production (HTTPS) |
-| `console.roles_url` | `""` | External endpoint returning JSON `[]string` of available roles |
-| `console.permissions_url` | `""` | External endpoint returning JSON `[]string` of available permissions |
+| `console.suggestions.roles_url` | `""` | External endpoint returning JSON `[]string` of available roles |
+| `console.suggestions.permissions_url` | `""` | External endpoint returning JSON `[]string` of available permissions |
+| `console.suggestions.auth_header` | `""` | Header name for upstream auth (e.g., `X-Api-Key`, `Authorization`) |
+| `console.suggestions.auth_value` | `""` | Header value (e.g., `sk-abc123`, `Bearer token123`) |
 
 #### Environment Variable Overrides
 
@@ -453,8 +455,10 @@ Every config field can be overridden via environment variables using the `QUORUM
 | `QUORUM_CONSOLE_ENABLED` | `console.enabled` |
 | `QUORUM_CONSOLE_JWT_SECRET` | `console.jwt_secret` |
 | `QUORUM_CONSOLE_SECURE_COOKIES` | `console.secure_cookies` |
-| `QUORUM_CONSOLE_ROLES_URL` | `console.roles_url` |
-| `QUORUM_CONSOLE_PERMISSIONS_URL` | `console.permissions_url` |
+| `QUORUM_CONSOLE_SUGGESTIONS_ROLES_URL` | `console.suggestions.roles_url` |
+| `QUORUM_CONSOLE_SUGGESTIONS_PERMISSIONS_URL` | `console.suggestions.permissions_url` |
+| `QUORUM_CONSOLE_SUGGESTIONS_AUTH_HEADER` | `console.suggestions.auth_header` |
+| `QUORUM_CONSOLE_SUGGESTIONS_AUTH_VALUE` | `console.suggestions.auth_value` |
 
 **Precedence:** Environment variables take the highest priority, overriding both YAML config values and defaults. Duration values use Go syntax (e.g., `30s`, `5m`, `1h`). Invalid values are ignored with a warning log.
 
@@ -520,8 +524,11 @@ Visit `http://localhost:8080/console/` after starting the server. On first run, 
 ```yaml
 console:
   enabled: true
-  roles_url: "https://your-idp.example.com/api/roles"
-  permissions_url: "https://your-idp.example.com/api/permissions"
+  suggestions:
+    roles_url: "https://your-idp.example.com/api/roles"
+    permissions_url: "https://your-idp.example.com/api/permissions"
+    auth_header: "X-Api-Key"
+    auth_value: "your-idp-api-key"
 ```
 
 **Console features:** Dashboard overview, policy CRUD with multi-stage editor (role/permission inputs with external suggestions, authorization mode dropdown, client-side validation), webhook management with delivery rate color coding, request browser with status/type filters and copy-to-clipboard IDs, request detail with tabbed payload and audit trail, audit log with policy context, delivery browser with partial event matching, and operator management.

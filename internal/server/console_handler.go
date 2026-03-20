@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/internal/config"
 	"github.com/lawale/quorum/internal/service"
 	"github.com/lawale/quorum/internal/store"
 )
@@ -20,18 +21,16 @@ type ConsoleHandler struct {
 	operatorService *service.OperatorService
 	tenantService   *service.TenantService
 	secureCookies   bool
-	rolesURL        string
-	permissionsURL  string
+	suggestions     config.SuggestionsConfig
 	httpClient      *http.Client
 }
 
-func NewConsoleHandler(os *service.OperatorService, ts *service.TenantService, secureCookies bool, rolesURL, permissionsURL string) *ConsoleHandler {
+func NewConsoleHandler(os *service.OperatorService, ts *service.TenantService, secureCookies bool, suggestions config.SuggestionsConfig) *ConsoleHandler {
 	return &ConsoleHandler{
 		operatorService: os,
 		tenantService:   ts,
 		secureCookies:   secureCookies,
-		rolesURL:        rolesURL,
-		permissionsURL:  permissionsURL,
+		suggestions:     suggestions,
 		httpClient:      &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -369,8 +368,8 @@ func (h *ConsoleHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
 
 func (h *ConsoleHandler) SuggestionsConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"roles_available":       h.rolesURL != "",
-		"permissions_available": h.permissionsURL != "",
+		"roles_available":       h.suggestions.RolesURL != "",
+		"permissions_available": h.suggestions.PermissionsURL != "",
 	})
 }
 
@@ -379,9 +378,9 @@ func (h *ConsoleHandler) ProxySuggestions(w http.ResponseWriter, r *http.Request
 	var upstream string
 	switch kind {
 	case "roles":
-		upstream = h.rolesURL
+		upstream = h.suggestions.RolesURL
 	case "permissions":
-		upstream = h.permissionsURL
+		upstream = h.suggestions.PermissionsURL
 	default:
 		writeError(w, http.StatusBadRequest, "invalid suggestion kind: must be 'roles' or 'permissions'")
 		return
@@ -391,7 +390,15 @@ func (h *ConsoleHandler) ProxySuggestions(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	resp, err := h.httpClient.Get(upstream)
+	req2, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstream, nil)
+	if err != nil {
+		writeServerError(w, r, err, "failed to build "+kind+" suggestions request")
+		return
+	}
+	if h.suggestions.AuthHeader != "" && h.suggestions.AuthValue != "" {
+		req2.Header.Set(h.suggestions.AuthHeader, h.suggestions.AuthValue)
+	}
+	resp, err := h.httpClient.Do(req2)
 	if err != nil {
 		writeServerError(w, r, err, "failed to fetch "+kind+" suggestions")
 		return
