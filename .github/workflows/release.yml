@@ -105,3 +105,30 @@ jobs:
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
 
       - run: npm publish --access public --provenance
+
+  trivy:
+    name: Scan Docker Images
+    runs-on: ubuntu-latest
+    needs: docker
+    permissions:
+      security-events: write
+    strategy:
+      matrix:
+        image:
+          - ""
+          - "-console"
+          - "-all"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_BASE }}${{ matrix.image }}:sha-${{ github.sha }}
+          format: sarif
+          output: trivy-${{ matrix.image || 'api' }}.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.image || 'api' }}.sarif
+          category: trivy-${{ matrix.image || 'api' }}

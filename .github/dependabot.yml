@@ -1,0 +1,59 @@
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /console/frontend
+    schedule:
+      interval: weekly
+    groups:
+      console-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /widgets/frontend
+    schedule:
+      interval: weekly
+    groups:
+      widget-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /examples/expenses
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: /examples/banking
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: /examples/expenses
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: /examples/access-portal
+    schedule:
+      interval: monthly

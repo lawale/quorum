@@ -16,6 +16,7 @@ linters:
     - ineffassign
     - gocritic
     - misspell
+    - gosec
   settings:
     errcheck:
       exclude-functions:
