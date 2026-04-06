@@ -35,7 +35,7 @@ func setupMSSQL(t *testing.T) *mssql.DB {
 	}
 	t.Cleanup(func() { ctr.Terminate(context.Background()) })
 
-	connStr, err := ctr.ConnectionString(ctx, "encrypt=false", "TrustServerCertificate=true")
+	connStr, err := ctr.ConnectionString(ctx, "encrypt=disable")
 	if err != nil {
 		t.Fatalf("connection string: %v", err)
 	}

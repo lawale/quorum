@@ -12,11 +12,26 @@ import (
 	"testing"
 	"time"
 
+	"reflect"
+
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
+
+// jsonEqual compares two JSON byte slices semantically, ignoring whitespace
+// differences introduced by database JSON/JSONB normalization.
+func jsonEqual(a, b []byte) bool {
+	var va, vb any
+	if err := json.Unmarshal(a, &va); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(b, &vb); err != nil {
+		return false
+	}
+	return reflect.DeepEqual(va, vb)
+}
 
 // TestRequestStore exercises every method of store.RequestStore.
 func TestRequestStore(t *testing.T, s store.RequestStore) {
@@ -49,7 +64,7 @@ func TestRequestStore(t *testing.T, s store.RequestStore) {
 		if got.MakerID != "user-1" {
 			t.Errorf("MakerID = %q, want %q", got.MakerID, "user-1")
 		}
-		if string(got.Payload) != `{"amount":100}` {
+		if !jsonEqual(got.Payload, []byte(`{"amount":100}`)) {
 			t.Errorf("Payload = %s, want %s", got.Payload, `{"amount":100}`)
 		}
 		if got.Status != model.StatusPending {
@@ -161,7 +176,7 @@ func TestRequestStore(t *testing.T, s store.RequestStore) {
 		if err != nil {
 			t.Fatalf("GetByID: %v", err)
 		}
-		if string(got.Metadata) != `{"env":"prod"}` {
+		if !jsonEqual(got.Metadata, []byte(`{"env":"prod"}`)) {
 			t.Errorf("Metadata = %s, want %s", got.Metadata, `{"env":"prod"}`)
 		}
 	})
@@ -525,7 +540,7 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 		if got.Stages[0].RejectionPolicy != model.RejectionPolicyThreshold {
 			t.Errorf("Stages[0].RejectionPolicy = %q, want %q", got.Stages[0].RejectionPolicy, model.RejectionPolicyThreshold)
 		}
-		if string(got.Stages[0].AllowedCheckerRoles) != `["admin","manager"]` {
+		if !jsonEqual(got.Stages[0].AllowedCheckerRoles, []byte(`["admin","manager"]`)) {
 			t.Errorf("Stages[0].AllowedCheckerRoles = %s", got.Stages[0].AllowedCheckerRoles)
 		}
 		if got.Stages[0].Name != "Finance Review" {
@@ -928,7 +943,7 @@ func TestAuditStore(t *testing.T, as store.AuditStore, rs store.RequestStore) {
 		if logs[0].Action != "created" {
 			t.Errorf("Action = %q, want %q", logs[0].Action, "created")
 		}
-		if string(logs[0].Details) != `{"note":"test"}` {
+		if !jsonEqual(logs[0].Details, []byte(`{"note":"test"}`)) {
 			t.Errorf("Details = %s", logs[0].Details)
 		}
 	})

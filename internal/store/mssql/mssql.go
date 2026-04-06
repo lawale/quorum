@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/store"
@@ -25,7 +27,7 @@ type DB struct {
 }
 
 func New(ctx context.Context, dsn string, maxOpen, maxIdle int) (*DB, error) {
-	db, err := sql.Open("sqlserver", dsn)
+	db, err := sql.Open("sqlserver", ensureGUIDConversionDSN(dsn))
 	if err != nil {
 		return nil, fmt.Errorf("opening database: %w", err)
 	}
@@ -39,6 +41,38 @@ func New(ctx context.Context, dsn string, maxOpen, maxIdle int) (*DB, error) {
 	}
 
 	return &DB{pool: db, Pool: db}, nil
+}
+
+// ensureGUIDConversionDSN enables go-mssqldb GUID conversion so scanned UUID bytes
+// are in RFC 4122 order expected by github.com/google/uuid.
+func ensureGUIDConversionDSN(dsn string) string {
+	if strings.HasPrefix(strings.ToLower(dsn), "sqlserver://") {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			return dsn
+		}
+		q := u.Query()
+		q.Set("guid conversion", "true")
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+
+	parts := strings.Split(dsn, ";")
+	for i, part := range parts {
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(kv[0]), "guid conversion") {
+			parts[i] = strings.TrimSpace(kv[0]) + "=true"
+			return strings.Join(parts, ";")
+		}
+	}
+
+	if strings.HasSuffix(dsn, ";") {
+		return dsn + "guid conversion=true"
+	}
+	return dsn + ";guid conversion=true"
 }
 
 func (db *DB) Close() {
