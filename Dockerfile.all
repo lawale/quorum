@@ -17,7 +17,7 @@ COPY widgets/frontend/ ./
 RUN npm run build
 
 # Stage 3: Build the Go binary with console + widgets
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 ARG TARGETOS TARGETARCH
 
 WORKDIR /app
