@@ -1,6 +1,9 @@
 # Quorum: The Open-Source Approval Engine for Modern Systems
 
+[![CI](https://github.com/lawale/quorum/actions/workflows/ci.yml/badge.svg)](https://github.com/lawale/quorum/actions/workflows/ci.yml)
+[![Security](https://github.com/lawale/quorum/actions/workflows/security.yml/badge.svg)](https://github.com/lawale/quorum/actions/workflows/security.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/lawale/quorum)](https://goreportcard.com/report/github.com/lawale/quorum)
+[![npm](https://img.shields.io/npm/v/@oluwavader/quorum-embed)](https://www.npmjs.com/package/@oluwavader/quorum-embed)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/lawale/quorum)](https://go.dev/)
 
