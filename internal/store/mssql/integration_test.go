@@ -59,7 +59,7 @@ func setupMSSQL(t *testing.T) *mssql.DB {
 	defer migDB.Close()
 
 	for _, f := range migrationFiles {
-		data, err := os.ReadFile(filepath.Join(migrationsDir(), f))
+		data, err := os.ReadFile(filepath.Join(migrationsDir(), filepath.Clean(f))) //#nosec G304 -- migration file paths from known directory
 		if err != nil {
 			t.Fatalf("read migration %s: %v", f, err)
 		}

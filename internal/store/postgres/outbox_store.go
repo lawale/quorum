@@ -207,7 +207,6 @@ func (s *OutboxStore) CountByStatus(ctx context.Context, tenantID *string, since
 	if since != nil {
 		where = append(where, fmt.Sprintf("o.created_at >= $%d", argIdx))
 		args = append(args, *since)
-		argIdx++
 		needsJoin = true
 	}
 

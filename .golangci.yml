@@ -37,8 +37,16 @@ linters:
           - errcheck
         path: "_test\\.go$"
       - linters:
+          - gosec
+        path: "_test\\.go$"
+        text: "G104|G101|G306"
+      - linters:
           - errcheck
         path: "internal/store/storetest/"
+      - linters:
+          - gosec
+        path: "internal/store/storetest/"
+        text: "G104"
     paths:
       - console/frontend
       - widgets/frontend

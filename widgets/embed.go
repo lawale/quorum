@@ -16,6 +16,6 @@ func Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Write(embedJS)
+		_, _ = w.Write(embedJS)
 	})
 }

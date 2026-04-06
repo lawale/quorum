@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -139,7 +140,8 @@ type TenantConfig struct {
 }
 
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	cleanPath := filepath.Clean(path)
+	data, err := os.ReadFile(cleanPath) //#nosec G304 -- config path is caller-controlled
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
@@ -204,14 +206,14 @@ func applyEnvValue(fv reflect.Value, envKey string) {
 		if fv.Type() == reflect.TypeFor[time.Duration]() {
 			d, err := time.ParseDuration(val)
 			if err != nil {
-				slog.Warn("ignoring invalid duration env var", "key", envKey, "value", val, "error", err)
+				slog.Warn("ignoring invalid duration env var", "key", envKey, "value", val, "error", err) //nolint:gosec // G706: env var values are not attacker-controlled
 				return
 			}
 			fv.Set(reflect.ValueOf(d))
 		} else {
 			n, err := strconv.Atoi(val)
 			if err != nil {
-				slog.Warn("ignoring invalid int env var", "key", envKey, "value", val, "error", err)
+				slog.Warn("ignoring invalid int env var", "key", envKey, "value", val, "error", err) //nolint:gosec // G706: env var values are not attacker-controlled
 				return
 			}
 			fv.SetInt(int64(n))
@@ -219,7 +221,7 @@ func applyEnvValue(fv reflect.Value, envKey string) {
 	case reflect.Bool:
 		b, err := strconv.ParseBool(val)
 		if err != nil {
-			slog.Warn("ignoring invalid bool env var", "key", envKey, "value", val, "error", err)
+			slog.Warn("ignoring invalid bool env var", "key", envKey, "value", val, "error", err) //nolint:gosec // G706: env var values are not attacker-controlled
 			return
 		}
 		fv.SetBool(b)

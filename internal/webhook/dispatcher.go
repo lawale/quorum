@@ -243,7 +243,7 @@ func (d *Dispatcher) deliverEntry(ctx context.Context, entry model.OutboxEntry) 
 		d.handleFailure(ctx, entry, err.Error())
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if markErr := d.outbox.MarkDelivered(ctx, entry.ID); markErr != nil {
@@ -310,8 +310,8 @@ func (d *Dispatcher) computeBackoff(attempts int) time.Duration {
 
 	// Add +/-20% jitter to avoid thundering herd
 	if delay > 0 {
-		jitter := time.Duration(rand.Int63n(int64(delay) / 5))
-		if rand.Intn(2) == 0 {
+		jitter := time.Duration(rand.Int63n(int64(delay) / 5)) //nolint:gosec // G404: jitter does not need crypto-strength randomness
+		if rand.Intn(2) == 0 {                                 //nolint:gosec // G404: jitter does not need crypto-strength randomness
 			delay += jitter
 		} else {
 			delay -= jitter

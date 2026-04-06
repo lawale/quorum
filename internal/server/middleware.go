@@ -118,7 +118,7 @@ func (w *statusWriter) Unwrap() http.ResponseWriter {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck // response already committed
+	_ = json.NewEncoder(w).Encode(v) //nolint:errcheck // response already committed
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

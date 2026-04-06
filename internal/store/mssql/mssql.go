@@ -36,7 +36,7 @@ func New(ctx context.Context, dsn string, maxOpen, maxIdle int) (*DB, error) {
 	db.SetMaxIdleConns(maxIdle)
 
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("pinging database: %w", err)
 	}
 
@@ -76,7 +76,7 @@ func ensureGUIDConversionDSN(dsn string) string {
 }
 
 func (db *DB) Close() {
-	db.pool.Close()
+	_ = db.pool.Close()
 }
 
 func (db *DB) Name() string                     { return "mssql" }

@@ -43,7 +43,7 @@ func main() {
 		if err != nil {
 			os.Exit(1)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			os.Exit(1)
 		}
@@ -229,7 +229,7 @@ func main() {
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		slog.Info("starting server", "addr", cfg.Server.Addr())
+		slog.Info("starting server", "addr", cfg.Server.Addr()) //nolint:gosec // G706: addr is from validated config, not user input
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server error", "error", err)
 			os.Exit(1)

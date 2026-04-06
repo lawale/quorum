@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -10,6 +11,16 @@ import (
 	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/store"
 )
+
+func safeInt32(v int) int32 {
+	if v > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if v < 0 {
+		return 0
+	}
+	return int32(v) //nolint:gosec // G115: bounds checked above
+}
 
 // DBTX is the common query interface shared by *pgxpool.Pool and pgx.Tx.
 // All postgres stores use this interface for their queries, allowing them
@@ -31,8 +42,8 @@ func New(ctx context.Context, dsn string, maxOpen, maxIdle int) (*DB, error) {
 		return nil, fmt.Errorf("parsing dsn: %w", err)
 	}
 
-	config.MaxConns = int32(maxOpen)
-	config.MinConns = int32(maxIdle)
+	config.MaxConns = safeInt32(maxOpen)
+	config.MinConns = safeInt32(maxIdle)
 
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		_, err := conn.Exec(ctx, "SET search_path TO quorum, public")
