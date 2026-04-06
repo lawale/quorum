@@ -1,5 +1,5 @@
 {
-  "name": "@quorum/embed",
+  "name": "@oluwavader/quorum-embed",
   "version": "0.0.1",
   "description": "Embeddable Web Components for the Quorum approval engine",
   "type": "module",
@@ -14,7 +14,8 @@
     "./embed": "./dist/embed.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "dev": "vite",

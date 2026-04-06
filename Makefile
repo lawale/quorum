@@ -6,7 +6,8 @@
        seed demo \
        docker-build docker-build-api docker-build-console docker-build-all \
        docker-push docker-push-api docker-push-console docker-push-all \
-       docker-buildx docker-buildx-api docker-buildx-console docker-buildx-all
+       docker-buildx docker-buildx-api docker-buildx-console docker-buildx-all \
+       quickstart
 
 BINARY_NAME=quorum
 BUILD_DIR=bin
@@ -118,6 +119,9 @@ seed:
 
 demo:
 	docker compose --profile demo up --build
+
+quickstart:
+	bash quickstart.sh
 
 clean:
 	rm -rf $(BUILD_DIR)
