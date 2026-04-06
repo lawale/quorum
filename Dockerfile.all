@@ -1,5 +1,5 @@
 # Stage 1: Build the console frontend (platform-independent static assets)
-FROM --platform=$BUILDPLATFORM node:22-alpine AS console-frontend
+FROM --platform=$BUILDPLATFORM node:25-alpine AS console-frontend
 
 WORKDIR /app/console/frontend
 COPY console/frontend/package.json console/frontend/package-lock.json ./
@@ -8,7 +8,7 @@ COPY console/frontend/ ./
 RUN npm run build
 
 # Stage 2: Build the widget frontend (platform-independent static assets)
-FROM --platform=$BUILDPLATFORM node:22-alpine AS widget-frontend
+FROM --platform=$BUILDPLATFORM node:25-alpine AS widget-frontend
 
 WORKDIR /app/widgets/frontend
 COPY widgets/frontend/package.json widgets/frontend/package-lock.json ./

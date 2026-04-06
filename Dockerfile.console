@@ -1,5 +1,5 @@
 # Stage 1: Build the frontend (platform-independent static assets)
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:25-alpine AS frontend
 
 WORKDIR /app/console/frontend
 COPY console/frontend/package.json console/frontend/package-lock.json ./
