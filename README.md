@@ -18,11 +18,23 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat&logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![Svelte](https://img.shields.io/badge/Svelte-FF3E00?style=flat&logo=svelte&logoColor=white)](https://svelte.dev/)
 
-[Quick Start](#quick-start) • [Full Stack Local Setup](#running-the-full-stack-locally) • [Demo & Sample Apps](#demo--sample-apps) • [Key Features](#-key-features) • [Why Quorum?](#-why-quorum) • [Documentation](#documentation) • [Community & Support](#-community--support)
+[Quick Start](#quick-start) • [Full Stack Local Setup](#running-the-full-stack-locally) • [Demo & Sample Apps](#demo--sample-apps) • [Key Features](#key-features) • [Why Quorum?](#why-quorum) • [Documentation](#documentation) • [Community & Support](#-community--support)
 
 ---
 
-## ✨ Key Features
+## Console Preview
+
+| Requests Dashboard                                           | Policy Editor |
+|--------------------------------------------------------------|---|
+| ![Dashboard](docs/screenshots/console-dashboard.png) | ![Policy Editor](docs/screenshots/console-policy-editor.png) |
+
+| Approval Detail | Audit Log |
+|---|---|
+| ![Approval Detail](docs/screenshots/console-approval-detail.png) | ![Audit Log](docs/screenshots/console-audit-log.png) |
+
+---
+
+## Key Features
 
 - **Uncouple Authorization from Your App** — Stop writing custom approval logic. Quorum acts as a centralized, reusable service for all your multi-stage workflows, keeping your core code clean and focused.
 
@@ -55,7 +67,7 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 
 ---
 
-## 💡 Why Quorum?
+## Why Quorum?
 
 - **For Developers:** Stop reinventing the wheel. Integrate a powerful approval flow with a few API calls. Focus on your product, not approval boilerplate.
 
@@ -198,23 +210,6 @@ Once running, the following endpoints are available:
 
 On first visit to the console you'll be prompted to create an admin operator.
 
-### Frontend Development
-
-To work on the console or widget frontends with hot reload, run the Go server and the Vite dev server side by side:
-
-```bash
-# Terminal 1 — API server (API-only binary is fine here)
-make build && ./bin/quorum -config config.yaml
-
-# Terminal 2 — Console dev server (proxies /api to localhost:8080)
-make console-dev
-
-# Terminal 3 — Widget dev server
-make embed-dev
-```
-
-The console dev server runs at `http://localhost:5173/console/` with hot module replacement.
-
 ---
 
 ## Use Case: Securing a Wire Transfer
@@ -351,62 +346,13 @@ Approve/Reject Request
 
 ### Dynamic Authorization Check
 
-When a policy has a `dynamic_authorization_url`, Quorum sends a POST request with this payload before allowing the approval:
-
-```json
-{
-  "request_id": "uuid",
-  "request_type": "wire_transfer",
-  "checker_id": "bob",
-  "maker_id": "alice",
-  "payload": { "source_account_id": "ACC-001", "amount": 50000 }
-}
-```
-
-Your endpoint responds with:
-
-```json
-{ "allowed": true }
-```
-
-or
-
-```json
-{ "allowed": false, "reason": "Checker is in the same department as maker" }
-```
-
-This lets you implement arbitrary business rules: department separation, conflict-of-interest checks, rate limiting, and geographic restrictions, without modifying Quorum.
-
----
-
-## API at a Glance
-
-All endpoints are under `/api/v1` and require authentication (configurable via the `auth` section in config).
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/requests` | Create a new approval request |
-| `GET` | `/api/v1/requests` | List requests (with `?status=`, `?type=`, `?page=`, `?per_page=` filters) |
-| `GET` | `/api/v1/requests/{id}` | Get a request by ID |
-| `POST` | `/api/v1/requests/{id}/approve` | Approve a request |
-| `POST` | `/api/v1/requests/{id}/reject` | Reject a request |
-| `POST` | `/api/v1/requests/{id}/cancel` | Cancel a request (maker only) |
-| `GET` | `/api/v1/requests/{id}/audit` | Get audit trail for a request |
-| `GET` | `/api/v1/requests/{id}/events` | SSE stream for real-time status updates |
-| `POST` | `/api/v1/policies` | Create a policy |
-| `GET` | `/api/v1/policies` | List policies (`?page=`, `?per_page=`) |
-| `GET` | `/api/v1/policies/{id}` | Get a policy by ID |
-| `PUT` | `/api/v1/policies/{id}` | Update a policy |
-| `DELETE` | `/api/v1/policies/{id}` | Delete a policy |
-| `POST` | `/api/v1/webhooks` | Register a webhook |
-| `GET` | `/api/v1/webhooks` | List webhooks (`?page=`, `?per_page=`) |
-| `DELETE` | `/api/v1/webhooks/{id}` | Delete a webhook |
-| `GET` | `/health` | Health check with component status (no auth) |
-| `GET` | `/metrics` | Prometheus metrics (no auth, when enabled) |
+When a policy has a `dynamic_authorization_url`, Quorum POSTs the full request context (request ID, type, checker, maker, and payload) to your endpoint before allowing the approval. Your endpoint responds with `{"allowed": true}` or `{"allowed": false, "reason": "..."}`. This lets you implement arbitrary business rules — department separation, conflict-of-interest checks, rate limiting — without modifying Quorum.
 
 ---
 
 ## Documentation
+
+All API endpoints are under `/api/v1` and require authentication (configurable via the `auth` section in config). The [wire transfer walkthrough](#use-case-securing-a-wire-transfer) above demonstrates the core request lifecycle.
 
 ### Configuration
 
@@ -434,38 +380,7 @@ See [`config.example.yaml`](config.example.yaml) for all available options.
 
 #### Environment Variable Overrides
 
-Every config field can be overridden via environment variables using the `QUORUM_` prefix. Variable names are derived from the config path in SCREAMING_SNAKE_CASE:
-
-| Env Var | Config Field |
-|---------|-------------|
-| `QUORUM_SERVER_HOST` | `server.host` |
-| `QUORUM_SERVER_PORT` | `server.port` |
-| `QUORUM_DATABASE_DRIVER` | `database.driver` |
-| `QUORUM_DATABASE_HOST` | `database.host` |
-| `QUORUM_DATABASE_PORT` | `database.port` |
-| `QUORUM_DATABASE_USER` | `database.user` |
-| `QUORUM_DATABASE_PASSWORD` | `database.password` |
-| `QUORUM_DATABASE_NAME` | `database.name` |
-| `QUORUM_DATABASE_MAX_OPEN_CONNS` | `database.max_open_conns` |
-| `QUORUM_DATABASE_MAX_IDLE_CONNS` | `database.max_idle_conns` |
-| `QUORUM_AUTH_MODE` | `auth.mode` |
-| `QUORUM_WEBHOOK_MAX_RETRIES` | `webhook.max_retries` |
-| `QUORUM_WEBHOOK_TIMEOUT` | `webhook.timeout` |
-| `QUORUM_WEBHOOK_HEARTBEAT` | `webhook.heartbeat` |
-| `QUORUM_EXPIRY_CHECK_INTERVAL` | `expiry.check_interval` |
-| `QUORUM_METRICS_ENABLED` | `metrics.enabled` |
-| `QUORUM_METRICS_PATH` | `metrics.path` |
-| `QUORUM_CONSOLE_ENABLED` | `console.enabled` |
-| `QUORUM_CONSOLE_JWT_SECRET` | `console.jwt_secret` |
-| `QUORUM_CONSOLE_SECURE_COOKIES` | `console.secure_cookies` |
-| `QUORUM_CONSOLE_SUGGESTIONS_ROLES_URL` | `console.suggestions.roles_url` |
-| `QUORUM_CONSOLE_SUGGESTIONS_PERMISSIONS_URL` | `console.suggestions.permissions_url` |
-| `QUORUM_CONSOLE_SUGGESTIONS_AUTH_HEADER` | `console.suggestions.auth_header` |
-| `QUORUM_CONSOLE_SUGGESTIONS_AUTH_VALUE` | `console.suggestions.auth_value` |
-
-**Precedence:** Environment variables take the highest priority, overriding both YAML config values and defaults. Duration values use Go syntax (e.g., `30s`, `5m`, `1h`). Invalid values are ignored with a warning log.
-
-The config file path itself can be set via `QUORUM_CONFIG_PATH`, which overrides the `-config` CLI flag.
+Every config field can be overridden via environment variables using the `QUORUM_` prefix with `SCREAMING_SNAKE_CASE` paths. For example, `database.host` becomes `QUORUM_DATABASE_HOST`. Environment variables take the highest priority, overriding both YAML values and defaults. The config file path itself can be set via `QUORUM_CONFIG_PATH`.
 
 ### Authentication Modes
 
@@ -659,47 +574,11 @@ Templates are resolved once at creation time, so editing a policy template only 
 
 ### Webhook Delivery
 
-Quorum uses a **transactional outbox** to guarantee webhook delivery. When a request reaches a terminal status (approved, rejected, cancelled, expired), the outbox entries are written in the same database transaction as the status update. 
-
-**How it works:**
-
-1. A request reaches terminal status (e.g., approved).
-2. In a single database transaction: the status is updated and outbox entries are created for each matching webhook and callback URL.
-3. After the transaction commits, a signal wakes the delivery worker.
-4. The worker reads pending entries from the outbox and delivers them via HTTP POST with HMAC-SHA256 signatures.
-5. Successful deliveries are marked as delivered. Failures are retried with exponential backoff up to `max_retries`.
-
-A configurable heartbeat (default 30s) acts as a safety net, even if a signal is missed, the worker will pick up pending entries on the next heartbeat tick.
-
-**Webhook signature:** Every webhook request includes an `X-Signature-256` header containing `sha256=<hex>`, computed using HMAC-SHA256 with the webhook's secret. Verify this on your end to ensure the request came from Quorum.
+Quorum uses a **transactional outbox** to guarantee webhook delivery. Outbox entries are written in the same database transaction as the status update, so no event is ever lost. A signal-driven delivery worker dispatches entries via HTTP POST with HMAC-SHA256 signatures (`X-Signature-256` header), retrying failures with exponential backoff. A configurable heartbeat (default 30s) acts as a safety net for missed signals.
 
 ### Health Endpoint
 
-The `/health` endpoint returns component-level health status and does not require authentication. It checks all registered dependencies (database, and any future additions like Redis).
-
-**Healthy response** (HTTP 200):
-
-```json
-{
-  "status": "healthy",
-  "components": {
-    "postgres": { "status": "healthy" }
-  }
-}
-```
-
-**Unhealthy response** (HTTP 503):
-
-```json
-{
-  "status": "unhealthy",
-  "components": {
-    "postgres": { "status": "unhealthy", "error": "connection refused" }
-  }
-}
-```
-
-Use this endpoint for load balancer health checks and container orchestration readiness probes.
+The `/health` endpoint returns component-level health status (HTTP 200 when healthy, 503 when unhealthy) and does not require authentication. Use it for load balancer health checks and container orchestration readiness probes.
 
 ### Docker
 
@@ -804,96 +683,21 @@ Visit the [Quorum console](http://localhost:8080/console/) (admin / admin123) to
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development setup, project structure, Makefile targets, and frontend development workflow.
+
 ```bash
-# Run tests
-make test
-
-# Lint
-make lint
-
-# Run the console frontend dev server (with hot reload)
-make console-dev
-
-# Run the widgets frontend dev server
-make embed-dev
-
-# Build with console
-make build-console
-
-# Build with embeddable widgets
-make build-embed
-
-# Build with everything (console + widgets)
-make build-all
-```
-
-### Makefile Targets
-
-| Target | Description |
-|--------|-------------|
-| `build` | Build the Go binary (no console, no widgets) |
-| `build-console` | Build console frontend + Go binary with console |
-| `build-embed` | Build widget frontend + Go binary with embeddable widgets |
-| `build-all` | Build both frontends + Go binary with console and widgets |
-| `run` | Build and start the server |
-| `test` | Run unit tests with race detector |
-| `test-integration` | Run store integration tests (requires Docker for testcontainers) |
-| `test-all` | Run both unit and integration tests |
-| `lint` | Run golangci-lint |
-| `migrate-up` | Run PostgreSQL migrations |
-| `migrate-down` | Roll back one PostgreSQL migration |
-| `docker-up` | Start all services with docker compose |
-| `docker-down` | Stop all docker compose services |
-| `seed` | Run the seed script against a running server |
-| `demo` | Start the full demo with sample apps via docker compose |
-| `console-dev` | Start the console Svelte dev server |
-| `embed-dev` | Start the widgets Svelte dev server |
-| `clean` | Remove build artifacts |
-
-### Project Structure
-
-```
-cmd/server/          — Entry point
-internal/
-  auth/              — Authentication providers and authorization hook
-  config/            — Configuration loading (YAML + env var overrides)
-  display/           — Display template resolution
-  health/            — HealthChecker interface and component health aggregation
-  metrics/           — Prometheus metrics
-  model/             — Domain models
-  server/            — HTTP handlers and routing
-  service/           — Business logic and approval workflow
-  sse/               — In-process pub/sub hub for SSE push notifications
-  store/             — Storage interfaces
-    postgres/        — PostgreSQL implementation
-    mssql/           — SQL Server implementation
-  webhook/           — Signal-driven outbox webhook dispatcher
-console/
-  console.go         — Embedded SPA handler (build tag: console)
-  console_stub.go    — No-op when built without console tag
-  frontend/          — Svelte 5 + TypeScript + Tailwind CSS
-widgets/
-  embed.go           — Embedded widget JS handler (build tag: embed)
-  embed_stub.go      — No-op when built without embed tag
-  frontend/          — Svelte 5 Web Components (custom elements)
-migrations/
-  postgres/          — PostgreSQL migration files
-  mssql/             — SQL Server migration files
-examples/
-  banking/           — Go sample app (wire transfers)
-  expenses/          — Node.js sample app (expense approval)
-  access-portal/     — Python sample app (access requests)
-scripts/
-  seed.sh            — Sample data seeder
+make test          # Unit tests
+make lint          # Linter
+make build-all     # Build with console + widgets
 ```
 
 ---
 
-## 🤝 Community & Support
+##  Community & Support
 
-- 🐛 **Issues:** Report bugs or request features on [GitHub Issues](https://github.com/lawale/quorum/issues)
-- 💬 **Discussions:** Join [GitHub Discussions](https://github.com/lawale/quorum/discussions) for help, ideas, and general conversation
-- 📖 **Changelog:** See the [Releases](https://github.com/lawale/quorum/releases) page for updates
+-  **Issues:** Report bugs or request features on [GitHub Issues](https://github.com/lawale/quorum/issues)
+-  **Discussions:** Join [GitHub Discussions](https://github.com/lawale/quorum/discussions) for help, ideas, and general conversation
+-  **Changelog:** See the [Releases](https://github.com/lawale/quorum/releases) page for updates
 
 ## License
 

@@ -1,5 +1,5 @@
 # Stage 1: Build the frontend (platform-independent static assets)
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:25-alpine AS frontend
 
 WORKDIR /app/console/frontend
 COPY console/frontend/package.json console/frontend/package-lock.json ./
@@ -8,7 +8,7 @@ COPY console/frontend/ ./
 RUN npm run build
 
 # Stage 2: Build the Go binary with embedded console
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 ARG TARGETOS TARGETARCH
 
 WORKDIR /app

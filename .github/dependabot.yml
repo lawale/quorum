@@ -25,11 +25,6 @@ updates:
       widget-deps:
         patterns: ["*"]
 
-  - package-ecosystem: npm
-    directory: /examples/expenses
-    schedule:
-      interval: monthly
-
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -43,17 +38,3 @@ updates:
     schedule:
       interval: monthly
 
-  - package-ecosystem: docker
-    directory: /examples/banking
-    schedule:
-      interval: monthly
-
-  - package-ecosystem: docker
-    directory: /examples/expenses
-    schedule:
-      interval: monthly
-
-  - package-ecosystem: docker
-    directory: /examples/access-portal
-    schedule:
-      interval: monthly

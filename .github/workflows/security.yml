@@ -16,25 +16,28 @@ jobs:
     name: Go Vulnerability Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - run: govulncheck ./...
 
   socket:
-    name: Socket (npm Supply Chain)
+    name: Socket (Supply Chain)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
-      - uses: SocketDev/socket-security-action@v1
+      - uses: actions/checkout@v6
+      - uses: SocketDev/action@v1
         with:
-          directories: |
-            console/frontend
-            widgets/frontend
-            examples/expenses
+          mode: firewall-free
+      - name: Safe install (console)
+        working-directory: console/frontend
+        run: sfw npm ci
+      - name: Safe install (widgets)
+        working-directory: widgets/frontend
+        run: sfw npm ci
 
   codeql:
     name: CodeQL
@@ -45,18 +48,18 @@ jobs:
       matrix:
         language: [go, javascript]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - if: matrix.language == 'go'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
 
       - if: matrix.language == 'go'
         run: go build ./cmd/server
 
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4

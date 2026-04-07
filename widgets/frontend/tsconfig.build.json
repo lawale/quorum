@@ -3,8 +3,10 @@
   "compilerOptions": {
     "declaration": true,
     "emitDeclarationOnly": true,
+    "rootDir": "src",
     "outDir": "dist",
-    "noEmit": false
+    "noEmit": false,
+    "skipLibCheck": true
   },
-  "include": ["src/index.ts", "src/lib/**/*.ts"]
+  "include": ["src/svelte-shims.d.ts", "src/index.ts", "src/lib/**/*.ts"]
 }
