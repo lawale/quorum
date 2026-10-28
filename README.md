@@ -7,16 +7,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/lawale/quorum)](https://go.dev/)
 
-**An open-source, embeddable approval engine that treats authorization as a service, not a feature.**
+**Every serious application eventually needs "someone else has to sign off on this". Quorum is that someone else, as a service.**
 
-Stop hardcoding "maker-checker" logic. Quorum is a standalone, self-hosted approval service that brings the [four-eyes principle](https://en.wikipedia.org/wiki/Two-man_rule) to any application. It provides a generic, policy-driven API for creating and managing multi-stage approval workflows, ensuring that critical actions are always reviewed before they take effect.
+Wire transfers, production access, price changes, content going live: the [four-eyes principle](https://en.wikipedia.org/wiki/Two-man_rule) shows up everywhere, and every team rebuilds it from scratch. A status column, a couple of endpoints, an audit table that is never quite complete, a UI that only one app can use. Then the next app needs the same thing and it starts again.
 
-Think of it as a pluggable, external "approval board" for your entire infrastructure, from financial transactions and access requests to content publishing and infrastructure changes.
+Quorum pulls that logic out of your applications into one self-hosted service. Your app creates a request; Quorum matches it to a policy, walks it through the stages you defined, enforces who may act at each one, records everything, and tells you when it is decided. Rules live in data and change without a deploy. The approval UI is included as Web Components you drop into any front end. One engine, shared by every app that needs a second pair of eyes.
 
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![SQL Server](https://img.shields.io/badge/SQL_Server-CC2927?style=flat&logo=microsoft-sql-server&logoColor=white)](https://www.microsoft.com/sql-server)
 [![Prometheus](https://img.shields.io/badge/Prometheus-E6522C?style=flat&logo=prometheus&logoColor=white)](https://prometheus.io/)
 [![Svelte](https://img.shields.io/badge/Svelte-FF3E00?style=flat&logo=svelte&logoColor=white)](https://svelte.dev/)
+[![Lit](https://img.shields.io/badge/Lit-324FFF?style=flat&logo=lit&logoColor=white)](https://lit.dev/)
 
 [Quick Start](#quick-start) • [Full Stack Local Setup](#running-the-full-stack-locally) • [Demo & Sample Apps](#demo--sample-apps) • [Key Features](#key-features) • [Why Quorum?](#why-quorum) • [Documentation](#documentation) • [Community & Support](#-community--support)
 
@@ -36,7 +37,7 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 
 ## Key Features
 
-- **Uncouple Authorization from Your App** — Stop writing custom approval logic. Quorum acts as a centralized, reusable service for all your multi-stage workflows, keeping your core code clean and focused.
+- **Approval as a Shared Service** — Stop writing custom approval logic in every application. Quorum is one reusable service for all your multi-stage review workflows, keeping your core code focused on your domain. It complements your authorization layer rather than replacing it: your identity provider still says who a user is and what role they hold; Quorum decides whether this particular action has been reviewed by the right people.
 
 - **Dynamic, Multi-Stage Policies** — Define complex approval rules with JSON. Create sequential stages (e.g., "Manager," then "Compliance"), each with its own required approvals and rejection rules. Change them at runtime without redeploying.
 
@@ -55,7 +56,7 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 
 - **Optional Admin Console** — Manage everything with a built-in web UI built with Svelte 5. Browse requests, define policies, inspect audit logs, and manage operators — all served directly from the Go binary. Opt-in via build tag for a smaller default binary.
 
-- **Embeddable UI Widgets** — Drop pre-built Web Components into your own application to give end users approval functionality without building custom UI. Three widgets (`<quorum-approval-panel>`, `<quorum-request-list>`, `<quorum-stage-progress>`) use Shadow DOM for style isolation and work with any frontend framework. CORS is enabled out of the box for cross-origin embedding. Opt-in via build tag.
+- **Embeddable UI Widgets** — Drop pre-built Web Components into your own application to give end users approval functionality without building custom UI. Three widgets (`<quorum-approval-panel>`, `<quorum-request-list>`, `<quorum-stage-progress>`), built with Lit, use Shadow DOM for style isolation, work with any frontend framework, and are themeable via CSS custom properties and `::part()`. CORS is enabled out of the box for cross-origin embedding. Opt-in via build tag.
 
 - **Real-Time Updates via SSE** — Widgets receive instant push notifications the moment a request's state changes, via Server-Sent Events. No polling required, the widget opens a long-lived connection and the server pushes events on approve, reject, cancel, stage advance, and expiry. Polling is kept as an automatic fallback if the SSE connection drops.
 
@@ -69,11 +70,19 @@ Think of it as a pluggable, external "approval board" for your entire infrastruc
 
 ## Why Quorum?
 
-- **For Developers:** Stop reinventing the wheel. Integrate a powerful approval flow with a few API calls. Focus on your product, not approval boilerplate.
+| Rolling your own | With Quorum |
+|---|---|
+| Approval state lives in a column on your own table, with transitions scattered across handlers | Requests, stages, votes, and expiry are a first-class model with enforced transitions |
+| Guards like "not the maker", "one vote per stage", "only managers" are re-implemented, and re-forgotten, per app | Layered guards are enforced centrally and configured per policy |
+| Changing who approves what means a code change and a deploy | Policies are data; edit them at runtime in the console or API |
+| The audit trail is whatever logging you remembered to add | Every action is recorded with actor, timestamp, and details, in a transactional outbox so nothing is lost |
+| Each app builds its own approval screens | Drop in three themeable Web Components, or use the admin console |
 
-- **For Security & Compliance Teams:** Enforce a consistent "maker-checker" principle across your entire organization. Gain a centralized view of all pending and approved critical actions.
+- **For Developers:** Integrate a complete approval flow with a few API calls and a `<script>` tag. Focus on your product, not approval boilerplate.
 
-- **For Platform Engineers:** Provide a self-service approval engine for internal platforms, allowing other teams to add governance to their tools without bespoke development.
+- **For Security & Compliance Teams:** Enforce a consistent maker-checker principle across the organisation, and get one place to see every pending and decided critical action.
+
+- **For Platform Engineers:** Offer approvals as a self-service capability on your internal platform, so other teams add governance to their tools without bespoke development.
 
 ---
 
@@ -478,52 +487,50 @@ The bundle is served at `/assets/embed.js` with CORS headers, so you can load it
 **Option 2: npm** — bundle into your own build:
 
 ```bash
-npm install @quorum/embed
+npm install @oluwavader/quorum-embed
 ```
 
 ```typescript
 // Registers all three custom elements
-import '@quorum/embed';
+import '@oluwavader/quorum-embed';
 
 // Optionally use the API client directly
-import { createClient } from '@quorum/embed';
+import { createClient } from '@oluwavader/quorum-embed';
 
 const client = createClient({
   apiUrl: 'https://your-quorum-host',
-  token: 'Bearer ...',
+  token: 'your-jwt', // sent as "Authorization: Bearer your-jwt"
 });
 const request = await client.getRequest('uuid-here');
 ```
 
-**Usage:**
+**Configure once, then embed:**
+
+```js
+// With the script tag the API is on window.QuorumEmbed
+QuorumEmbed.configure({
+  apiUrl: 'https://your-quorum-host',
+  tenantId: 'acme',
+  token: () => session.accessToken, // static value or getter
+});
+```
 
 ```html
 <!-- Show approval details with approve/reject actions -->
-<quorum-approval-panel
-  request-id="uuid-here"
-  api-url="https://your-quorum-host"
-  token="Bearer ..."
-></quorum-approval-panel>
+<quorum-approval-panel request-id="uuid-here"></quorum-approval-panel>
 
 <!-- List requests with filters and pagination -->
-<quorum-request-list
-  api-url="https://your-quorum-host"
-  status="pending"
-  page-size="10"
-  token="Bearer ..."
-></quorum-request-list>
+<quorum-request-list status="pending" page-size="10"></quorum-request-list>
 
 <!-- Visualize approval stage progress (with real-time SSE updates) -->
-<quorum-stage-progress
-  request-id="uuid-here"
-  api-url="https://your-quorum-host"
-  token="Bearer ..."
-  sse="true"
-  poll-interval="30000"
-></quorum-stage-progress>
+<quorum-stage-progress request-id="uuid-here" poll-interval="30000"></quorum-stage-progress>
 ```
 
-**Authentication:** Pass a `token` attribute for Bearer authentication, or an `auth-headers` attribute (JSON string) for trust-mode headers like `{"X-User-ID": "alice", "X-User-Roles": "manager"}`.
+Any attribute (`api-url`, `token`, `tenant-id`, `auth-headers`) set on an element overrides the global value for that element.
+
+**Authentication:** Pass a `token` attribute or config value for Bearer authentication (the `Bearer ` prefix is added for you), or `auth-headers` (a JSON string) for trust-mode headers like `{"X-User-ID": "alice", "X-User-Roles": "manager"}`. Approve and Reject buttons only render when the server reports the viewer may act on the request.
+
+**Theming:** Set CSS custom properties such as `--quorum-accent`, `--quorum-bg`, or `--quorum-font` on any ancestor to restyle every widget, and use `::part()` selectors for structural overrides. The full token and part list is in the [package README](widgets/frontend/README.md#theming).
 
 **Real-time updates:** Both the approval panel and stage progress widgets connect via SSE by default for instant push notifications. Set `sse="false"` to disable and use polling only. The `poll-interval` attribute (default 30000ms) controls the fallback polling rate. When both widgets are on the same page, the stage progress widget also reacts to custom events dispatched by the approval panel for immediate cross-widget updates.
 
