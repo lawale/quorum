@@ -1,7 +1,7 @@
-// Auto-register custom elements
-import './components/ApprovalPanel.svelte';
-import './components/RequestList.svelte';
-import './components/StageProgress.svelte';
+// Importing the components registers the custom elements as a side effect.
+export { QuorumApprovalPanel } from './components/approval-panel';
+export { QuorumRequestList } from './components/request-list';
+export { QuorumStageProgress } from './components/stage-progress';
 
 // Public API
 export { configure } from './lib/config';

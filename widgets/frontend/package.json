@@ -27,6 +27,7 @@
     "approval",
     "maker-checker",
     "web-components",
+    "lit",
     "embed"
   ],
   "license": "MIT",
@@ -35,9 +36,10 @@
     "url": "https://github.com/lawale/quorum",
     "directory": "widgets/frontend"
   },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^7.0.0",
-    "svelte": "^5.55.1",
     "typescript": "^6.0.0",
     "vite": "^8.0.0"
   }
