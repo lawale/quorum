@@ -54,7 +54,7 @@ console/
 widgets/
   embed.go           — Embedded widget JS handler (build tag: embed)
   embed_stub.go      — No-op when built without embed tag
-  frontend/          — Svelte 5 Web Components (custom elements)
+  frontend/          — Lit Web Components (custom elements)
 migrations/
   postgres/          — PostgreSQL migration files
   mssql/             — SQL Server migration files
@@ -86,7 +86,7 @@ scripts/
 | `seed` | Run the seed script against a running server |
 | `demo` | Start the full demo with sample apps via docker compose |
 | `console-dev` | Start the console Svelte dev server |
-| `embed-dev` | Start the widgets Svelte dev server |
+| `embed-dev` | Start the widgets Vite dev server |
 | `clean` | Remove build artifacts |
 
 ## Frontend Development

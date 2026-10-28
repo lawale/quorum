@@ -1,4 +1,4 @@
-import type { RequestStatus, ResolvedDisplay } from './types';
+import type { ResolvedDisplay } from './types';
 
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleString();
@@ -18,14 +18,6 @@ export function timeAgo(iso: string): string {
 export function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-
-export const STATUS_COLORS: Record<RequestStatus, { bg: string; text: string }> = {
-  pending: { bg: '#fef3c7', text: '#92400e' },
-  approved: { bg: '#d1fae5', text: '#065f46' },
-  rejected: { bg: '#fee2e2', text: '#991b1b' },
-  cancelled: { bg: '#f3f4f6', text: '#374151' },
-  expired: { bg: '#ffedd5', text: '#9a3412' },
-};
 
 export const ACTION_COLORS: Record<string, string> = {
   created: '#4f46e5',
