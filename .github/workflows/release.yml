@@ -65,7 +65,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=sha,prefix=
+            type=sha,prefix=sha-,format=long
 
       - uses: docker/build-push-action@v7
         with:
@@ -93,7 +93,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 20.x
+          node-version: 22.x
           registry-url: https://registry.npmjs.org
           cache: npm
           cache-dependency-path: widgets/frontend/package-lock.json
