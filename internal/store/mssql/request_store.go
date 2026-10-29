@@ -113,6 +113,22 @@ func (s *RequestStore) FindPendingByFingerprint(ctx context.Context, reqType str
 	return s.scanOne(ctx, query, reqType, fingerprint)
 }
 
+func (s *RequestStore) ListRecentByType(ctx context.Context, reqType string, since time.Time, makerID string) ([]model.Request, error) {
+	query := `SELECT ` + requestColumns + ` FROM [quorum].[requests] WHERE type = @p1 AND created_at >= @p2`
+	args := []any{reqType, since}
+	if makerID != "" {
+		args = append(args, makerID)
+		query += fmt.Sprintf(" AND maker_id = @p%d", len(args))
+	}
+	if tenant := auth.TenantIDFromContext(ctx); tenant != "" {
+		args = append(args, tenant)
+		query += fmt.Sprintf(" AND tenant_id = @p%d", len(args))
+	}
+	query += " ORDER BY created_at DESC"
+	requests, _, err := s.scanMany(ctx, query, args...)
+	return requests, err
+}
+
 func (s *RequestStore) List(ctx context.Context, filter store.RequestFilter) ([]model.Request, int, error) {
 	var conditions []string
 	var args []any

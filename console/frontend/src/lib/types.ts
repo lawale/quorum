@@ -43,12 +43,35 @@ export interface BypassCondition {
   value: unknown;
 }
 
+export interface BypassLimit {
+  window: string;
+  max_count?: number;
+  max_sum?: { path: string; value: number };
+  group_by?: string[];
+}
+
 export interface BypassRule {
   name?: string;
   maker_roles?: string[];
   maker_permissions?: string[];
   maker_attributes?: Record<string, string[]>;
   payload?: BypassCondition[];
+  limits?: BypassLimit[];
+}
+
+export interface BypassLimitExceeded {
+  rule: string;
+  window: string;
+  measure: 'count' | 'sum';
+  path?: string;
+  observed: number;
+  limit: number;
+  group_by?: string[];
+}
+
+export function getBypassLimitExceeded(metadata?: Record<string, unknown>): BypassLimitExceeded | null {
+  const hit = metadata?.bypass_limit_exceeded as BypassLimitExceeded | undefined;
+  return hit && typeof hit.measure === 'string' ? hit : null;
 }
 
 export interface Policy {

@@ -150,9 +150,15 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 	req.CurrentStage = 0
 
 	// A matching bypass rule means this request needs no review: it is
-	// created and approved in one step, fully audited as a bypass.
-	if rule := matchBypass(policy, req, auth.RolesFromContext(ctx), auth.PermissionsFromContext(ctx), req.MakerAttributes); rule != nil {
+	// created and approved in one step, fully audited as a bypass. A rule
+	// whose velocity limit trips instead sends the request to review with
+	// the measurement attached for the reviewer.
+	rule, limitHit := matchBypass(ctx, s.requests, policy, req, auth.RolesFromContext(ctx), auth.PermissionsFromContext(ctx), req.MakerAttributes)
+	if rule != nil {
 		return s.createBypassed(ctx, req, rule)
+	}
+	if limitHit != nil {
+		stampLimitExceeded(req, limitHit)
 	}
 
 	if err := s.requests.Create(ctx, req); err != nil {
@@ -164,6 +170,11 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 
 	// Audit log
 	s.audit(ctx, req.ID, "created", req.MakerID, nil)
+	if limitHit != nil {
+		details, _ := json.Marshal(limitHit)
+		s.audit(ctx, req.ID, "bypass_limit_exceeded", "system", details)
+		slog.InfoContext(ctx, "bypass limit exceeded; request routed to review", "request_id", req.ID, "request_type", req.Type, "rule", limitHit.Rule, "measure", limitHit.Measure, "observed", limitHit.Observed, "limit", limitHit.Limit)
+	}
 
 	if s.metrics != nil {
 		s.metrics.RequestsTotal.WithLabelValues("created").Inc()

@@ -148,6 +148,7 @@
     maker_permissions: string;  // comma-separated
     maker_attributes: string;   // one "attribute = v1, v2" per line
     payload: { path: string; op: BypassCondition['op']; value: string }[];
+    limits: { window: string; max_count: string; max_sum_path: string; max_sum_value: string; group_by: string }[];
   }
   let bypassRules: BypassRuleForm[] = $state([]);
 
@@ -160,6 +161,13 @@
       maker_permissions: (r.maker_permissions || []).join(', '),
       maker_attributes: Object.entries(r.maker_attributes || {}).map(([k, v]) => `${k} = ${v.join(', ')}`).join('\n'),
       payload: (r.payload || []).map((c) => ({ path: c.path, op: c.op, value: JSON.stringify(c.value) })),
+      limits: (r.limits || []).map((l) => ({
+        window: l.window,
+        max_count: l.max_count != null ? String(l.max_count) : '',
+        max_sum_path: l.max_sum?.path || '',
+        max_sum_value: l.max_sum ? String(l.max_sum.value) : '',
+        group_by: (l.group_by || []).join(', '),
+      })),
     };
   }
 
@@ -186,17 +194,29 @@
     const payload = f.payload
       .filter((c) => c.path.trim())
       .map((c) => ({ path: c.path.trim(), op: c.op, value: parseConditionValue(c.value) }));
+    const limits = f.limits
+      .filter((l) => l.window.trim())
+      .map((l) => {
+        const groupBy = splitList(l.group_by);
+        return {
+          window: l.window.trim(),
+          max_count: l.max_count.trim() ? Number(l.max_count) : undefined,
+          max_sum: l.max_sum_path.trim() ? { path: l.max_sum_path.trim(), value: Number(l.max_sum_value) } : undefined,
+          group_by: groupBy.length ? groupBy : undefined,
+        };
+      });
     return {
       name: f.name.trim() || undefined,
       maker_roles: roles.length ? roles : undefined,
       maker_permissions: perms.length ? perms : undefined,
       maker_attributes: parseAttributeLines(f.maker_attributes),
       payload: payload.length ? payload : undefined,
+      limits: limits.length ? limits : undefined,
     };
   }
 
   function addBypassRule() {
-    bypassRules = [...bypassRules, { name: '', maker_roles: '', maker_permissions: '', maker_attributes: '', payload: [] }];
+    bypassRules = [...bypassRules, { name: '', maker_roles: '', maker_permissions: '', maker_attributes: '', payload: [], limits: [] }];
   }
   function removeBypassRule(i: number) {
     bypassRules = bypassRules.filter((_, idx) => idx !== i);
@@ -207,6 +227,12 @@
   }
   function removeBypassCondition(i: number, j: number) {
     bypassRules[i].payload = bypassRules[i].payload.filter((_, idx) => idx !== j);
+  }
+  function addBypassLimit(i: number) {
+    bypassRules[i].limits = [...bypassRules[i].limits, { window: '24h', max_count: '', max_sum_path: '', max_sum_value: '', group_by: '' }];
+  }
+  function removeBypassLimit(i: number, j: number) {
+    bypassRules[i].limits = bypassRules[i].limits.filter((_, idx) => idx !== j);
   }
 
   // Fixed values are edited as one comma-separated string per rule.
@@ -269,6 +295,19 @@
       if (!rule.maker_roles && !rule.maker_permissions && !rule.maker_attributes && !rule.payload) {
         validationErrors[`bypass_${i}`] = 'A bypass rule needs at least one condition, or it would bypass every request';
         return;
+      }
+      for (const l of rule.limits || []) {
+        if (!/^\d+(d|h|m|s)$/.test(l.window) && !/^(\d+h)?(\d+m)?(\d+s)?$/.test(l.window)) {
+          validationErrors[`bypass_${i}`] = `Limit window "${l.window}" must look like 24h, 90m or 7d`;
+        } else if (l.max_count == null && !l.max_sum) {
+          validationErrors[`bypass_${i}`] = 'A limit needs a max count, a max sum, or both';
+        } else if (l.max_count != null && (!Number.isInteger(l.max_count) || l.max_count < 1)) {
+          validationErrors[`bypass_${i}`] = 'Limit max count must be a whole number of at least 1';
+        } else if (l.max_sum && !(l.max_sum.value >= 0)) {
+          validationErrors[`bypass_${i}`] = 'Limit max sum needs a numeric value';
+        } else if ((l.group_by || []).some((g) => g !== 'maker' && !g.startsWith('payload:'))) {
+          validationErrors[`bypass_${i}`] = 'Group by entries must be "maker" or "payload:<path>"';
+        }
       }
       for (const c of rule.payload || []) {
         if (['lt', 'lte', 'gt', 'gte'].includes(c.op) && typeof c.value !== 'number') {
@@ -804,6 +843,25 @@
                 </div>
               {/each}
               <p class="mt-2 text-[11px] text-on-surface-variant">Values are JSON: numbers like <code>1000</code>, strings like <code>"NGN"</code> (bare words are treated as strings), arrays for <code>in</code>.</p>
+            </div>
+            <div class="mt-4 pt-4 border-t border-outline-variant/10">
+              <div class="flex items-center justify-between mb-1">
+                <span class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Velocity limits</span>
+                <button type="button" onclick={() => addBypassLimit(i)} class="text-xs font-medium text-primary hover:text-primary-container transition-colors">+ Add limit</button>
+              </div>
+              <p class="text-[11px] text-on-surface-variant mb-2">Stops the rule when recent activity is too high, so a threshold cannot be gamed by splitting work into many small requests. Counts every request of this type in the window; by default per maker.</p>
+              {#each rule.limits as lim, j}
+                <div class="grid grid-cols-[6rem_6rem_1fr_6rem_1fr_auto] gap-2 items-center mt-2">
+                  <input type="text" bind:value={lim.window} oninput={() => clearFieldError(`bypass_${i}`)} placeholder="24h" aria-label="Limit window" class="px-3 py-2 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <input type="number" min="1" bind:value={lim.max_count} oninput={() => clearFieldError(`bypass_${i}`)} placeholder="max #" aria-label="Limit max count" class="px-3 py-2 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <input type="text" bind:value={lim.max_sum_path} oninput={() => clearFieldError(`bypass_${i}`)} placeholder="sum of path, e.g. amount" aria-label="Limit sum path" class="px-3 py-2 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <input type="number" min="0" bind:value={lim.max_sum_value} oninput={() => clearFieldError(`bypass_${i}`)} placeholder="max sum" aria-label="Limit max sum" class="px-3 py-2 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <input type="text" bind:value={lim.group_by} oninput={() => clearFieldError(`bypass_${i}`)} placeholder="group by: maker, payload:destination_account" aria-label="Limit group by" class="px-3 py-2 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary" />
+                  <button type="button" onclick={() => removeBypassLimit(i, j)} class="p-2 text-on-surface-variant hover:text-status-rejected-text transition-colors" aria-label="Remove limit">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              {/each}
             </div>
             {#if validationErrors[`bypass_${i}`]}
               <p class="mt-3 text-xs text-status-rejected-text">{validationErrors[`bypass_${i}`]}</p>

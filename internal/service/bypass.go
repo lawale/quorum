@@ -1,12 +1,17 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lawale/quorum/internal/model"
+	"github.com/lawale/quorum/internal/store"
 )
 
 var bypassOps = map[string]bool{"eq": true, "ne": true, "lt": true, "lte": true, "gt": true, "gte": true, "in": true}
@@ -29,6 +34,34 @@ func validateBypassRules(rules []model.BypassRule) error {
 		}
 		if !r.HasCondition() {
 			return fmt.Errorf("%w: rule %d has no conditions and would bypass every request", ErrInvalidBypassRule, i)
+		}
+		for j := range r.Limits {
+			l := &r.Limits[j]
+			l.Window = strings.TrimSpace(l.Window)
+			if d, err := parseWindow(l.Window); err != nil || d <= 0 {
+				return fmt.Errorf("%w: rule %d, limit %d: window must be a positive duration such as 24h or 7d", ErrInvalidBypassRule, i, j)
+			}
+			if l.MaxCount == nil && l.MaxSum == nil {
+				return fmt.Errorf("%w: rule %d, limit %d: set max_count, max_sum, or both", ErrInvalidBypassRule, i, j)
+			}
+			if l.MaxCount != nil && *l.MaxCount < 1 {
+				return fmt.Errorf("%w: rule %d, limit %d: max_count must be at least 1", ErrInvalidBypassRule, i, j)
+			}
+			if l.MaxSum != nil {
+				l.MaxSum.Path = strings.TrimSpace(l.MaxSum.Path)
+				if l.MaxSum.Path == "" || l.MaxSum.Value < 0 {
+					return fmt.Errorf("%w: rule %d, limit %d: max_sum needs a path and a non-negative value", ErrInvalidBypassRule, i, j)
+				}
+			}
+			l.GroupBy = trimList(l.GroupBy)
+			for _, g := range l.GroupBy {
+				if g != "maker" && !strings.HasPrefix(g, "payload:") {
+					return fmt.Errorf("%w: rule %d, limit %d: group_by entries must be \"maker\" or \"payload:<path>\"", ErrInvalidBypassRule, i, j)
+				}
+				if strings.HasPrefix(g, "payload:") && strings.TrimPrefix(g, "payload:") == "" {
+					return fmt.Errorf("%w: rule %d, limit %d: payload group_by needs a path", ErrInvalidBypassRule, i, j)
+				}
+			}
 		}
 		for j := range r.Payload {
 			c := &r.Payload[j]
@@ -75,14 +108,39 @@ func trimList(in []string) []string {
 	return out
 }
 
-// matchBypass returns the first rule the maker and payload satisfy, or nil.
-func matchBypass(policy *model.Policy, req *model.Request, makerRoles, makerPermissions []string, makerAttributes map[string]string) *model.BypassRule {
+// matchBypass returns the first rule whose conditions and limits the request
+// satisfies. When a rule's conditions match but a limit stops it, the first
+// such hit is returned alongside a nil rule so the caller can surface it to
+// reviewers. Limit evaluation needs recent history; errors there fail safe,
+// treating the rule as not matched.
+func matchBypass(ctx context.Context, requests store.RequestStore, policy *model.Policy, req *model.Request, makerRoles, makerPermissions []string, makerAttributes map[string]string) (*model.BypassRule, *model.BypassLimitExceeded) {
+	var firstHit *model.BypassLimitExceeded
+	for _, rule := range matchingBypassRules(policy, req, makerRoles, makerPermissions, makerAttributes) {
+		hit, err := limitsExceeded(ctx, requests, rule, req)
+		if err != nil {
+			slog.WarnContext(ctx, "bypass limit check failed; routing to review", "error", err, "rule", rule.Name, "request_type", req.Type)
+			continue
+		}
+		if hit == nil {
+			return rule, firstHit
+		}
+		if firstHit == nil {
+			firstHit = hit
+		}
+	}
+	return nil, firstHit
+}
+
+// matchingBypassRules returns, in policy order, every rule whose maker and
+// payload conditions hold. Limits are not considered here.
+func matchingBypassRules(policy *model.Policy, req *model.Request, makerRoles, makerPermissions []string, makerAttributes map[string]string) []*model.BypassRule {
 	if len(policy.BypassRules) == 0 {
 		return nil
 	}
 
 	var payload map[string]any
 	payloadParsed := false
+	var matched []*model.BypassRule
 
 	for i := range policy.BypassRules {
 		rule := &policy.BypassRules[i]
@@ -117,9 +175,153 @@ func matchBypass(policy *model.Policy, req *model.Request, makerRoles, makerPerm
 				continue
 			}
 		}
-		return rule
+		matched = append(matched, rule)
 	}
-	return nil
+	return matched
+}
+
+// limitsExceeded measures the maker's recent activity against each limit on
+// the rule, including the request being created. It returns the first limit
+// that would be exceeded, or nil when all pass.
+func limitsExceeded(ctx context.Context, requests store.RequestStore, rule *model.BypassRule, req *model.Request) (*model.BypassLimitExceeded, error) {
+	if len(rule.Limits) == 0 {
+		return nil, nil
+	}
+
+	var newPayload map[string]any
+	_ = json.Unmarshal(req.Payload, &newPayload)
+
+	now := time.Now().UTC()
+	for _, limit := range rule.Limits {
+		window, err := parseWindow(limit.Window)
+		if err != nil {
+			return nil, fmt.Errorf("limit window %q: %w", limit.Window, err)
+		}
+		groupBy := limit.GroupBy
+		if len(groupBy) == 0 {
+			groupBy = []string{"maker"}
+		}
+		makerFilter := ""
+		if slices.Contains(groupBy, "maker") {
+			makerFilter = req.MakerID
+		}
+
+		recent, err := requests.ListRecentByType(ctx, req.Type, now.Add(-window), makerFilter)
+		if err != nil {
+			return nil, fmt.Errorf("listing recent requests: %w", err)
+		}
+
+		count := 1 // the request being created
+		sum := 0.0
+		if limit.MaxSum != nil {
+			sum = numberAt(newPayload, limit.MaxSum.Path)
+		}
+		for i := range recent {
+			if recent[i].ID == req.ID {
+				continue
+			}
+			var prior map[string]any
+			if err := json.Unmarshal(recent[i].Payload, &prior); err != nil {
+				prior = nil
+			}
+			if !sameGroup(groupBy, newPayload, prior) {
+				continue
+			}
+			count++
+			if limit.MaxSum != nil {
+				sum += numberAt(prior, limit.MaxSum.Path)
+			}
+		}
+
+		if limit.MaxCount != nil && count > *limit.MaxCount {
+			return &model.BypassLimitExceeded{
+				Rule: rule.Name, Window: limit.Window, Measure: "count",
+				Observed: float64(count), Limit: float64(*limit.MaxCount), GroupBy: groupBy,
+			}, nil
+		}
+		if limit.MaxSum != nil && sum > limit.MaxSum.Value {
+			return &model.BypassLimitExceeded{
+				Rule: rule.Name, Window: limit.Window, Measure: "sum", Path: limit.MaxSum.Path,
+				Observed: sum, Limit: limit.MaxSum.Value, GroupBy: groupBy,
+			}, nil
+		}
+	}
+	return nil, nil
+}
+
+// sameGroup reports whether a prior request falls in the same group as the
+// new one for every payload:<path> key. The maker key is applied in the query.
+func sameGroup(groupBy []string, current, prior map[string]any) bool {
+	for _, g := range groupBy {
+		if !strings.HasPrefix(g, "payload:") {
+			continue
+		}
+		path := strings.TrimPrefix(g, "payload:")
+		a, aok := valueAtPath(current, path)
+		b, bok := valueAtPath(prior, path)
+		if !aok || !bok || !scalarEqual(a, b) {
+			return false
+		}
+	}
+	return true
+}
+
+// numberAt returns the numeric value at a payload path, or 0 when absent or
+// not a number. Numeric strings are accepted since amounts are often quoted.
+func numberAt(data map[string]any, path string) float64 {
+	v, ok := valueAtPath(data, path)
+	if !ok {
+		return 0
+	}
+	switch x := v.(type) {
+	case float64:
+		return x
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(x), 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+// parseWindow parses a Go duration, additionally accepting a trailing "d"
+// for whole days (e.g. "7d", "30d").
+func parseWindow(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty window")
+	}
+	if strings.HasSuffix(s, "d") {
+		days, err := strconv.Atoi(strings.TrimSuffix(s, "d"))
+		if err != nil || days <= 0 {
+			return 0, fmt.Errorf("invalid day window %q", s)
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, err
+	}
+	return d, nil
+}
+
+// stampLimitExceeded records a tripped bypass limit in request metadata so
+// the reviewer sees why a normally-bypassed request needs their decision.
+func stampLimitExceeded(req *model.Request, hit *model.BypassLimitExceeded) {
+	meta := map[string]json.RawMessage{}
+	if len(req.Metadata) > 0 {
+		if err := json.Unmarshal(req.Metadata, &meta); err != nil {
+			meta = map[string]json.RawMessage{}
+		}
+	}
+	b, err := json.Marshal(hit)
+	if err != nil {
+		return
+	}
+	meta["bypass_limit_exceeded"] = b
+	if merged, err := json.Marshal(meta); err == nil {
+		req.Metadata = merged
+	}
 }
 
 func anyIn(wanted, have []string) bool {

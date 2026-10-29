@@ -50,6 +50,7 @@
       case 'bypassed':
       case 'stage_advanced': return 'bg-status-approved-bg text-status-approved-text';
       case 'rejected': return 'bg-status-rejected-bg text-status-rejected-text';
+      case 'bypass_limit_exceeded': return 'bg-status-pending-bg text-status-pending-text';
       case 'cancelled':
       case 'expired': return 'bg-surface-container text-on-surface-variant';
       default: return 'bg-surface-container text-on-surface-variant';

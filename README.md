@@ -630,6 +630,31 @@ When a request is created, Quorum tries the rules in order. A rule matches when 
 
 A rule must specify at least one condition; an empty rule is rejected, since it would bypass everything.
 
+**Velocity limits.** A threshold on its own invites structuring: anyone who learns that transfers under 1,000 skip review will send 900 five times. Give the rule `limits` and it stops matching once recent activity is too high:
+
+```json
+{
+  "name": "small internal transfer",
+  "payload": [ { "path": "amount", "op": "lt", "value": 1000 } ],
+  "limits": [
+    { "window": "24h", "max_count": 3 },
+    { "window": "24h", "max_sum": { "path": "amount", "value": 2500 } },
+    { "window": "7d",  "max_sum": { "path": "amount", "value": 5000 }, "group_by": ["payload:destination_account"] }
+  ]
+}
+```
+
+- **`window`** — how far back to look. Go durations such as `24h` or `90m`, plus a `d` suffix for days.
+- **`max_count`** — the most requests allowed in the window, counting the one being created.
+- **`max_sum`** — the most a numeric payload field may total across the window, again including the new request. Numeric strings are accepted.
+- **`group_by`** — what makes two requests "the same activity". Defaults to `["maker"]`. Add `payload:<path>` entries to group by a payload value instead of, or as well as, the maker. The third limit above catches five different people each sending 900 to one destination account.
+
+Every request of the policy's type in the window counts, whatever its status and whether or not it was bypassed. When any limit would be exceeded the rule does not match and Quorum tries the next rule; if none matches, the request goes through the normal stages. Bypass fails safe into review, never into rejection, and a database error during the check is treated the same way.
+
+When a limit is what sent a request to review, Quorum writes `metadata.bypass_limit_exceeded` with the rule, window, measure, observed value and limit, and records a `bypass_limit_exceeded` audit entry. The console and the approval panel widget show this as a notice above the request, so the reviewer knows they are looking at the fourth transfer today rather than just another 900.
+
+Limits make a bypass threshold safe to offer. They are not transaction monitoring: patterns across request types or tenants, or over months, belong in the AML tooling behind your application. Quorum's job is to make sure that when the pattern is visible at approval time, a human sees it.
+
 On the first match the request is created and approved in one step. No approval rows are written. The audit log records `created` followed by `bypassed` with the rule name, the usual `approved` webhooks fire, and SSE subscribers are notified. The response to the create call already carries `"status": "approved"`, so your application can act immediately. Requests that match no rule proceed through the stages as normal.
 
 Bypass applies to the whole policy, not to a stage. If what you want is "head office may approve any branch's request", that is a [scope](#reviewer-scoping) rule on the stage, not a bypass.

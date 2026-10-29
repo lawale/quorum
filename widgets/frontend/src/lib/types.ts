@@ -85,6 +85,16 @@ export interface ResolvedItem {
   fields: ResolvedField[];
 }
 
+export interface BypassLimitExceeded {
+  rule: string;
+  window: string;
+  measure: 'count' | 'sum';
+  path?: string;
+  observed: number;
+  limit: number;
+  group_by?: string[];
+}
+
 export interface ResolvedChange {
   label: string;
   from: string;

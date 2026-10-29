@@ -119,6 +119,25 @@ type BypassCondition struct {
 	Value json.RawMessage `json:"value"`
 }
 
+// BypassSum caps the total of a numeric payload field across the window.
+type BypassSum struct {
+	Path  string  `json:"path"`
+	Value float64 `json:"value"`
+}
+
+// BypassLimit is a velocity ceiling on a bypass rule. It counts requests of
+// the same type created within Window and, by default, by the same maker.
+// GroupBy widens the key: "maker" (default) and "payload:<path>" entries must
+// all match for a prior request to count. When MaxCount or MaxSum would be
+// exceeded by the new request, the rule does not match and the request goes
+// through normal review. Window accepts Go durations plus a "d" suffix.
+type BypassLimit struct {
+	Window   string     `json:"window"`
+	MaxCount *int       `json:"max_count,omitempty"`
+	MaxSum   *BypassSum `json:"max_sum,omitempty"`
+	GroupBy  []string   `json:"group_by,omitempty"`
+}
+
 // BypassRule describes requests that need no review. A rule matches when every
 // condition it specifies holds for the maker and the payload: the maker holds
 // any listed role, holds any listed permission, has each listed attribute set
@@ -130,6 +149,20 @@ type BypassRule struct {
 	MakerPermissions []string            `json:"maker_permissions,omitempty"`
 	MakerAttributes  map[string][]string `json:"maker_attributes,omitempty"`
 	Payload          []BypassCondition   `json:"payload,omitempty"`
+	Limits           []BypassLimit       `json:"limits,omitempty"`
+}
+
+// BypassLimitExceeded is written to request metadata when a bypass rule
+// matched but one of its limits stopped it, so reviewers see why a request
+// that would normally skip review is in front of them.
+type BypassLimitExceeded struct {
+	Rule     string   `json:"rule"`
+	Window   string   `json:"window"`
+	Measure  string   `json:"measure"` // "count" or "sum"
+	Path     string   `json:"path,omitempty"`
+	Observed float64  `json:"observed"` // including this request
+	Limit    float64  `json:"limit"`
+	GroupBy  []string `json:"group_by,omitempty"`
 }
 
 // HasCondition reports whether the rule constrains anything at all. A rule

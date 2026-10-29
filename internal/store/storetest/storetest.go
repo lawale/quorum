@@ -160,6 +160,46 @@ func TestRequestStore(t *testing.T, s store.RequestStore) {
 		}
 	})
 
+	t.Run("ListRecentByType", func(t *testing.T) {
+		rt := "recent-" + uuid.NewString()
+		mk := func(maker string) *model.Request {
+			r := &model.Request{Type: rt, Payload: json.RawMessage(`{"amount": 1}`), MakerID: maker}
+			if err := s.Create(ctx, r); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+			return r
+		}
+		mk("alice")
+		mk("alice")
+		mk("bob")
+		if err := s.Create(ctx, &model.Request{Type: "other-" + uuid.NewString(), Payload: json.RawMessage(`{}`), MakerID: "alice"}); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		since := time.Now().UTC().Add(-time.Hour)
+		all, err := s.ListRecentByType(ctx, rt, since, "")
+		if err != nil {
+			t.Fatalf("ListRecentByType: %v", err)
+		}
+		if len(all) != 3 {
+			t.Errorf("all makers: got %d, want 3", len(all))
+		}
+		alice, err := s.ListRecentByType(ctx, rt, since, "alice")
+		if err != nil {
+			t.Fatalf("ListRecentByType(alice): %v", err)
+		}
+		if len(alice) != 2 {
+			t.Errorf("alice: got %d, want 2", len(alice))
+		}
+		future, err := s.ListRecentByType(ctx, rt, time.Now().UTC().Add(time.Hour), "")
+		if err != nil {
+			t.Fatalf("ListRecentByType(future): %v", err)
+		}
+		if len(future) != 0 {
+			t.Errorf("future window: got %d, want 0", len(future))
+		}
+	})
+
 	t.Run("MakerAttributes roundtrip", func(t *testing.T) {
 		req := &model.Request{
 			Type:            "transfer",

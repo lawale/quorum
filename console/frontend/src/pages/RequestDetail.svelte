@@ -5,7 +5,7 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import type { Request, AuditLog, OutboxEntry } from '../lib/types';
-  import { getDisplay } from '../lib/types';
+  import { getDisplay, getBypassLimitExceeded } from '../lib/types';
 
   let { id }: { id: string } = $props();
 
@@ -110,6 +110,7 @@
       case 'bypassed':
       case 'stage_advanced': return 'bg-status-approved-bg text-status-approved-text';
       case 'rejected': return 'bg-status-rejected-bg text-status-rejected-text';
+      case 'bypass_limit_exceeded': return 'bg-status-pending-bg text-status-pending-text';
       case 'cancelled':
       case 'expired': return 'bg-surface-container text-on-surface-variant';
       default: return 'bg-surface-container text-on-surface-variant';
@@ -123,6 +124,7 @@
       case 'bypassed':
       case 'stage_advanced': return 'bg-emerald-500';
       case 'rejected': return 'bg-red-500';
+      case 'bypass_limit_exceeded': return 'bg-amber-500';
       case 'cancelled': return 'bg-gray-400';
       case 'expired': return 'bg-orange-500';
       default: return 'bg-surface-container-high';
@@ -166,6 +168,7 @@
 
   let failedCount = $derived(outboxEntries.filter(e => e.status === 'failed').length);
   let displayData = $derived(req ? getDisplay(req.metadata) : null);
+  let limitHit = $derived(req ? getBypassLimitExceeded(req.metadata) : null);
   let stages = $derived(req ? deriveStages(auditLogs, req) : { total: 0, completed: 0 });
   let verificationLogs = $derived(auditLogs.filter(l => l.action === 'approved' || l.action === 'rejected'));
 
@@ -227,6 +230,22 @@
             <h2 class="text-xl font-bold tracking-tight text-on-surface">Request Content</h2>
           </div>
           <div class="bg-surface-container-lowest rounded-xl shadow-ambient-lg p-6">
+            {#if limitHit}
+              <div class="mb-5 rounded-lg border border-status-pending-text/30 bg-status-pending-bg px-4 py-3 text-sm text-status-pending-text">
+                <p class="font-semibold">Needs review: bypass limit exceeded</p>
+                <p class="mt-1">
+                  This request matched the bypass rule "{limitHit.rule}" but
+                  {#if limitHit.measure === 'sum'}
+                    the total {limitHit.path} in the last {limitHit.window} is {limitHit.observed}, above the limit of {limitHit.limit}.
+                  {:else}
+                    it is request number {limitHit.observed} in the last {limitHit.window}, above the limit of {limitHit.limit}.
+                  {/if}
+                  {#if limitHit.group_by?.length}
+                    Counted per {limitHit.group_by.join(' + ').replace(/payload:/g, '')}.
+                  {/if}
+                </p>
+              </div>
+            {/if}
             {#if displayData}
               {#if displayData.title}
                 <h3 class="text-base font-semibold text-on-surface mb-4">{displayData.title}</h3>
