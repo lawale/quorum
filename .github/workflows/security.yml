@@ -16,7 +16,7 @@ jobs:
     name: Go Vulnerability Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: SocketDev/action@v1
         with:
           mode: firewall-free
@@ -48,7 +48,7 @@ jobs:
       matrix:
         language: [go, javascript]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - if: matrix.language == 'go'
         uses: actions/setup-go@v6
