@@ -321,19 +321,23 @@
     }
 
     try {
+      let saved: Policy | undefined;
       if (isEdit && id) {
-        await policiesApi.update(id, payload);
+        saved = await policiesApi.update(id, payload);
         addToast('Policy updated', 'success');
       } else {
         // Temporarily set the global tenant to the form selection for the create call
         const previousTenant = get(selectedTenant);
         if (formTenantId) selectedTenant.set(formTenantId);
         try {
-          await policiesApi.create(payload);
+          saved = await policiesApi.create(payload);
         } finally {
           selectedTenant.set(previousTenant);
         }
         addToast('Policy created', 'success');
+      }
+      for (const w of saved?.warnings ?? []) {
+        addToast(w, 'error', 10000);
       }
       window.location.hash = '#/policies';
     } catch (err) {

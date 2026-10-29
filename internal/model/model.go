@@ -123,6 +123,10 @@ type Policy struct {
 	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
 	CreatedAt                  time.Time       `json:"created_at"`
 	UpdatedAt                  time.Time       `json:"updated_at"`
+	// Warnings are advisory notes produced when a policy is saved, such as a
+	// scope rule naming an identity attribute the auth mode does not provide.
+	// They are returned to the caller and never stored.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // StageAt returns the approval stage at the given index, or nil if out of range.

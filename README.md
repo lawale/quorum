@@ -655,6 +655,8 @@ Because scope is per stage, a request can travel between branches:
 
 Stage 0 is reviewed in the maker's branch. Stage 1 is reviewed by the branch named in the payload, or by head office.
 
+Attribute names in a policy must match the names configured in step 1. Saving a policy whose scope rules reference an attribute the active auth mode does not supply still succeeds, but the response carries a `warnings` array (and the console shows it) explaining that the stage can never be approved as configured.
+
 Rules fail closed: if no source yields a value, because the maker had no such attribute and the payload path is missing, the checker is out of scope. Out-of-scope decisions return `403`, and `viewer_can_act` on a request reflects the scope check so widgets hide the buttons.
 
 Both sets of attributes are also passed to the [dynamic authorization URL](#permission-guards) as `maker_attributes` and `checker_attributes`, so an external check can build on them.

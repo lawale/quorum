@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lawale/quorum/internal/auth"
@@ -260,6 +261,79 @@ func TestCreate_CapturesMakerAttributes(t *testing.T) {
 	if stored == nil || stored.MakerAttributes["branch_id"] != "LAG-01" {
 		t.Errorf("maker attributes not captured: %+v", stored)
 	}
+}
+
+func TestPolicyCreate_ScopeWarnings(t *testing.T) {
+	newSvc := func() *PolicyService {
+		return NewPolicyService(&testutil.MockPolicyStore{
+			GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) { return nil, nil },
+			CreateFunc:           func(ctx context.Context, p *model.Policy) error { return nil },
+		})
+	}
+
+	t.Run("not configured: no warnings", func(t *testing.T) {
+		svc := newSvc()
+		policy := scopedPolicy(model.ScopeRule{Attribute: "branch_id"})
+		if err := svc.Create(context.Background(), policy); err != nil {
+			t.Fatal(err)
+		}
+		if policy.Warnings != nil {
+			t.Errorf("warnings = %v, want none when attributes were never configured", policy.Warnings)
+		}
+	})
+
+	t.Run("known attribute: no warnings", func(t *testing.T) {
+		svc := newSvc()
+		svc.SetKnownAttributes("verify", []string{"branch_id", "department"})
+		policy := scopedPolicy(model.ScopeRule{Attribute: "branch_id"})
+		if err := svc.Create(context.Background(), policy); err != nil {
+			t.Fatal(err)
+		}
+		if policy.Warnings != nil {
+			t.Errorf("warnings = %v, want none", policy.Warnings)
+		}
+	})
+
+	t.Run("unknown attribute: one warning naming the section", func(t *testing.T) {
+		svc := newSvc()
+		svc.SetKnownAttributes("verify", []string{"branch_id"})
+		policy := scopedPolicy(model.ScopeRule{Attribute: "branchId"}, model.ScopeRule{Attribute: "branch_id"})
+		if err := svc.Create(context.Background(), policy); err != nil {
+			t.Fatal(err)
+		}
+		if len(policy.Warnings) != 1 {
+			t.Fatalf("warnings = %v, want exactly one", policy.Warnings)
+		}
+		for _, want := range []string{`"branchId"`, "auth.verify.claims.attributes", "configured: branch_id"} {
+			if !strings.Contains(policy.Warnings[0], want) {
+				t.Errorf("warning %q should mention %s", policy.Warnings[0], want)
+			}
+		}
+	})
+
+	t.Run("nothing configured in trust mode: single warning", func(t *testing.T) {
+		svc := newSvc()
+		svc.SetKnownAttributes("trust", nil)
+		policy := scopedPolicy(model.ScopeRule{Attribute: "branch_id"})
+		if err := svc.Create(context.Background(), policy); err != nil {
+			t.Fatal(err)
+		}
+		if len(policy.Warnings) != 1 || !strings.Contains(policy.Warnings[0], "auth.trust.attribute_headers is empty") {
+			t.Errorf("warnings = %v", policy.Warnings)
+		}
+	})
+
+	t.Run("no scope rules: no warnings even when unconfigured", func(t *testing.T) {
+		svc := newSvc()
+		svc.SetKnownAttributes("trust", nil)
+		policy := testutil.NewPolicy()
+		if err := svc.Create(context.Background(), policy); err != nil {
+			t.Fatal(err)
+		}
+		if policy.Warnings != nil {
+			t.Errorf("warnings = %v, want none", policy.Warnings)
+		}
+	})
 }
 
 func TestPolicyCreate_ScopeRule_MissingAttribute_Error(t *testing.T) {

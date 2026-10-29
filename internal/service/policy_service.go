@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -27,10 +29,76 @@ var (
 
 type PolicyService struct {
 	policies store.PolicyStore
+
+	authMode             string
+	knownAttributes      map[string]bool
+	attributesConfigured bool
 }
 
 func NewPolicyService(policies store.PolicyStore) *PolicyService {
 	return &PolicyService{policies: policies}
+}
+
+// SetKnownAttributes tells the service which identity attribute names the
+// configured auth mode can supply, so policies whose scope rules reference an
+// attribute no checker will ever carry can be flagged when they are saved.
+func (s *PolicyService) SetKnownAttributes(authMode string, names []string) {
+	s.authMode = authMode
+	s.knownAttributes = make(map[string]bool, len(names))
+	for _, n := range names {
+		s.knownAttributes[n] = true
+	}
+	s.attributesConfigured = true
+}
+
+// scopeWarnings returns advisory messages for scope rules that reference
+// identity attributes the auth mode does not provide. Such rules are valid but
+// unsatisfiable: the stage would never accept a checker.
+func (s *PolicyService) scopeWarnings(policy *model.Policy) []string {
+	if !s.attributesConfigured {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var used []string
+	for _, stage := range policy.Stages {
+		for _, rule := range stage.Scope {
+			if rule.Attribute != "" && !seen[rule.Attribute] {
+				seen[rule.Attribute] = true
+				used = append(used, rule.Attribute)
+			}
+		}
+	}
+	if len(used) == 0 {
+		return nil
+	}
+
+	section := "auth." + s.authMode + ".attribute_headers"
+	if s.authMode == "verify" {
+		section = "auth.verify.claims.attributes"
+	}
+
+	if len(s.knownAttributes) == 0 {
+		return []string{fmt.Sprintf(
+			"scope rules reference identity attribute(s) %s but %s is empty; no checker will carry them and these stages can never be approved",
+			strings.Join(used, ", "), section)}
+	}
+
+	known := make([]string, 0, len(s.knownAttributes))
+	for n := range s.knownAttributes {
+		known = append(known, n)
+	}
+	sort.Strings(known)
+
+	var warnings []string
+	for _, attr := range used {
+		if !s.knownAttributes[attr] {
+			warnings = append(warnings, fmt.Sprintf(
+				"scope attribute %q is not configured in %s (configured: %s); no checker will carry it and that stage can never be approved",
+				attr, section, strings.Join(known, ", ")))
+		}
+	}
+	return warnings
 }
 
 func (s *PolicyService) Create(ctx context.Context, policy *model.Policy) error {
@@ -54,7 +122,18 @@ func (s *PolicyService) Create(ctx context.Context, policy *model.Policy) error 
 		return fmt.Errorf("%w: %s", ErrInvalidDisplayTemplate, err.Error())
 	}
 
-	return s.policies.Create(ctx, policy)
+	if err := s.policies.Create(ctx, policy); err != nil {
+		return err
+	}
+	s.attachWarnings(policy)
+	return nil
+}
+
+func (s *PolicyService) attachWarnings(policy *model.Policy) {
+	policy.Warnings = s.scopeWarnings(policy)
+	for _, w := range policy.Warnings {
+		slog.Warn("policy saved with unsatisfiable scope rule", "policy_id", policy.ID, "request_type", policy.RequestType, "warning", w)
+	}
 }
 
 // validateAndDefaultStages validates stage ordering and applies defaults
@@ -175,7 +254,11 @@ func (s *PolicyService) Update(ctx context.Context, policy *model.Policy) error 
 		return fmt.Errorf("%w: %s", ErrInvalidDisplayTemplate, err.Error())
 	}
 
-	return s.policies.Update(ctx, policy)
+	if err := s.policies.Update(ctx, policy); err != nil {
+		return err
+	}
+	s.attachWarnings(policy)
+	return nil
 }
 
 func (s *PolicyService) DistinctRequestTypes(ctx context.Context) ([]string, error) {

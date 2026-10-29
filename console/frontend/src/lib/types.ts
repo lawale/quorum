@@ -50,6 +50,7 @@ export interface Policy {
   display_template?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  warnings?: string[];
 }
 
 export interface Webhook {
