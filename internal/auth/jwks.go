@@ -246,23 +246,47 @@ func (k jwk) publicKey() (any, error) {
 		default:
 			return nil, fmt.Errorf("unsupported curve %q", k.Crv)
 		}
-		x, err := decodeBigInt(k.X)
+		size := (curve.Params().BitSize + 7) / 8
+		x, err := decodeCoordinate(k.X, size)
 		if err != nil {
 			return nil, fmt.Errorf("x: %w", err)
 		}
-		y, err := decodeBigInt(k.Y)
+		y, err := decodeCoordinate(k.Y, size)
 		if err != nil {
 			return nil, fmt.Errorf("y: %w", err)
 		}
-		pub := &ecdsa.PublicKey{Curve: curve, X: x, Y: y}
-		// ECDH() validates that the point is on the curve; the ECDH key itself is discarded.
-		if _, err := pub.ECDH(); err != nil {
+		// Uncompressed SEC 1 encoding: 0x04 || X || Y. Parsing rejects points
+		// that are not on the curve.
+		point := make([]byte, 0, 1+2*size)
+		point = append(point, 0x04)
+		point = append(point, x...)
+		point = append(point, y...)
+		pub, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+		if err != nil {
 			return nil, fmt.Errorf("invalid EC point: %w", err)
 		}
 		return pub, nil
 	default:
 		return nil, fmt.Errorf("unsupported key type %q", k.Kty)
 	}
+}
+
+// decodeCoordinate decodes a base64url EC coordinate and left-pads it to the
+// curve's byte size. Encodings longer than the coordinate are rejected.
+func decodeCoordinate(s string, size int) ([]byte, error) {
+	if s == "" {
+		return nil, errors.New("missing")
+	}
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > size {
+		return nil, fmt.Errorf("coordinate is %d bytes, curve takes %d", len(b), size)
+	}
+	out := make([]byte, size)
+	copy(out[size-len(b):], b)
+	return out, nil
 }
 
 func decodeBigInt(s string) (*big.Int, error) {
