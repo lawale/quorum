@@ -110,6 +110,34 @@ type ApprovalStage struct {
 	Scope               []ScopeRule       `json:"scope,omitempty"`
 }
 
+// BypassCondition is a comparison against a value in the request payload.
+// Op is one of eq, ne, lt, lte, gt, gte, in. Ordering operators compare
+// numbers only; eq, ne and in compare numbers, strings and booleans.
+type BypassCondition struct {
+	Path  string          `json:"path"`
+	Op    string          `json:"op"`
+	Value json.RawMessage `json:"value"`
+}
+
+// BypassRule describes requests that need no review. A rule matches when every
+// condition it specifies holds for the maker and the payload: the maker holds
+// any listed role, holds any listed permission, has each listed attribute set
+// to one of the allowed values, and every payload condition is true. A policy's
+// rules are tried in order and the first match auto-approves the request.
+type BypassRule struct {
+	Name             string              `json:"name,omitempty"`
+	MakerRoles       []string            `json:"maker_roles,omitempty"`
+	MakerPermissions []string            `json:"maker_permissions,omitempty"`
+	MakerAttributes  map[string][]string `json:"maker_attributes,omitempty"`
+	Payload          []BypassCondition   `json:"payload,omitempty"`
+}
+
+// HasCondition reports whether the rule constrains anything at all. A rule
+// with no conditions would bypass every request and is rejected.
+func (r BypassRule) HasCondition() bool {
+	return len(r.MakerRoles) > 0 || len(r.MakerPermissions) > 0 || len(r.MakerAttributes) > 0 || len(r.Payload) > 0
+}
+
 type Policy struct {
 	ID                         uuid.UUID       `json:"id"`
 	TenantID                   string          `json:"tenant_id"`
@@ -121,6 +149,7 @@ type Policy struct {
 	DynamicAuthorizationSecret *string         `json:"-"`
 	AutoExpireDuration         *time.Duration  `json:"auto_expire_duration,omitempty"`
 	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
+	BypassRules                []BypassRule    `json:"bypass_rules,omitempty"`
 	CreatedAt                  time.Time       `json:"created_at"`
 	UpdatedAt                  time.Time       `json:"updated_at"`
 	// Warnings are advisory notes produced when a policy is saved, such as a

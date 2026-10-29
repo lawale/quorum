@@ -586,6 +586,50 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 		}
 	})
 
+	t.Run("BypassRules roundtrip", func(t *testing.T) {
+		policy := &model.Policy{
+			Name:        "Bypass Policy",
+			RequestType: "bypass-" + uuid.NewString(),
+			Stages:      []model.ApprovalStage{{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny}},
+			BypassRules: []model.BypassRule{{
+				Name:            "small-internal",
+				MakerRoles:      []string{"teller"},
+				MakerAttributes: map[string][]string{"branch_id": {"HQ"}},
+				Payload:         []model.BypassCondition{{Path: "amount", Op: "lt", Value: json.RawMessage(`100`)}},
+			}},
+		}
+		if err := s.Create(ctx, policy); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		got, err := s.GetByID(ctx, policy.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if len(got.BypassRules) != 1 || got.BypassRules[0].Name != "small-internal" {
+			t.Fatalf("BypassRules = %+v", got.BypassRules)
+		}
+		r := got.BypassRules[0]
+		if len(r.MakerRoles) != 1 || r.MakerRoles[0] != "teller" || r.MakerAttributes["branch_id"][0] != "HQ" {
+			t.Errorf("rule maker conditions = %+v", r)
+		}
+		if len(r.Payload) != 1 || r.Payload[0].Path != "amount" || r.Payload[0].Op != "lt" || !jsonEqual(r.Payload[0].Value, []byte(`100`)) {
+			t.Errorf("rule payload conditions = %+v", r.Payload)
+		}
+
+		// Clearing the rules persists as none.
+		got.BypassRules = nil
+		if err := s.Update(ctx, got); err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		again, err := s.GetByID(ctx, policy.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if again.BypassRules != nil {
+			t.Errorf("BypassRules after clear = %+v, want nil", again.BypassRules)
+		}
+	})
+
 	t.Run("Multi-stage roundtrip", func(t *testing.T) {
 		maxCheckers := 5
 		policy := &model.Policy{

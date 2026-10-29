@@ -48,6 +48,7 @@ Quorum pulls that logic out of your applications into one self-hosted service. Y
   - **Eligible reviewers** — Optionally restrict each request to a specific set of allowed reviewers.
   - **Role-based stage access** — Each approval stage can define which roles are allowed to act (e.g., only `manager` for Stage 1, only `compliance_officer` for Stage 2).
   - **Permission-based stage access** — Each approval stage can define which permissions are required (e.g., only users with `approve_transfers` permission for Stage 2). When both roles and permissions are configured, `authorization_mode` controls whether either suffices (`"any"`) or both are required (`"all"`).
+  - **Bypass rules** — Declare which requests need no review at all, such as a root admin's own changes or transfers under a threshold. Matching requests are approved on creation, with the rule recorded in the audit trail. See [Bypass Rules](#bypass-rules).
   - **Reviewer scoping** — Each stage can require the checker's identity attribute (such as `branch_id` or `department`) to match the maker's, or a value in the payload, so a branch manager only acts on requests from their own branch. See [Reviewer Scoping](#reviewer-scoping).
   - **External authorization checks** — Delegate to an external HTTP endpoint for custom business logic (e.g., "only managers in the same department can approve").
   - **Duplicate vote prevention** — A checker can only act once per stage.
@@ -318,6 +319,7 @@ Quorum enforces a layered permission model on every approval action. When a user
 | **Dynamic authorization URL** | Per-policy | An external HTTP endpoint called before each approval. The endpoint receives the full request context and returns `{"allowed": true/false}`. Use this for custom business logic your domain requires. |
 | **Duplicate vote prevention** | Per-stage | A checker can only vote once per stage. They may vote on different stages of the same request. |
 | **Request fingerprinting** | Per-policy | Configurable `identity_fields` extracted from the payload and hashed. Prevents duplicate pending requests for the same resource. |
+| **Bypass rules** | Per-policy | `bypass_rules` describe requests that need no review. A matching request is approved on creation and audited as `bypassed`. See [Bypass Rules](#bypass-rules). |
 
 ```
 Approve/Reject Request
@@ -597,6 +599,40 @@ Any attribute (`api-url`, `token`, `tenant-id`, `auth-headers`) set on an elemen
 **Error handling:** Set `suppress-errors` on the widget to hide inline error messages. Listen for `quorum:error` events to handle errors externally (e.g., toast notifications). The event detail includes `{ action, message, status }` where `action` is `"load"`, `"approve"`, or `"reject"`.
 
 **Events:** Widgets dispatch custom events you can listen for: `quorum:approved`, `quorum:rejected`, `quorum:select`, and `quorum:error`.
+
+### Bypass Rules
+
+Not everything needs a second pair of eyes. A root administrator correcting a branch address, or a transfer under a small threshold, usually goes straight through in a hand-rolled maker-checker, and that exemption lives in code where nobody can see it. Quorum makes it policy.
+
+```json
+"bypass_rules": [
+  {
+    "name": "root admin",
+    "maker_roles": ["root_admin"]
+  },
+  {
+    "name": "small internal transfer",
+    "maker_attributes": { "branch_id": ["HQ"] },
+    "payload": [
+      { "path": "amount",   "op": "lt", "value": 1000 },
+      { "path": "currency", "op": "in", "value": ["NGN", "GHS"] }
+    ]
+  }
+]
+```
+
+When a request is created, Quorum tries the rules in order. A rule matches when **every** condition it specifies holds:
+
+- **`maker_roles`** — the maker holds at least one of these roles.
+- **`maker_permissions`** — the maker holds at least one of these permissions.
+- **`maker_attributes`** — for each attribute listed, the maker's value is one of the allowed values. Attributes come from the same configuration as [Reviewer Scoping](#reviewer-scoping).
+- **`payload`** — every condition is true for the request payload. `op` is one of `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`. Ordering operators compare numbers only; `in` takes an array. A missing path never satisfies a condition, including `ne`.
+
+A rule must specify at least one condition; an empty rule is rejected, since it would bypass everything.
+
+On the first match the request is created and approved in one step. No approval rows are written. The audit log records `created` followed by `bypassed` with the rule name, the usual `approved` webhooks fire, and SSE subscribers are notified. The response to the create call already carries `"status": "approved"`, so your application can act immediately. Requests that match no rule proceed through the stages as normal.
+
+Bypass applies to the whole policy, not to a stage. If what you want is "head office may approve any branch's request", that is a [scope](#reviewer-scoping) rule on the stage, not a bypass.
 
 ### Reviewer Scoping
 

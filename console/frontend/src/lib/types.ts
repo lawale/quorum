@@ -37,6 +37,20 @@ export interface ApprovalStage {
   scope?: ScopeRule[];
 }
 
+export interface BypassCondition {
+  path: string;
+  op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in';
+  value: unknown;
+}
+
+export interface BypassRule {
+  name?: string;
+  maker_roles?: string[];
+  maker_permissions?: string[];
+  maker_attributes?: Record<string, string[]>;
+  payload?: BypassCondition[];
+}
+
 export interface Policy {
   id: string;
   tenant_id: string;
@@ -48,6 +62,7 @@ export interface Policy {
   dynamic_authorization_secret?: string;
   auto_expire_duration?: string;
   display_template?: Record<string, unknown>;
+  bypass_rules?: BypassRule[];
   created_at: string;
   updated_at: string;
   warnings?: string[];

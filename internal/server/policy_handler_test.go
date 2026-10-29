@@ -397,6 +397,47 @@ func TestPolicyHandler_Update_CarriesScopeRules(t *testing.T) {
 	}
 }
 
+func TestPolicyHandler_Create_CarriesBypassRules(t *testing.T) {
+	var stored *model.Policy
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) { return nil, nil },
+		CreateFunc:           func(ctx context.Context, policy *model.Policy) error { stored = policy; return nil },
+	}
+	handler := newTestPolicyHandler(policies)
+
+	body := `{"name":"Bypass","request_type":"transfer","stages":[{"index":0,"required_approvals":1,"rejection_policy":"any"}],
+		"bypass_rules":[{"name":"small","maker_roles":["teller"],"payload":[{"path":"amount","op":"lt","value":100}]}]}`
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	if stored == nil || len(stored.BypassRules) != 1 || stored.BypassRules[0].Name != "small" || len(stored.BypassRules[0].Payload) != 1 {
+		t.Fatalf("bypass rules not carried: %+v", stored)
+	}
+}
+
+func TestPolicyHandler_Create_InvalidBypassRule_400(t *testing.T) {
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) { return nil, nil },
+	}
+	handler := newTestPolicyHandler(policies)
+
+	body := `{"name":"Bypass","request_type":"transfer","stages":[{"index":0,"required_approvals":1,"rejection_policy":"any"}],
+		"bypass_rules":[{"name":"everything"}]}`
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func withURLParam(r *http.Request, key, value string) *http.Request {
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add(key, value)

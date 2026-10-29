@@ -34,14 +34,15 @@ type stageBody struct {
 }
 
 type createPolicyBody struct {
-	Name                       string          `json:"name"`
-	RequestType                string          `json:"request_type"`
-	Stages                     []stageBody     `json:"stages"`
-	IdentityFields             []string        `json:"identity_fields,omitempty"`
-	DynamicAuthorizationURL    *string         `json:"dynamic_authorization_url,omitempty"`
-	DynamicAuthorizationSecret *string         `json:"dynamic_authorization_secret,omitempty"`
-	AutoExpireDuration         string          `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
+	Name                       string             `json:"name"`
+	RequestType                string             `json:"request_type"`
+	Stages                     []stageBody        `json:"stages"`
+	IdentityFields             []string           `json:"identity_fields,omitempty"`
+	DynamicAuthorizationURL    *string            `json:"dynamic_authorization_url,omitempty"`
+	DynamicAuthorizationSecret *string            `json:"dynamic_authorization_secret,omitempty"`
+	AutoExpireDuration         string             `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate            json.RawMessage    `json:"display_template,omitempty"`
+	BypassRules                []model.BypassRule `json:"bypass_rules,omitempty"`
 }
 
 func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +88,7 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		DynamicAuthorizationURL:    body.DynamicAuthorizationURL,
 		DynamicAuthorizationSecret: body.DynamicAuthorizationSecret,
 		DisplayTemplate:            body.DisplayTemplate,
+		BypassRules:                body.BypassRules,
 	}
 
 	if body.AutoExpireDuration != "" {
@@ -103,7 +105,7 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) || errors.Is(err, service.ErrInvalidAuthorizationMode) || errors.Is(err, service.ErrInvalidScopeRule) {
+		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) || errors.Is(err, service.ErrInvalidAuthorizationMode) || errors.Is(err, service.ErrInvalidScopeRule) || errors.Is(err, service.ErrInvalidBypassRule) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -152,13 +154,14 @@ func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 type updatePolicyBody struct {
-	Name                       string          `json:"name"`
-	Stages                     []stageBody     `json:"stages,omitempty"`
-	IdentityFields             []string        `json:"identity_fields,omitempty"`
-	DynamicAuthorizationURL    *string         `json:"dynamic_authorization_url,omitempty"`
-	DynamicAuthorizationSecret *string         `json:"dynamic_authorization_secret,omitempty"`
-	AutoExpireDuration         string          `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
+	Name                       string             `json:"name"`
+	Stages                     []stageBody        `json:"stages,omitempty"`
+	IdentityFields             []string           `json:"identity_fields,omitempty"`
+	DynamicAuthorizationURL    *string            `json:"dynamic_authorization_url,omitempty"`
+	DynamicAuthorizationSecret *string            `json:"dynamic_authorization_secret,omitempty"`
+	AutoExpireDuration         string             `json:"auto_expire_duration,omitempty"`
+	DisplayTemplate            json.RawMessage    `json:"display_template,omitempty"`
+	BypassRules                []model.BypassRule `json:"bypass_rules,omitempty"` // send [] to clear
 }
 
 func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -224,9 +227,12 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if body.DisplayTemplate != nil {
 		existing.DisplayTemplate = body.DisplayTemplate
 	}
+	if body.BypassRules != nil {
+		existing.BypassRules = body.BypassRules
+	}
 
 	if err := h.policyService.Update(r.Context(), existing); err != nil {
-		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) || errors.Is(err, service.ErrInvalidAuthorizationMode) || errors.Is(err, service.ErrInvalidScopeRule) {
+		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) || errors.Is(err, service.ErrInvalidAuthorizationMode) || errors.Is(err, service.ErrInvalidScopeRule) || errors.Is(err, service.ErrInvalidBypassRule) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

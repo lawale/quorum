@@ -47,6 +47,7 @@
       case 'webhook_sent':
       case 'webhook_failed': return 'bg-surface-container text-on-surface-variant';
       case 'approved':
+      case 'bypassed':
       case 'stage_advanced': return 'bg-status-approved-bg text-status-approved-text';
       case 'rejected': return 'bg-status-rejected-bg text-status-rejected-text';
       case 'cancelled':

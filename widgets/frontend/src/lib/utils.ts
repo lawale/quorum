@@ -26,6 +26,7 @@ export const ACTION_COLORS: Record<string, string> = {
   cancelled: '#6b7280',
   expired: '#f97316',
   stage_advanced: '#8b5cf6',
+  bypassed: '#10b981',
 };
 
 /**
@@ -50,6 +51,9 @@ export function formatDetails(details: Record<string, unknown>, action?: string)
   // Known template: stage advancement
   if (action === 'stage_advanced' && 'from_stage' in details && 'to_stage' in details) {
     return `Stage ${details.from_stage} → ${details.to_stage}`;
+  }
+  if (action === 'bypassed' && 'rule' in details) {
+    return details.rule ? `Auto-approved by rule "${details.rule}"` : 'Auto-approved by a bypass rule';
   }
 
   return Object.entries(details)

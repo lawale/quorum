@@ -51,6 +51,7 @@ func setupMSSQL(t *testing.T) *mssql.DB {
 		"007_create_operators.up.sql",
 		"008_create_webhook_outbox.up.sql",
 		"009_add_maker_attributes.up.sql",
+		"010_add_policy_bypass_rules.up.sql",
 	}
 
 	migDB, err := sql.Open("sqlserver", connStr)

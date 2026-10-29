@@ -149,6 +149,12 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 	// Start at stage 0
 	req.CurrentStage = 0
 
+	// A matching bypass rule means this request needs no review: it is
+	// created and approved in one step, fully audited as a bypass.
+	if rule := matchBypass(policy, req, auth.RolesFromContext(ctx), auth.PermissionsFromContext(ctx), req.MakerAttributes); rule != nil {
+		return s.createBypassed(ctx, req, rule)
+	}
+
 	if err := s.requests.Create(ctx, req); err != nil {
 		if errors.Is(err, store.ErrDuplicateRequest) {
 			return nil, ErrDuplicateRequest
@@ -164,6 +170,61 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 		s.metrics.PendingRequestsGauge.Inc()
 	}
 
+	return req, nil
+}
+
+// createBypassed persists a request and marks it approved without any
+// checker action, enqueuing resolution webhooks in the same transaction when
+// one is available. The audit trail records both the creation and the bypass
+// with the rule that matched.
+func (s *RequestService) createBypassed(ctx context.Context, req *model.Request, rule *model.BypassRule) (*model.Request, error) {
+	persist := func(requests store.RequestStore, outbox store.OutboxStore, webhooks store.WebhookStore) error {
+		if err := requests.Create(ctx, req); err != nil {
+			return err
+		}
+		if err := requests.UpdateStatus(ctx, req.ID, model.StatusApproved); err != nil {
+			return err
+		}
+		req.Status = model.StatusApproved
+		if s.enqueueWebhooks != nil && outbox != nil && webhooks != nil {
+			return s.enqueueWebhooks(ctx, outbox, webhooks, req, nil)
+		}
+		return nil
+	}
+
+	var err error
+	if s.runInTx != nil {
+		err = s.runInTx(ctx, func(tx *store.Stores) error {
+			return persist(tx.Requests, tx.Outbox, tx.Webhooks)
+		})
+	} else {
+		err = persist(s.requests, nil, nil)
+	}
+	if err != nil {
+		if errors.Is(err, store.ErrDuplicateRequest) {
+			return nil, ErrDuplicateRequest
+		}
+		return nil, err
+	}
+
+	s.audit(ctx, req.ID, "created", req.MakerID, nil)
+	details, _ := json.Marshal(map[string]string{"rule": rule.Name})
+	s.audit(ctx, req.ID, "bypassed", "system", details)
+
+	if s.signalWebhooks != nil {
+		s.signalWebhooks()
+	}
+	if s.signalSSE != nil {
+		s.signalSSE(req.ID)
+	}
+	if s.metrics != nil {
+		s.metrics.RequestsTotal.WithLabelValues("created").Inc()
+		s.metrics.RequestsTotal.WithLabelValues("bypassed").Inc()
+		s.metrics.RequestsTotal.WithLabelValues(string(model.StatusApproved)).Inc()
+		s.metrics.RequestResolutionDuration.Observe(0)
+	}
+
+	slog.InfoContext(ctx, "request bypassed review", "request_id", req.ID, "request_type", req.Type, "rule", rule.Name, "maker_id", req.MakerID)
 	return req, nil
 }
 

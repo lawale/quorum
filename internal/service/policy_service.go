@@ -25,6 +25,7 @@ var (
 	ErrThresholdNoMaxCheckers   = errors.New("max_checkers is required when rejection_policy is 'threshold'")
 	ErrInvalidAuthorizationMode = errors.New("authorization_mode must be 'any' or 'all' when both allowed_checker_roles and allowed_permissions are set")
 	ErrInvalidScopeRule         = errors.New("scope rules require a non-empty attribute")
+	ErrInvalidBypassRule        = errors.New("invalid bypass rule")
 )
 
 type PolicyService struct {
@@ -120,6 +121,10 @@ func (s *PolicyService) Create(ctx context.Context, policy *model.Policy) error 
 
 	if err := display.ValidateTemplate(policy.DisplayTemplate); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidDisplayTemplate, err.Error())
+	}
+
+	if err := validateBypassRules(policy.BypassRules); err != nil {
+		return err
 	}
 
 	if err := s.policies.Create(ctx, policy); err != nil {
@@ -252,6 +257,10 @@ func (s *PolicyService) Update(ctx context.Context, policy *model.Policy) error 
 
 	if err := display.ValidateTemplate(policy.DisplayTemplate); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidDisplayTemplate, err.Error())
+	}
+
+	if err := validateBypassRules(policy.BypassRules); err != nil {
+		return err
 	}
 
 	if err := s.policies.Update(ctx, policy); err != nil {
