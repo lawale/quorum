@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -275,6 +276,46 @@ func TestVerifyProvider_NestedAndStringClaims(t *testing.T) {
 	}
 }
 
+// Auth0 publishes custom claims under URL-shaped namespaces. Those contain
+// dots, so they must resolve as literal keys rather than as nested paths.
+func TestVerifyProvider_NamespacedClaims(t *testing.T) {
+	iss := newTestIssuer(t)
+	p := iss.provider(t, func(c *VerifyProviderConfig) {
+		c.Claims.Roles = "https://acme.com/roles"
+		c.Claims.TenantID = "https://acme.com/tenant"
+	})
+	c := baseClaims()
+	delete(c, "roles")
+	delete(c, "tenant_id")
+	c["https://acme.com/roles"] = []string{"manager"}
+	c["https://acme.com/tenant"] = "acme"
+
+	id, err := p.Authenticate(request(iss.sign(c, iss.kid)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id.TenantID != "acme" {
+		t.Errorf("tenant = %q, want acme", id.TenantID)
+	}
+	if len(id.Roles) != 1 || id.Roles[0] != "manager" {
+		t.Errorf("roles = %v, want [manager]", id.Roles)
+	}
+}
+
+func TestClaimAt_LiteralKeyWinsOverPath(t *testing.T) {
+	claims := map[string]any{
+		"a.b": "literal",
+		"a":   map[string]any{"b": "nested"},
+	}
+	if got := claimAt(claims, "a.b"); got != "literal" {
+		t.Errorf("claimAt(a.b) = %v, want literal", got)
+	}
+	delete(claims, "a.b")
+	if got := claimAt(claims, "a.b"); got != "nested" {
+		t.Errorf("claimAt(a.b) after delete = %v, want nested", got)
+	}
+}
+
 func TestVerifyProvider_OptionalIssuerAndAudience(t *testing.T) {
 	iss := newTestIssuer(t)
 	p := iss.provider(t, func(cfg *VerifyProviderConfig) { cfg.Issuer = ""; cfg.Audience = "" })
@@ -300,7 +341,7 @@ func TestJWKSCache_RotationRefreshesOnUnknownKid(t *testing.T) {
 	// backdated so the rate limiter allows an on-demand fetch.
 	iss.keys.Store(iss.jwks("key-2"))
 	cache.mu.Lock()
-	cache.lastRefresh = time.Now().Add(-2 * jwksMinRefreshInterval)
+	cache.lastAttempt = time.Now().Add(-2 * jwksMinRefreshInterval)
 	cache.mu.Unlock()
 
 	before := iss.hits.Load()
@@ -327,6 +368,69 @@ func TestJWKSCache_RateLimitsUnknownKid(t *testing.T) {
 	}
 	if iss.hits.Load() != before {
 		t.Errorf("unknown kids triggered %d refreshes within the rate-limit window", iss.hits.Load()-before)
+	}
+}
+
+// A failed on-demand refresh must still count against the rate limit;
+// otherwise an unreachable IdP turns every bad token into an outbound fetch.
+func TestJWKSCache_RateLimitsAfterFailedRefresh(t *testing.T) {
+	iss := newTestIssuer(t)
+	cache := NewJWKSCache(iss.server.URL, iss.server.Client())
+	if err := cache.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	iss.keys.Store([]byte(`{"keys":[]}`)) // issuer now returns an unusable set
+	cache.mu.Lock()
+	cache.lastAttempt = time.Now().Add(-2 * jwksMinRefreshInterval)
+	cache.mu.Unlock()
+
+	before := iss.hits.Load()
+	for range 20 {
+		if _, err := cache.Key(context.Background(), "bogus"); err == nil {
+			t.Fatal("expected unknown kid to fail")
+		}
+	}
+	if got := iss.hits.Load() - before; got != 1 {
+		t.Errorf("failed refreshes hit the issuer %d times, want 1", got)
+	}
+	if cache.Len() != 2 {
+		t.Errorf("cached keys = %d after failed refresh, want 2", cache.Len())
+	}
+}
+
+// A burst of concurrent unknown-kid misses collapses into a single fetch.
+func TestJWKSCache_ConcurrentMissesFetchOnce(t *testing.T) {
+	iss := newTestIssuer(t)
+	cache := NewJWKSCache(iss.server.URL, iss.server.Client())
+	if err := cache.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	iss.keys.Store(iss.jwks("key-2"))
+	cache.mu.Lock()
+	cache.lastAttempt = time.Now().Add(-2 * jwksMinRefreshInterval)
+	cache.mu.Unlock()
+
+	before := iss.hits.Load()
+	var wg sync.WaitGroup
+	var found atomic.Int32
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := cache.Key(context.Background(), "key-2"); err == nil {
+				found.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if got := iss.hits.Load() - before; got != 1 {
+		t.Errorf("concurrent misses hit the issuer %d times, want 1", got)
+	}
+	if found.Load() == 0 {
+		t.Error("expected at least the refreshing goroutine to find the rotated key")
+	}
+	if _, err := cache.Key(context.Background(), "key-2"); err != nil {
+		t.Errorf("rotated key should be cached afterwards: %v", err)
 	}
 }
 

@@ -34,9 +34,12 @@ type JWKSCache struct {
 	url    string
 	client *http.Client
 
-	mu          sync.RWMutex
-	keys        map[string]any // kid -> *rsa.PublicKey | *ecdsa.PublicKey
-	lastRefresh time.Time
+	mu   sync.RWMutex
+	keys map[string]any // kid -> *rsa.PublicKey | *ecdsa.PublicKey
+	// lastAttempt is when a refresh was last started, successful or not. The
+	// on-demand rate limit keys off attempts so that an unreachable IdP does
+	// not turn every unknown-kid token into a fresh outbound fetch.
+	lastAttempt time.Time
 }
 
 // NewJWKSCache creates an empty cache for the given JWKS URL. Call Refresh or
@@ -57,13 +60,18 @@ func (c *JWKSCache) Key(ctx context.Context, kid string) (any, error) {
 
 	// Unknown kid: the issuer may have rotated keys. Refresh at most once per
 	// jwksMinRefreshInterval so bad tokens cannot be used to spam the IdP.
-	c.mu.RLock()
-	recent := time.Since(c.lastRefresh) < jwksMinRefreshInterval
-	c.mu.RUnlock()
+	// Claiming the slot under the lock means a burst of concurrent misses
+	// results in a single fetch; the others fail fast with an unknown key.
+	c.mu.Lock()
+	recent := time.Since(c.lastAttempt) < jwksMinRefreshInterval
+	if !recent {
+		c.lastAttempt = time.Now()
+	}
+	c.mu.Unlock()
 	if recent {
 		return nil, fmt.Errorf("unknown signing key %q", kid)
 	}
-	if err := c.Refresh(ctx); err != nil {
+	if err := c.refresh(ctx); err != nil {
 		return nil, err
 	}
 	if k, ok := c.lookup(kid); ok {
@@ -90,6 +98,13 @@ func (c *JWKSCache) lookup(kid string) (any, bool) {
 // previously cached keys are kept, so a transient IdP outage does not take
 // authentication down with it.
 func (c *JWKSCache) Refresh(ctx context.Context) error {
+	c.mu.Lock()
+	c.lastAttempt = time.Now()
+	c.mu.Unlock()
+	return c.refresh(ctx)
+}
+
+func (c *JWKSCache) refresh(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
 		return fmt.Errorf("building JWKS request: %w", err)
@@ -117,7 +132,6 @@ func (c *JWKSCache) Refresh(ctx context.Context) error {
 
 	c.mu.Lock()
 	c.keys = keys
-	c.lastRefresh = time.Now()
 	c.mu.Unlock()
 	return nil
 }

@@ -151,10 +151,16 @@ func classify(err error) error {
 	}
 }
 
-// claimAt resolves a dotted path such as "realm_access.roles" within claims.
+// claimAt resolves a claim by name, or by a dotted path such as
+// "realm_access.roles" into nested claims. A literal claim name wins over
+// path traversal, so Auth0-style namespaced claims like
+// "https://acme.com/roles" resolve as a single key despite containing dots.
 func claimAt(claims map[string]any, path string) any {
 	if path == "" {
 		return nil
+	}
+	if v, ok := claims[path]; ok {
+		return v
 	}
 	var cur any = claims
 	for _, part := range strings.Split(path, ".") {
