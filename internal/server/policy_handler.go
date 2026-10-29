@@ -22,14 +22,15 @@ func NewPolicyHandler(ps *service.PolicyService) *PolicyHandler {
 }
 
 type stageBody struct {
-	Index               int             `json:"index"`
-	Name                string          `json:"name,omitempty"`
-	RequiredApprovals   int             `json:"required_approvals"`
-	AllowedCheckerRoles json.RawMessage `json:"allowed_checker_roles,omitempty"`
-	AllowedPermissions  json.RawMessage `json:"allowed_permissions,omitempty"`
-	AuthorizationMode   string          `json:"authorization_mode,omitempty"`
-	RejectionPolicy     string          `json:"rejection_policy,omitempty"`
-	MaxCheckers         *int            `json:"max_checkers,omitempty"`
+	Index               int               `json:"index"`
+	Name                string            `json:"name,omitempty"`
+	RequiredApprovals   int               `json:"required_approvals"`
+	AllowedCheckerRoles json.RawMessage   `json:"allowed_checker_roles,omitempty"`
+	AllowedPermissions  json.RawMessage   `json:"allowed_permissions,omitempty"`
+	AuthorizationMode   string            `json:"authorization_mode,omitempty"`
+	RejectionPolicy     string            `json:"rejection_policy,omitempty"`
+	MaxCheckers         *int              `json:"max_checkers,omitempty"`
+	Scope               []model.ScopeRule `json:"scope,omitempty"`
 }
 
 type createPolicyBody struct {
@@ -74,6 +75,7 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 			AuthorizationMode:   model.AuthorizationMode(sb.AuthorizationMode),
 			RejectionPolicy:     model.RejectionPolicy(sb.RejectionPolicy),
 			MaxCheckers:         sb.MaxCheckers,
+			Scope:               sb.Scope,
 		}
 	}
 
@@ -197,6 +199,7 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 				AuthorizationMode:   model.AuthorizationMode(sb.AuthorizationMode),
 				RejectionPolicy:     model.RejectionPolicy(sb.RejectionPolicy),
 				MaxCheckers:         sb.MaxCheckers,
+				Scope:               sb.Scope,
 			}
 		}
 		existing.Stages = stages
