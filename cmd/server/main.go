@@ -170,42 +170,9 @@ func main() {
 	tenantService.StartCacheRefresh(appCtx, cfg.Tenant.CacheRefreshInterval)
 
 	// Auth provider
-	var authProvider auth.Provider
-	switch cfg.Auth.Mode {
-	case "trust":
-		authProvider = auth.NewTrustProvider(cfg.Auth.Trust.UserIDHeader, cfg.Auth.Trust.RolesHeader, cfg.Auth.Trust.PermissionsHeader, cfg.Auth.Trust.TenantIDHeader)
-	case "verify":
-		v := cfg.Auth.Verify
-		if v.JWKSURL == "" {
-			slog.Error("auth mode \"verify\" requires auth.verify.jwks_url")
-			os.Exit(1)
-		}
-		keys := auth.NewJWKSCache(v.JWKSURL, nil)
-		keys.Start(appCtx, v.JWKSRefresh)
-		provider, err := auth.NewVerifyProvider(auth.VerifyProviderConfig{
-			Keys:     keys,
-			Issuer:   v.Issuer,
-			Audience: v.Audience,
-			Claims: auth.ClaimMapping{
-				UserID:      v.Claims.UserID,
-				Roles:       v.Claims.Roles,
-				Permissions: v.Claims.Permissions,
-				TenantID:    v.Claims.TenantID,
-			},
-			ClockSkew:       v.ClockSkew,
-			DefaultTenantID: v.DefaultTenantID,
-		})
-		if err != nil {
-			slog.Error("configuring verify auth", "error", err)
-			os.Exit(1)
-		}
-		authProvider = provider
-		slog.Info("auth mode verify", "jwks_url", v.JWKSURL, "issuer", v.Issuer, "audience", v.Audience)
-	case "custom":
-		slog.Error("auth mode \"custom\" is not yet implemented")
-		os.Exit(1)
-	default:
-		slog.Error("unknown auth mode", "mode", cfg.Auth.Mode)
+	authProvider, err := newAuthProvider(appCtx, cfg.Auth)
+	if err != nil {
+		slog.Error("configuring auth", "error", err)
 		os.Exit(1)
 	}
 
@@ -271,4 +238,51 @@ func main() {
 	}
 
 	slog.Info("server stopped")
+}
+
+// newAuthProvider builds the request authenticator for the configured auth mode.
+func newAuthProvider(ctx context.Context, cfg config.AuthConfig) (auth.Provider, error) {
+	switch cfg.Mode {
+	case "trust":
+		return newTrustProvider(cfg.Trust), nil
+	case "verify":
+		return newVerifyProvider(ctx, cfg.Verify)
+	case "custom":
+		return nil, errors.New("auth mode \"custom\" is not yet implemented")
+	default:
+		return nil, fmt.Errorf("unknown auth mode %q", cfg.Mode)
+	}
+}
+
+func newTrustProvider(cfg config.TrustConfig) auth.Provider {
+	slog.Info("auth mode trust", "user_id_header", cfg.UserIDHeader, "tenant_id_header", cfg.TenantIDHeader)
+	return auth.NewTrustProvider(cfg.UserIDHeader, cfg.RolesHeader, cfg.PermissionsHeader, cfg.TenantIDHeader)
+}
+
+// newVerifyProvider wires a JWKS cache (refreshed in the background until ctx
+// is cancelled) to a JWT-validating provider.
+func newVerifyProvider(ctx context.Context, cfg config.VerifyConfig) (auth.Provider, error) {
+	if cfg.JWKSURL == "" {
+		return nil, errors.New("auth mode \"verify\" requires auth.verify.jwks_url")
+	}
+	keys := auth.NewJWKSCache(cfg.JWKSURL, nil)
+	keys.Start(ctx, cfg.JWKSRefresh)
+	provider, err := auth.NewVerifyProvider(auth.VerifyProviderConfig{
+		Keys:     keys,
+		Issuer:   cfg.Issuer,
+		Audience: cfg.Audience,
+		Claims: auth.ClaimMapping{
+			UserID:      cfg.Claims.UserID,
+			Roles:       cfg.Claims.Roles,
+			Permissions: cfg.Claims.Permissions,
+			TenantID:    cfg.Claims.TenantID,
+		},
+		ClockSkew:       cfg.ClockSkew,
+		DefaultTenantID: cfg.DefaultTenantID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("auth mode verify", "jwks_url", cfg.JWKSURL, "issuer", cfg.Issuer, "audience", cfg.Audience)
+	return provider, nil
 }
