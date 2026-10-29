@@ -27,7 +27,8 @@ type testIssuer struct {
 	kid    string
 	server *httptest.Server
 	hits   atomic.Int32
-	keys   atomic.Value // []byte JWKS body, swappable to simulate rotation
+	keys   atomic.Value                  // []byte JWKS body, swappable to simulate rotation
+	gate   atomic.Pointer[chan struct{}] // when set, responses block until the channel closes
 }
 
 func newTestIssuer(t *testing.T) *testIssuer {
@@ -44,6 +45,9 @@ func newTestIssuer(t *testing.T) *testIssuer {
 	iss.keys.Store(iss.jwks(iss.kid))
 	iss.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		iss.hits.Add(1)
+		if g := iss.gate.Load(); g != nil {
+			<-*g
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(iss.keys.Load().([]byte))
 	}))
@@ -428,7 +432,8 @@ func TestJWKSCache_RateLimitsAfterFailedRefresh(t *testing.T) {
 	}
 }
 
-// A burst of concurrent unknown-kid misses collapses into a single fetch.
+// A burst of concurrent unknown-kid misses collapses into a single fetch
+// whose result every caller shares, so none of them fail during a rotation.
 func TestJWKSCache_ConcurrentMissesFetchOnce(t *testing.T) {
 	iss := newTestIssuer(t)
 	cache := NewJWKSCache(iss.server.URL, iss.server.Client())
@@ -440,27 +445,78 @@ func TestJWKSCache_ConcurrentMissesFetchOnce(t *testing.T) {
 	cache.lastAttempt = time.Now().Add(-2 * jwksMinRefreshInterval)
 	cache.mu.Unlock()
 
+	// Hold the issuer's response until every goroutine is waiting on the
+	// miss, so the test exercises the shared in-flight fetch rather than
+	// racing the first caller to completion.
+	release := make(chan struct{})
+	iss.gate.Store(&release)
+
+	const n = 50
 	before := iss.hits.Load()
 	var wg sync.WaitGroup
 	var found atomic.Int32
-	for range 50 {
+	var started sync.WaitGroup
+	started.Add(n)
+	for range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			started.Done()
 			if _, err := cache.Key(context.Background(), "key-2"); err == nil {
 				found.Add(1)
 			}
 		}()
 	}
+	started.Wait()
+	time.Sleep(50 * time.Millisecond) // let the goroutines reach the miss
+	close(release)
 	wg.Wait()
+
 	if got := iss.hits.Load() - before; got != 1 {
 		t.Errorf("concurrent misses hit the issuer %d times, want 1", got)
 	}
-	if found.Load() == 0 {
-		t.Error("expected at least the refreshing goroutine to find the rotated key")
+	if found.Load() != n {
+		t.Errorf("%d of %d concurrent callers found the rotated key, want all", found.Load(), n)
 	}
-	if _, err := cache.Key(context.Background(), "key-2"); err != nil {
-		t.Errorf("rotated key should be cached afterwards: %v", err)
+}
+
+// A caller whose request is cancelled mid-fetch must not fail the shared
+// refresh for everyone else.
+func TestJWKSCache_SharedRefreshSurvivesLeaderCancel(t *testing.T) {
+	iss := newTestIssuer(t)
+	cache := NewJWKSCache(iss.server.URL, iss.server.Client())
+	if err := cache.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	iss.keys.Store(iss.jwks("key-2"))
+	cache.mu.Lock()
+	cache.lastAttempt = time.Now().Add(-2 * jwksMinRefreshInterval)
+	cache.mu.Unlock()
+
+	release := make(chan struct{})
+	iss.gate.Store(&release)
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	leaderDone := make(chan error, 1)
+	go func() {
+		_, err := cache.Key(leaderCtx, "key-2")
+		leaderDone <- err
+	}()
+	time.Sleep(50 * time.Millisecond) // leader is now blocked in the fetch
+	followerDone := make(chan error, 1)
+	go func() {
+		_, err := cache.Key(context.Background(), "key-2")
+		followerDone <- err
+	}()
+	time.Sleep(50 * time.Millisecond) // follower has joined the in-flight fetch
+	cancelLeader()
+	close(release)
+
+	if err := <-followerDone; err != nil {
+		t.Errorf("follower should receive the rotated key despite leader cancel: %v", err)
+	}
+	if err := <-leaderDone; err != nil {
+		t.Errorf("leader's fetch was detached from its context and should still succeed: %v", err)
 	}
 }
 

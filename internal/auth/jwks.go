@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // jwksMaxBytes bounds the JWKS response size to guard against a misconfigured
@@ -40,6 +42,10 @@ type JWKSCache struct {
 	// on-demand rate limit keys off attempts so that an unreachable IdP does
 	// not turn every unknown-kid token into a fresh outbound fetch.
 	lastAttempt time.Time
+
+	// onDemand collapses concurrent unknown-kid refreshes into one fetch whose
+	// result every waiting caller shares.
+	onDemand singleflight.Group
 }
 
 // NewJWKSCache creates an empty cache for the given JWKS URL. Call Refresh or
@@ -60,18 +66,23 @@ func (c *JWKSCache) Key(ctx context.Context, kid string) (any, error) {
 
 	// Unknown kid: the issuer may have rotated keys. Refresh at most once per
 	// jwksMinRefreshInterval so bad tokens cannot be used to spam the IdP.
-	// Claiming the slot under the lock means a burst of concurrent misses
-	// results in a single fetch; the others fail fast with an unknown key.
-	c.mu.Lock()
-	recent := time.Since(c.lastAttempt) < jwksMinRefreshInterval
-	if !recent {
-		c.lastAttempt = time.Now()
-	}
-	c.mu.Unlock()
-	if recent {
-		return nil, fmt.Errorf("unknown signing key %q", kid)
-	}
-	if err := c.refresh(ctx); err != nil {
+	// Concurrent misses join the in-flight fetch rather than failing, so the
+	// first requests after a rotation all succeed.
+	if _, err, _ := c.onDemand.Do("refresh", func() (any, error) {
+		c.mu.Lock()
+		recent := time.Since(c.lastAttempt) < jwksMinRefreshInterval
+		if !recent {
+			c.lastAttempt = time.Now()
+		}
+		c.mu.Unlock()
+		if recent {
+			return nil, errRefreshRateLimited
+		}
+		// Detach from the leader's request: a client disconnect must not
+		// fail the fetch for everyone sharing it. The HTTP client's own
+		// timeout still bounds the call.
+		return nil, c.refresh(context.WithoutCancel(ctx))
+	}); err != nil && !errors.Is(err, errRefreshRateLimited) {
 		return nil, err
 	}
 	if k, ok := c.lookup(kid); ok {
@@ -79,6 +90,8 @@ func (c *JWKSCache) Key(ctx context.Context, kid string) (any, error) {
 	}
 	return nil, fmt.Errorf("unknown signing key %q", kid)
 }
+
+var errRefreshRateLimited = errors.New("JWKS refresh rate-limited")
 
 func (c *JWKSCache) lookup(kid string) (any, bool) {
 	c.mu.RLock()
