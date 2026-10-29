@@ -300,7 +300,7 @@ curl -X POST http://localhost:8080/api/v1/requests/{request_id}/approve \
 
 ### 4. System Acts on the Result
 
-Your application, listening via webhook, receives a `request.approved` event and executes the transfer; safe in the knowledge that all checks have been passed. The webhook is guaranteed to be delivered as it was written to a durable outbox in the same database transaction as the status change, so nothing can be lost.
+Your application, listening via webhook, receives an `approved` event and executes the transfer; safe in the knowledge that all checks have been passed. The webhook is guaranteed to be delivered as it was written to a durable outbox in the same database transaction as the status change, so nothing can be lost.
 
 ---
 
@@ -803,6 +803,53 @@ Your webhook consumer receives the full request, so on approval it can read the 
 ### Webhook Delivery
 
 Quorum uses a **transactional outbox** to guarantee webhook delivery. Outbox entries are written in the same database transaction as the status update, so no event is ever lost. A signal-driven delivery worker dispatches entries via HTTP POST with HMAC-SHA256 signatures (`X-Signature-256` header), retrying failures with exponential backoff. A configurable heartbeat (default 30s) acts as a safety net for missed signals.
+
+**Events.** A webhook subscribes to one or more of:
+
+| Event | When | Extra payload |
+|-------|------|---------------|
+| `review_requested` | A request starts waiting on a stage: on creation and on every stage advance. | `review` (see below) |
+| `approved` | The final stage passed, or a [bypass rule](#bypass-rules) matched. | |
+| `rejected` | A stage's rejection policy was met. | |
+| `cancelled` | The maker cancelled the request. | |
+| `expired` | The policy's `auto_expire_duration` elapsed. | |
+
+Every delivery carries `event`, the full `request` (payload, metadata, maker attributes, current stage), the `approvals` so far, and a `timestamp`.
+
+#### Telling reviewers
+
+Quorum has no user directory, so it cannot email the branch manager itself. What it can do is work out exactly who is allowed to act and hand that to your application, which does know how to reach people. That is the `review_requested` event:
+
+```json
+{
+  "event": "review_requested",
+  "request": { "id": "…", "type": "branch.update", "status": "pending", "current_stage": 1, "maker_id": "alice", "…": "…" },
+  "review": {
+    "reason": "stage_advanced",
+    "stage_index": 1,
+    "stage_name": "Receiving branch or head office",
+    "total_stages": 2,
+    "required_approvals": 1,
+    "allowed_roles": ["branch_manager"],
+    "allowed_permissions": ["approve_transfer"],
+    "authorization_mode": "all",
+    "scope": [
+      { "attribute": "branch_id", "values": ["ABJ-02", "HQ"] }
+    ],
+    "eligible_reviewers": [],
+    "excluded_user_ids": ["alice"],
+    "expires_at": "2026-10-30T09:00:00Z"
+  },
+  "timestamp": "2026-10-29T09:00:00Z"
+}
+```
+
+- **`reason`** is `created` for stage 0, `stage_advanced` for later stages, or `bypass_limit_exceeded` when a request that would have skipped review was held because of a [velocity limit](#bypass-rules).
+- **`scope`** has its values already resolved for this request: the maker's attribute, the payload value, and any fixed values a rule names. A consumer does not need to know how scope rules work; it matches users whose `branch_id` is `ABJ-02` or `HQ`.
+- **`excluded_user_ids`** lists people who cannot act even if they otherwise qualify. Today that is the maker; the list exists so consumers need no special case when more exclusions are added.
+- **`eligible_reviewers`**, when non-empty, is the per-request allowlist and overrides everything else.
+
+The consumer's job is a directory query: users holding one of `allowed_roles` (or `allowed_permissions`, depending on `authorization_mode`), whose attributes match `scope`, minus `excluded_user_ids`. Then notify them by whatever channel suits, with a link to the request. The event is written in the same transaction as the request or the stage advance, so a reviewer is never left unnotified because the process died in between.
 
 ### Health Endpoint
 

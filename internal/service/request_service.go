@@ -40,15 +40,13 @@ type RequestService struct {
 	policies          store.PolicyStore
 	audits            store.AuditStore
 	authorizationHook *auth.AuthorizationHook
-	enqueueWebhooks   func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
-	signalWebhooks    func()
-	runInTx           func(ctx context.Context, fn func(tx *store.Stores) error) error
-	signalSSE         func(requestID uuid.UUID)
-	metrics           *metrics.Metrics
+	dispatch
+	signalSSE func(requestID uuid.UUID)
+	metrics   *metrics.Metrics
 }
 
 // SetSSESignal configures the callback invoked after a request's state changes
-// to notify connected SSE clients. Called post-commit alongside signalWebhooks.
+// to notify connected SSE clients. Called after the transaction commits.
 func (s *RequestService) SetSSESignal(signal func(requestID uuid.UUID)) {
 	s.signalSSE = signal
 }
@@ -71,21 +69,19 @@ func NewRequestService(
 		policies:          policies,
 		audits:            audits,
 		authorizationHook: authorizationHook,
+		dispatch: dispatch{
+			runInTx: passThrough(&store.Stores{Requests: requests, Approvals: approvals, Policies: policies, Audits: audits}),
+		},
 	}
 }
 
-// SetWebhookDispatch configures transactional webhook dispatch via an outbox table.
-// enqueue writes outbox rows (should be called inside a transaction), signal wakes
-// the delivery worker (should be called after the transaction commits), and runInTx
-// executes a function within a database transaction.
-func (s *RequestService) SetWebhookDispatch(
-	runInTx func(ctx context.Context, fn func(tx *store.Stores) error) error,
-	enqueue func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error,
-	signal func(),
-) {
-	s.runInTx = runInTx
-	s.enqueueWebhooks = enqueue
-	s.signalWebhooks = signal
+// SetWebhookDispatch makes state changes transactional and announces them to
+// sink on the same transaction. runInTx is the database's transaction runner.
+func (s *RequestService) SetWebhookDispatch(runInTx txRunner, sink EventSink) {
+	if runInTx != nil {
+		s.runInTx = runInTx
+	}
+	s.sink = sink
 }
 
 func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model.Request, error) {
@@ -157,11 +153,21 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 	if rule != nil {
 		return s.createBypassed(ctx, req, rule)
 	}
+	reason := model.ReviewReasonCreated
 	if limitHit != nil {
 		stampLimitExceeded(req, limitHit)
+		reason = model.ReviewReasonBypassLimitExceeded
 	}
 
-	if err := s.requests.Create(ctx, req); err != nil {
+	// Persist and, on the same transaction, tell subscribers that stage 0 is
+	// waiting on reviewers.
+	err = s.transact(ctx, func(tx *store.Stores, emit emitFunc) error {
+		if err := tx.Requests.Create(ctx, req); err != nil {
+			return err
+		}
+		return emitReviewRequested(emit, policy, req, reason)
+	})
+	if err != nil {
 		if errors.Is(err, store.ErrDuplicateRequest) {
 			return nil, ErrDuplicateRequest
 		}
@@ -185,32 +191,19 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 }
 
 // createBypassed persists a request and marks it approved without any
-// checker action, enqueuing resolution webhooks in the same transaction when
-// one is available. The audit trail records both the creation and the bypass
-// with the rule that matched.
+// checker action, announcing the approval on the same transaction. The audit
+// trail records both the creation and the bypass with the rule that matched.
 func (s *RequestService) createBypassed(ctx context.Context, req *model.Request, rule *model.BypassRule) (*model.Request, error) {
-	persist := func(requests store.RequestStore, outbox store.OutboxStore, webhooks store.WebhookStore) error {
-		if err := requests.Create(ctx, req); err != nil {
+	err := s.transact(ctx, func(tx *store.Stores, emit emitFunc) error {
+		if err := tx.Requests.Create(ctx, req); err != nil {
 			return err
 		}
-		if err := requests.UpdateStatus(ctx, req.ID, model.StatusApproved); err != nil {
+		if err := tx.Requests.UpdateStatus(ctx, req.ID, model.StatusApproved); err != nil {
 			return err
 		}
 		req.Status = model.StatusApproved
-		if s.enqueueWebhooks != nil && outbox != nil && webhooks != nil {
-			return s.enqueueWebhooks(ctx, outbox, webhooks, req, nil)
-		}
-		return nil
-	}
-
-	var err error
-	if s.runInTx != nil {
-		err = s.runInTx(ctx, func(tx *store.Stores) error {
-			return persist(tx.Requests, tx.Outbox, tx.Webhooks)
-		})
-	} else {
-		err = persist(s.requests, nil, nil)
-	}
+		return emit(model.StatusChanged(req, model.StatusApproved, nil))
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrDuplicateRequest) {
 			return nil, ErrDuplicateRequest
@@ -222,9 +215,6 @@ func (s *RequestService) createBypassed(ctx context.Context, req *model.Request,
 	details, _ := json.Marshal(map[string]string{"rule": rule.Name})
 	s.audit(ctx, req.ID, "bypassed", "system", details)
 
-	if s.signalWebhooks != nil {
-		s.signalWebhooks()
-	}
 	if s.signalSSE != nil {
 		s.signalSSE(req.ID)
 	}
@@ -313,41 +303,25 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 		return nil, errors.New("only the maker can cancel their own request")
 	}
 
-	req.Status = model.StatusCancelled
-	approvals, err := s.approvals.ListByRequestID(ctx, requestID)
-	if err != nil {
-		return nil, fmt.Errorf("loading approvals for cancel callback: %w", err)
-	}
-
-	if s.runInTx != nil && s.enqueueWebhooks != nil {
-		err := s.runInTx(ctx, func(txStores *store.Stores) error {
-			if err := txStores.Requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
-				return err
-			}
-			return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, approvals)
-		})
+	err = s.transact(ctx, func(tx *store.Stores, emit emitFunc) error {
+		if err := tx.Requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
+			return err
+		}
+		approvals, err := tx.Approvals.ListByRequestID(ctx, requestID)
 		if err != nil {
-			if errors.Is(err, store.ErrStatusConflict) {
-				return nil, ErrRequestNotPending
-			}
-			return nil, err
+			return fmt.Errorf("loading approvals for cancel event: %w", err)
 		}
-		if s.signalWebhooks != nil {
-			s.signalWebhooks()
+		req.Status = model.StatusCancelled
+		return emit(model.StatusChanged(req, model.StatusCancelled, approvals))
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrStatusConflict) {
+			return nil, ErrRequestNotPending
 		}
-		if s.signalSSE != nil {
-			s.signalSSE(requestID)
-		}
-	} else {
-		if err := s.requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
-			if errors.Is(err, store.ErrStatusConflict) {
-				return nil, ErrRequestNotPending
-			}
-			return nil, err
-		}
-		if s.signalSSE != nil {
-			s.signalSSE(requestID)
-		}
+		return nil, err
+	}
+	if s.signalSSE != nil {
+		s.signalSSE(requestID)
 	}
 
 	s.audit(ctx, requestID, "cancelled", makerID, nil)
@@ -448,158 +422,93 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 	var newStatus *model.RequestStatus
 	var newStage *int
 
-	if s.runInTx != nil {
-		// Transactional path: lock the request row, insert vote, count inside
-		// the transaction, and apply any resulting state change atomically.
-		// The FOR UPDATE lock serializes concurrent decisions on the same
-		// request, preventing missed stage advances and post-terminal votes.
-		err := s.runInTx(ctx, func(txStores *store.Stores) error {
-			// Lock the request row to serialize concurrent decision processing
-			lockedReq, lockErr := txStores.Requests.GetByIDForUpdate(ctx, requestID)
-			if lockErr != nil {
-				return lockErr
-			}
-			if lockedReq == nil || lockedReq.Status != model.StatusPending {
-				return store.ErrStatusConflict
-			}
-			// Use the locked version's stage — it may have advanced since our
-			// initial read above.
-			approval.StageIndex = lockedReq.CurrentStage
+	// Lock the request row, insert the vote, count inside the transaction,
+	// and apply any resulting state change atomically. The FOR UPDATE lock
+	// serialises concurrent decisions on the same request, preventing missed
+	// stage advances and post-terminal votes.
+	err = s.transact(ctx, func(tx *store.Stores, emit emitFunc) error {
+		lockedReq, err := tx.Requests.GetByIDForUpdate(ctx, requestID)
+		if err != nil {
+			return err
+		}
+		if lockedReq == nil || lockedReq.Status != model.StatusPending {
+			return store.ErrStatusConflict
+		}
+		// Use the locked version's stage: it may have advanced since our
+		// initial read above.
+		approval.StageIndex = lockedReq.CurrentStage
 
-			if err := txStores.Approvals.Create(ctx, approval); err != nil {
-				return fmt.Errorf("recording decision: %w", err)
-			}
+		if err := tx.Approvals.Create(ctx, approval); err != nil {
+			return fmt.Errorf("recording decision: %w", err)
+		}
 
-			// Count votes inside the transaction where we hold the lock
-			approvalCount, err := txStores.Approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, lockedReq.CurrentStage)
-			if err != nil {
+		approvalCount, err := tx.Approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, lockedReq.CurrentStage)
+		if err != nil {
+			return err
+		}
+		rejectionCount, err := tx.Approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, lockedReq.CurrentStage)
+		if err != nil {
+			return err
+		}
+
+		newStatus, newStage = evaluateWithCounts(approvalCount, rejectionCount, lockedReq.CurrentStage, policy)
+
+		switch {
+		case newStatus != nil:
+			// Terminal status (approved or rejected)
+			if err := tx.Requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
 				return err
 			}
-			rejectionCount, err := txStores.Approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, lockedReq.CurrentStage)
+			approvals, err := tx.Approvals.ListByRequestID(ctx, requestID)
 			if err != nil {
-				return err
+				return fmt.Errorf("loading approvals for resolution event: %w", err)
 			}
-
-			newStatus, newStage = evaluateWithCounts(approvalCount, rejectionCount, lockedReq.CurrentStage, policy)
-
-			if newStatus != nil {
-				// Terminal status (approved or rejected)
-				if err := txStores.Requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
-					return err
-				}
-				if s.enqueueWebhooks != nil {
-					resolveApprovals, err := txStores.Approvals.ListByRequestID(ctx, requestID)
-					if err != nil {
-						return fmt.Errorf("loading approvals for callback: %w", err)
-					}
-					req.Status = *newStatus
-					req.Approvals = resolveApprovals
-					return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, resolveApprovals)
-				}
-			} else if newStage != nil {
-				// Stage advance — still pending but move to next stage
-				if err := txStores.Requests.UpdateStageAndStatus(ctx, requestID, *newStage, model.StatusPending); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			if errors.Is(err, store.ErrStatusConflict) {
-				return nil, ErrRequestNotPending
-			}
-			if errors.Is(err, store.ErrDuplicateApproval) {
-				return nil, ErrAlreadyActioned
-			}
-			return nil, err
-		}
-
-		// Post-commit side effects
-		s.audit(ctx, requestID, string(decision), checkerID, nil)
-
-		if newStatus != nil {
-			if s.signalWebhooks != nil {
-				s.signalWebhooks()
-			}
-			if s.signalSSE != nil {
-				s.signalSSE(requestID)
-			}
-			if s.metrics != nil {
-				s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
-				s.metrics.PendingRequestsGauge.Dec()
-				s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
-			}
-		} else if newStage != nil {
-			fromStage := req.CurrentStage
-			req.CurrentStage = *newStage
-			stageDetails, err := json.Marshal(map[string]int{"from_stage": fromStage, "to_stage": *newStage})
-			if err != nil {
-				slog.WarnContext(ctx, "failed to marshal stage details for audit", "error", err)
-			}
-			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
-			if s.signalSSE != nil {
-				s.signalSSE(requestID)
-			}
-		}
-	} else {
-		// Fallback: no transaction support. Pre-read counts and predict outcome.
-		// This path is inherently racy under concurrency but provides a working
-		// single-instance fallback.
-		approvalCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionApproved, req.CurrentStage)
-		if err != nil {
-			return nil, err
-		}
-		rejectionCount, err := s.approvals.CountByDecisionAndStage(ctx, requestID, model.DecisionRejected, req.CurrentStage)
-		if err != nil {
-			return nil, err
-		}
-
-		predictedApprovals := approvalCount
-		predictedRejections := rejectionCount
-		if decision == model.DecisionApproved {
-			predictedApprovals++
-		} else {
-			predictedRejections++
-		}
-
-		newStatus, newStage = evaluateWithCounts(predictedApprovals, predictedRejections, req.CurrentStage, policy)
-
-		if err := s.approvals.Create(ctx, approval); err != nil {
-			if errors.Is(err, store.ErrDuplicateApproval) {
-				return nil, ErrAlreadyActioned
-			}
-			return nil, fmt.Errorf("recording decision: %w", err)
-		}
-
-		s.audit(ctx, requestID, string(decision), checkerID, nil)
-
-		if newStatus != nil && *newStatus != req.Status {
 			req.Status = *newStatus
-			if err := s.requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
-				if errors.Is(err, store.ErrStatusConflict) {
-					return nil, ErrRequestNotPending
-				}
-				return nil, err
+			req.Approvals = approvals
+			return emit(model.StatusChanged(req, *newStatus, approvals))
+		case newStage != nil:
+			// Stage advance: still pending, but the next stage is now waiting
+			if err := tx.Requests.UpdateStageAndStatus(ctx, requestID, *newStage, model.StatusPending); err != nil {
+				return err
 			}
-			if newStatus.IsTerminal() && s.metrics != nil {
-				s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
-				s.metrics.PendingRequestsGauge.Dec()
-				s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
-			}
-		} else if newStage != nil && *newStage != req.CurrentStage {
-			fromStage := req.CurrentStage
-			if err := s.requests.UpdateStageAndStatus(ctx, requestID, *newStage, model.StatusPending); err != nil {
-				if errors.Is(err, store.ErrStatusConflict) {
-					return nil, ErrRequestNotPending
-				}
-				return nil, err
-			}
-			req.CurrentStage = *newStage
-			stageDetails, err := json.Marshal(map[string]int{"from_stage": fromStage, "to_stage": *newStage})
-			if err != nil {
-				slog.WarnContext(ctx, "failed to marshal stage details for audit", "error", err)
-			}
-			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
+			advanced := *req
+			advanced.CurrentStage = *newStage
+			return emitReviewRequested(emit, policy, &advanced, model.ReviewReasonStageAdvanced)
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrStatusConflict) {
+			return nil, ErrRequestNotPending
+		}
+		if errors.Is(err, store.ErrDuplicateApproval) {
+			return nil, ErrAlreadyActioned
+		}
+		return nil, err
+	}
+
+	// Post-commit side effects
+	s.audit(ctx, requestID, string(decision), checkerID, nil)
+
+	if newStatus != nil {
+		if s.signalSSE != nil {
+			s.signalSSE(requestID)
+		}
+		if s.metrics != nil {
+			s.metrics.RequestsTotal.WithLabelValues(string(*newStatus)).Inc()
+			s.metrics.PendingRequestsGauge.Dec()
+			s.metrics.RequestResolutionDuration.Observe(time.Since(req.CreatedAt).Seconds())
+		}
+	} else if newStage != nil {
+		fromStage := req.CurrentStage
+		req.CurrentStage = *newStage
+		stageDetails, err := json.Marshal(map[string]int{"from_stage": fromStage, "to_stage": *newStage})
+		if err != nil {
+			slog.WarnContext(ctx, "failed to marshal stage details for audit", "error", err)
+		}
+		s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
+		if s.signalSSE != nil {
+			s.signalSSE(requestID)
 		}
 	}
 

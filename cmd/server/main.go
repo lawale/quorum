@@ -137,15 +137,15 @@ func main() {
 		RetentionPeriod: cfg.Webhook.OutboxRetention,
 		BlockPrivateIPs: cfg.Webhook.BlockPrivateIPs,
 	})
-	requestService.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
+	requestService.SetWebhookDispatch(stores.RunInTx, dispatcher)
 
 	// SSE event hub for real-time push to connected widgets
 	eventHub := sse.NewHub()
 	requestService.SetSSESignal(eventHub.Publish)
 
 	// Expiry worker
-	expiryWorker := service.NewExpiryWorker(stores.Requests, stores.Audits, cfg.Expiry.CheckInterval)
-	expiryWorker.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
+	expiryWorker := service.NewExpiryWorker(stores.Requests, stores.Approvals, stores.Audits, cfg.Expiry.CheckInterval)
+	expiryWorker.SetWebhookDispatch(stores.RunInTx, dispatcher)
 	expiryWorker.SetSSESignal(eventHub.Publish)
 
 	// Metrics (optional)

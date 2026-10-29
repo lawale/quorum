@@ -15,14 +15,12 @@ import (
 )
 
 type ExpiryWorker struct {
-	requests        store.RequestStore
-	audits          store.AuditStore
-	checkInterval   time.Duration
-	enqueueWebhooks func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
-	signalWebhooks  func()
-	runInTx         func(ctx context.Context, fn func(tx *store.Stores) error) error
-	signalSSE       func(requestID uuid.UUID)
-	metrics         *metrics.Metrics
+	requests      store.RequestStore
+	audits        store.AuditStore
+	checkInterval time.Duration
+	dispatch
+	signalSSE func(requestID uuid.UUID)
+	metrics   *metrics.Metrics
 }
 
 // SetSSESignal configures the callback invoked after a request expires
@@ -36,23 +34,24 @@ func (w *ExpiryWorker) SetMetrics(m *metrics.Metrics) {
 	w.metrics = m
 }
 
-func NewExpiryWorker(requests store.RequestStore, audits store.AuditStore, checkInterval time.Duration) *ExpiryWorker {
+func NewExpiryWorker(requests store.RequestStore, approvals store.ApprovalStore, audits store.AuditStore, checkInterval time.Duration) *ExpiryWorker {
 	return &ExpiryWorker{
 		requests:      requests,
 		audits:        audits,
 		checkInterval: checkInterval,
+		dispatch: dispatch{
+			runInTx: passThrough(&store.Stores{Requests: requests, Approvals: approvals, Audits: audits}),
+		},
 	}
 }
 
-// SetWebhookDispatch configures transactional webhook dispatch for expired requests.
-func (w *ExpiryWorker) SetWebhookDispatch(
-	runInTx func(ctx context.Context, fn func(tx *store.Stores) error) error,
-	enqueue func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error,
-	signal func(),
-) {
-	w.runInTx = runInTx
-	w.enqueueWebhooks = enqueue
-	w.signalWebhooks = signal
+// SetWebhookDispatch makes expiry transactional and announces it to sink on
+// the same transaction. runInTx is the database's transaction runner.
+func (w *ExpiryWorker) SetWebhookDispatch(runInTx txRunner, sink EventSink) {
+	if runInTx != nil {
+		w.runInTx = runInTx
+	}
+	w.sink = sink
 }
 
 func (w *ExpiryWorker) Start(ctx context.Context) {
@@ -82,51 +81,32 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 	}
 
 	for _, req := range expired {
-		req.Status = model.StatusExpired
-
 		// Inject the request's tenant into context so webhook lookup is scoped correctly
 		tenantCtx := auth.WithTenantID(ctx, req.TenantID)
 
-		if w.runInTx != nil && w.enqueueWebhooks != nil {
-			err := w.runInTx(tenantCtx, func(txStores *store.Stores) error {
-				if err := txStores.Requests.UpdateStatus(tenantCtx, req.ID, model.StatusExpired); err != nil {
-					return err
-				}
-				approvals, err := txStores.Approvals.ListByRequestID(tenantCtx, req.ID)
-				if err != nil {
-					return fmt.Errorf("loading approvals for expiry webhook: %w", err)
-				}
-				return w.enqueueWebhooks(tenantCtx, txStores.Outbox, txStores.Webhooks, &req, approvals)
-			})
+		err := w.transact(tenantCtx, func(tx *store.Stores, emit emitFunc) error {
+			if err := tx.Requests.UpdateStatus(tenantCtx, req.ID, model.StatusExpired); err != nil {
+				return err
+			}
+			approvals, err := tx.Approvals.ListByRequestID(tenantCtx, req.ID)
 			if err != nil {
-				if errors.Is(err, store.ErrStatusConflict) {
-					slog.Debug("request already resolved, skipping expiry", "request_id", req.ID)
-					continue
-				}
-				slog.Error("failed to expire request", "error", err, "request_id", req.ID)
-				if w.metrics != nil {
-					w.metrics.ExpiryErrorsTotal.Inc()
-				}
+				return fmt.Errorf("loading approvals for expiry event: %w", err)
+			}
+			return emit(model.StatusChanged(&req, model.StatusExpired, approvals))
+		})
+		if err != nil {
+			if errors.Is(err, store.ErrStatusConflict) {
+				slog.Debug("request already resolved, skipping expiry", "request_id", req.ID)
 				continue
 			}
-			if w.signalWebhooks != nil {
-				w.signalWebhooks()
+			slog.Error("failed to expire request", "error", err, "request_id", req.ID)
+			if w.metrics != nil {
+				w.metrics.ExpiryErrorsTotal.Inc()
 			}
-			if w.signalSSE != nil {
-				w.signalSSE(req.ID)
-			}
-		} else {
-			if err := w.requests.UpdateStatus(ctx, req.ID, model.StatusExpired); err != nil {
-				if errors.Is(err, store.ErrStatusConflict) {
-					slog.Debug("request already resolved, skipping expiry", "request_id", req.ID)
-					continue
-				}
-				slog.Error("failed to expire request", "error", err, "request_id", req.ID)
-				if w.metrics != nil {
-					w.metrics.ExpiryErrorsTotal.Inc()
-				}
-				continue
-			}
+			continue
+		}
+		if w.signalSSE != nil {
+			w.signalSSE(req.ID)
 		}
 
 		// Audit

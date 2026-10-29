@@ -9,7 +9,7 @@
   let submitting = $state(false);
   let error = $state('');
 
-  const availableEvents = ['approved', 'rejected', 'cancelled', 'expired'];
+  const availableEvents = ['review_requested', 'approved', 'rejected', 'cancelled', 'expired'];
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
