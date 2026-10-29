@@ -1,23 +1,19 @@
 // Package main implements a sample banking wire transfer application that
-// integrates with the Quorum maker-checker system. Wire transfers require
-// multi-stage approval before execution.
+// integrates with the Quorum maker-checker system through the Quorum Go
+// client. Wire transfers require multi-stage approval before execution.
 //
-// On startup the app registers a "wire_transfer" policy with Quorum (idempotent).
-// Users create transfers through the web UI, which are submitted to Quorum for
-// approval. When Quorum reaches a terminal decision it calls back via webhook,
-// and the app updates the transfer status accordingly.
+// The "wire_transfer" policy is registered by scripts/setup.sh. Users create
+// transfers through the web UI, which are submitted to Quorum for approval.
+// When Quorum reaches a terminal decision it calls back via webhook, and the
+// app updates the transfer status accordingly.
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -25,6 +21,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lawale/quorum/clients/go"
 )
 
 // ---------------------------------------------------------------------------
@@ -200,28 +197,6 @@ func (s *transferStore) List(ctx context.Context) []*Transfer {
 }
 
 // ---------------------------------------------------------------------------
-// Quorum API types
-// ---------------------------------------------------------------------------
-
-type quorumCreateRequest struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
-}
-
-type quorumCreateResponse struct {
-	ID string `json:"id"`
-}
-
-type webhookPayload struct {
-	Event   string          `json:"event"`
-	Request json.RawMessage `json:"request"`
-}
-
-type webhookRequest struct {
-	ID string `json:"id"`
-}
-
-// ---------------------------------------------------------------------------
 // Application
 // ---------------------------------------------------------------------------
 
@@ -229,7 +204,7 @@ type app struct {
 	cfg    config
 	store  *transferStore
 	pages  map[string]*template.Template
-	client *http.Client
+	quorum *client.Client
 }
 
 func parseTemplates() map[string]*template.Template {
@@ -255,11 +230,19 @@ func main() {
 	}
 	defer pool.Close()
 
+	quorum, err := client.New(cfg.QuorumAPIURL,
+		client.WithTenant("banking"),
+		client.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}),
+	)
+	if err != nil {
+		log.Fatalf("Invalid QUORUM_API_URL: %v", err)
+	}
+
 	a := &app{
 		cfg:    cfg,
 		store:  newTransferStore(pool),
 		pages:  parseTemplates(),
-		client: &http.Client{Timeout: 10 * time.Second},
+		quorum: quorum,
 	}
 
 	mux := http.NewServeMux()
@@ -369,49 +352,29 @@ func (a *app) handleCreateTransferAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) submitToQuorum(ctx context.Context, transfer *Transfer) {
-	payload, _ := json.Marshal(map[string]string{
-		"transfer_id":       transfer.ID,
-		"from_user":         transfer.FromUser,
-		"source_account_id": transfer.SourceAccount,
-		"amount":            transfer.Amount,
-		"destination":       transfer.Destination,
+	// The transfer's creator is the maker. The idempotency key means a retry
+	// of this call can never open a second approval for the same transfer.
+	req, err := a.quorum.As(client.Identity{UserID: transfer.FromUser}).CreateRequest(ctx, client.CreateRequest{
+		Type: "wire_transfer",
+		Payload: map[string]string{
+			"transfer_id":       transfer.ID,
+			"from_user":         transfer.FromUser,
+			"source_account_id": transfer.SourceAccount,
+			"amount":            transfer.Amount,
+			"destination":       transfer.Destination,
+		},
+		IdempotencyKey: "transfer-" + transfer.ID,
 	})
-
-	quorumReq := quorumCreateRequest{
-		Type:    "wire_transfer",
-		Payload: payload,
-	}
-
-	body, _ := json.Marshal(quorumReq)
-	httpReq, err := http.NewRequest(http.MethodPost, a.cfg.QuorumAPIURL+"/api/v1/requests", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("ERROR: failed to build Quorum request: %v", err)
+		log.Printf("WARN: Quorum did not accept transfer %s: %v", transfer.ID, err)
 		return
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-User-ID", transfer.FromUser)
-	httpReq.Header.Set("X-Tenant-ID", "banking")
 
-	resp, err := a.client.Do(httpReq)
-	if err != nil {
-		log.Printf("ERROR: failed to submit to Quorum: %v", err)
-		return
+	transfer.QuorumRequestID = req.ID.String()
+	if err := a.store.SetQuorumRequestID(ctx, transfer.ID, transfer.QuorumRequestID); err != nil {
+		log.Printf("ERROR: failed to save Quorum request ID: %v", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusCreated {
-		var qResp quorumCreateResponse
-		if err := json.NewDecoder(resp.Body).Decode(&qResp); err == nil {
-			transfer.QuorumRequestID = qResp.ID
-			if err := a.store.SetQuorumRequestID(ctx, transfer.ID, qResp.ID); err != nil {
-				log.Printf("ERROR: failed to save Quorum request ID: %v", err)
-			}
-			log.Printf("Transfer %s submitted to Quorum as request %s", transfer.ID, qResp.ID)
-		}
-	} else {
-		respBody, _ := io.ReadAll(resp.Body)
-		log.Printf("WARN: Quorum returned status %d: %s", resp.StatusCode, string(respBody))
-	}
+	log.Printf("Transfer %s submitted to Quorum as request %s", transfer.ID, req.ID)
 }
 
 func (a *app) handleTransferDetail(w http.ResponseWriter, r *http.Request) {
@@ -433,71 +396,40 @@ func (a *app) handleTransferDetail(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (a *app) handleWebhook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
+	payload, err := client.ParseWebhook(r, a.cfg.WebhookSecret)
 	if err != nil {
-		http.Error(w, "failed to read body", http.StatusBadRequest)
-		return
-	}
-
-	sigHeader := r.Header.Get("X-Signature-256")
-	if !verifySignature(body, sigHeader, a.cfg.WebhookSecret) {
-		log.Println("WARN: webhook signature verification failed")
-		http.Error(w, "invalid signature", http.StatusUnauthorized)
-		return
-	}
-
-	var payload webhookPayload
-	if err := json.Unmarshal(body, &payload); err != nil {
+		if errors.Is(err, client.ErrInvalidSignature) {
+			log.Println("WARN: webhook signature verification failed")
+			http.Error(w, "invalid signature", http.StatusUnauthorized)
+			return
+		}
 		log.Printf("WARN: failed to parse webhook payload: %v", err)
 		http.Error(w, "invalid payload", http.StatusBadRequest)
 		return
 	}
 
-	var reqObj webhookRequest
-	if err := json.Unmarshal(payload.Request, &reqObj); err != nil {
-		log.Printf("WARN: failed to parse webhook request object: %v", err)
-		http.Error(w, "invalid request object", http.StatusBadRequest)
-		return
-	}
-
 	ctx := r.Context()
-	transfer, ok := a.store.FindByQuorumID(ctx, reqObj.ID)
+	requestID := payload.Request.ID.String()
+	transfer, ok := a.store.FindByQuorumID(ctx, requestID)
 	if !ok {
-		log.Printf("WARN: received webhook for unknown Quorum request %s", reqObj.ID)
+		log.Printf("WARN: received webhook for unknown Quorum request %s", requestID)
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
 	switch payload.Event {
-	case "approved":
+	case client.EventApproved:
 		a.store.SetStatus(ctx, transfer.ID, StatusApproved)
 		a.store.SetStatus(ctx, transfer.ID, StatusExecuted)
-		log.Printf("Transfer %s approved and executed (Quorum request %s)", transfer.ID, reqObj.ID)
-	case "rejected":
+		log.Printf("Transfer %s approved and executed (Quorum request %s)", transfer.ID, requestID)
+	case client.EventRejected:
 		a.store.SetStatus(ctx, transfer.ID, StatusRejected)
-		log.Printf("Transfer %s rejected (Quorum request %s)", transfer.ID, reqObj.ID)
+		log.Printf("Transfer %s rejected (Quorum request %s)", transfer.ID, requestID)
 	default:
-		log.Printf("INFO: ignoring webhook event %q for request %s", payload.Event, reqObj.ID)
+		log.Printf("INFO: ignoring webhook event %q for request %s", payload.Event, requestID)
 	}
 
 	w.WriteHeader(http.StatusOK)
-}
-
-// ---------------------------------------------------------------------------
-// HMAC verification
-// ---------------------------------------------------------------------------
-
-func verifySignature(body []byte, sigHeader, secret string) bool {
-	if !strings.HasPrefix(sigHeader, "sha256=") {
-		return false
-	}
-	receivedSig, err := hex.DecodeString(strings.TrimPrefix(sigHeader, "sha256="))
-	if err != nil {
-		return false
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	return hmac.Equal(receivedSig, mac.Sum(nil))
 }
 
 // ---------------------------------------------------------------------------

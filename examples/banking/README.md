@@ -1,13 +1,15 @@
 # Banking App — Quorum Example
 
-A sample wire transfer application built with Go that integrates with Quorum for multi-stage approval.
+A sample wire transfer application built with Go that integrates with Quorum for multi-stage approval, using the [Quorum Go client](../../clients/go).
 
 ## What it demonstrates
 
 - **Multi-stage approval**: Wire transfers require manager review, then compliance check
+- **The Go client**: `CreateRequest` with the transfer's creator as maker and an idempotency key, so a retried submission never opens a second approval
 - **Webhook callbacks**: Quorum calls back when a decision is made; the app executes the transfer
-- **HMAC-SHA256 signature verification**: Webhook payloads are verified before processing
-- **Policy self-registration**: The app registers its policy with Quorum on startup
+- **HMAC-SHA256 signature verification**: `client.ParseWebhook` rejects any delivery not signed with the shared secret
+
+The `wire_transfer` policy itself is registered by `scripts/setup.sh`.
 
 ## Running
 
@@ -17,6 +19,10 @@ go run .
 
 # With Docker Compose (from project root)
 docker compose --profile demo up
+
+# Build the image on its own (from project root; the example depends on the
+# client in this repository)
+docker build -f examples/banking/Dockerfile .
 ```
 
 Visit [http://localhost:3001](http://localhost:3001) to use the app.

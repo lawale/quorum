@@ -76,7 +76,9 @@ services:
 
   # ---- Sample consumer apps (start after setup completes) ----
   banking:
-    build: examples/banking
+    build:
+      context: .
+      dockerfile: examples/banking/Dockerfile
     ports:
       - "3001:3001"
     environment:

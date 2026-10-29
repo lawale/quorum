@@ -365,7 +365,39 @@ When a policy has a `dynamic_authorization_url`, Quorum POSTs the full request c
 
 ## Documentation
 
-All API endpoints are under `/api/v1` and require authentication (configurable via the `auth` section in config). The [wire transfer walkthrough](#use-case-securing-a-wire-transfer) above demonstrates the core request lifecycle.
+All API endpoints are under `/api/v1` and require authentication (configurable via the `auth` section in config). The [wire transfer walkthrough](#use-case-securing-a-wire-transfer) above demonstrates the core request lifecycle. The full contract is published as OpenAPI at [`api/openapi.yaml`](api/openapi.yaml) and served by every Quorum at `/openapi.yaml`; the test suite validates real server traffic against it, so it is never out of date.
+
+### Go Client
+
+`github.com/lawale/quorum/clients/go` is the Go client. It shares the server's own types, so it cannot drift from the API, and adds what a REST surface cannot express: per-call identity, idempotent creation, webhook signature verification, and waiting on a decision.
+
+```go
+import "github.com/lawale/quorum/clients/go"
+
+q, err := client.New("https://quorum.example.com", client.WithTenant("banking"))
+
+// The transfer's creator is the maker. A repeated idempotency key returns
+// the same request instead of opening a second approval.
+req, err := q.As(client.Identity{UserID: "alice"}).CreateRequest(ctx, client.CreateRequest{
+    Type:           "wire_transfer",
+    Payload:        transfer,
+    IdempotencyKey: "transfer-" + transfer.ID,
+})
+
+// A checker decides.
+req, err = q.As(client.Identity{UserID: "bob", Roles: []string{"manager"}}).Approve(ctx, req.ID, "looks right")
+if client.IsForbidden(err) { /* bob may not act on this request */ }
+
+// Block until the request is decided: follows the event stream, polls if
+// streaming is unavailable, gives up when ctx does.
+final, err := q.As(client.Identity{UserID: "alice"}).WaitForDecision(ctx, req.ID)
+
+// Verify and decode a webhook delivery in your handler.
+payload, err := client.ParseWebhook(r, webhookSecret)
+if errors.Is(err, client.ErrInvalidSignature) { /* not from Quorum */ }
+```
+
+Against a server in `verify` mode, pass `client.BearerToken(jwt)` to `As` instead of an `Identity`. Against one in `trust` mode with renamed headers, set them with `client.WithTrustHeaderNames`. The [banking example](examples/banking/) is built on the client.
 
 ### Configuration
 
@@ -940,11 +972,11 @@ Three example apps in `examples/` demonstrate how real applications integrate wi
 docker compose --profile demo up
 ```
 
-This starts everything: PostgreSQL, Quorum with the admin console, seed data, and all three sample apps. Each app self-registers its policy with Quorum on startup.
+This starts everything: PostgreSQL, Quorum with the admin console, the policies each app needs (via `scripts/setup.sh`), seed data, and all three sample apps.
 
 **What each app demonstrates:**
 
-- **Banking**: Webhook-driven flow — transfers execute automatically when Quorum sends an approved webhook with HMAC signature verification
+- **Banking**: Webhook-driven flow on the [Go client](#go-client) — transfers execute automatically when Quorum sends an approved webhook, verified with `client.ParseWebhook`
 - **Expense Tracker**: Polling-based flow — the detail page fetches the latest status from Quorum on each page load
 - **Access Portal**: Threshold voting — 2 of 3 security reviewers must approve; not every rejection is fatal
 
