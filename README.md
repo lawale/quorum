@@ -846,7 +846,7 @@ Quorum has no user directory, so it cannot email the branch manager itself. What
 
 - **`reason`** is `created` for stage 0, `stage_advanced` for later stages, or `bypass_limit_exceeded` when a request that would have skipped review was held because of a [velocity limit](#bypass-rules).
 - **`scope`** has its values already resolved for this request: the maker's attribute, the payload value, and any fixed values a rule names. A consumer does not need to know how scope rules work; it matches users whose `branch_id` is `ABJ-02` or `HQ`.
-- **`excluded_user_ids`** lists people who cannot act even if they otherwise qualify: the maker, and anyone who has already voted on this stage.
+- **`excluded_user_ids`** lists people who cannot act even if they otherwise qualify. Today that is the maker; the list exists so consumers need no special case when more exclusions are added.
 - **`eligible_reviewers`**, when non-empty, is the per-request allowlist and overrides everything else.
 
 The consumer's job is a directory query: users holding one of `allowed_roles` (or `allowed_permissions`, depending on `authorization_mode`), whose attributes match `scope`, minus `excluded_user_ids`. Then notify them by whatever channel suits, with a link to the request. The event is written in the same transaction as the request or the stage advance, so a reviewer is never left unnotified because the process died in between.

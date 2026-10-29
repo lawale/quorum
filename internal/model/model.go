@@ -246,6 +246,13 @@ type AuditLog struct {
 // the reviewers in its own directory and notify them.
 const EventReviewRequested = "review_requested"
 
+// Why a stage is being announced.
+const (
+	ReviewReasonCreated             = "created"
+	ReviewReasonStageAdvanced       = "stage_advanced"
+	ReviewReasonBypassLimitExceeded = "bypass_limit_exceeded"
+)
+
 // ReviewRequest describes the reviewers a stage is waiting on. Quorum has no
 // user directory, so it resolves everything it can from the policy and the
 // request and leaves identity lookup to the consumer.
@@ -255,11 +262,11 @@ type ReviewRequest struct {
 	StageName          string            `json:"stage_name,omitempty"`
 	TotalStages        int               `json:"total_stages"`
 	RequiredApprovals  int               `json:"required_approvals"`
-	EligibleReviewers  []string          `json:"eligible_reviewers,omitempty"`
+	EligibleReviewers  []string          `json:"eligible_reviewers"`
 	AllowedRoles       []string          `json:"allowed_roles,omitempty"`
 	AllowedPermissions []string          `json:"allowed_permissions,omitempty"`
 	AuthorizationMode  AuthorizationMode `json:"authorization_mode,omitempty"`
-	Scope              []ResolvedScope   `json:"scope,omitempty"`
+	Scope              []ResolvedScope   `json:"scope"`
 	ExcludedUserIDs    []string          `json:"excluded_user_ids,omitempty"`
 	ExpiresAt          *time.Time        `json:"expires_at,omitempty"`
 }
@@ -271,6 +278,32 @@ type ResolvedScope struct {
 	Attribute             string   `json:"attribute"`
 	Values                []string `json:"values"`
 	AllowUnscopedCheckers bool     `json:"allow_unscoped_checkers,omitempty"`
+}
+
+// Event is something that happened to a request which webhook subscribers
+// may want to hear about. Build one with StatusChanged or ReviewRequested so
+// the name and the data always agree.
+type Event struct {
+	Name      string
+	Request   *Request
+	Approvals []Approval
+	Review    *ReviewRequest
+}
+
+// StatusChanged announces that req reached status. The event carries its own
+// copy of the request stamped with that status and the approvals, so the
+// payload is right no matter when the caller updates its own copy.
+func StatusChanged(req *Request, status RequestStatus, approvals []Approval) Event {
+	r := *req
+	r.Status = status
+	r.Approvals = approvals
+	return Event{Name: string(status), Request: &r, Approvals: approvals}
+}
+
+// ReviewRequested announces that req is waiting on the reviewers described
+// by review.
+func ReviewRequested(req *Request, review *ReviewRequest) Event {
+	return Event{Name: EventReviewRequested, Request: req, Review: review}
 }
 
 type WebhookPayload struct {

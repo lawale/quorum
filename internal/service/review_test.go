@@ -13,39 +13,12 @@ import (
 	"github.com/lawale/quorum/internal/testutil"
 )
 
-type capturedEvent struct {
-	event  string
-	req    *model.Request
-	review *model.ReviewRequest
-}
-
-// installEventCapture wires a transaction runner and an outbox enqueuer that
-// record every emitted event, status and review alike.
-func installEventCapture(svc *RequestService, requests *testutil.MockRequestStore, approvals *testutil.MockApprovalStore) *[]capturedEvent {
-	var events []capturedEvent
-	svc.SetWebhookDispatch(
-		func(ctx context.Context, fn func(tx *store.Stores) error) error {
-			return fn(&store.Stores{Requests: requests, Approvals: approvals, Outbox: &testutil.MockOutboxStore{}, Webhooks: &testutil.MockWebhookStore{}})
-		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-			copied := *req
-			events = append(events, capturedEvent{event: event, req: &copied, review: review})
-			return nil
-		},
-		func() {},
-	)
-	return &events
-}
-
-// countVote makes the approval mock report the vote just inserted, which is
-// what the transactional decision path reads after recording it.
-func countVote(approvals *testutil.MockApprovalStore) {
-	approvals.CountByDecisionAndStageFunc = func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-		if decision == model.DecisionApproved {
-			return 1, nil
-		}
-		return 0, nil
-	}
+// installEventCapture wires a pass-through transaction runner over the given
+// stores and a sink that records every emitted event.
+func installEventCapture(svc *RequestService, requests *testutil.MockRequestStore, approvals *testutil.MockApprovalStore) *fakeSink {
+	sink := &fakeSink{}
+	svc.SetWebhookDispatch(passThrough(&store.Stores{Requests: requests, Approvals: approvals}), sink)
+	return sink
 }
 
 func TestBuildReviewRequest_ResolvesStageAndScope(t *testing.T) {
@@ -69,16 +42,12 @@ func TestBuildReviewRequest_ResolvesStageAndScope(t *testing.T) {
 		r.MakerAttributes = map[string]string{"branch_id": "LAG-01", "department": "ops"}
 		r.EligibleReviewers = []string{"bob", "carol"}
 	})
-	approvals := []model.Approval{
-		{CheckerID: "zed", StageIndex: 0},
-		{CheckerID: "yan", StageIndex: 1},
-	}
 
-	rr := buildReviewRequest(policy, req, 1, approvals, "stage_advanced")
+	rr := buildReviewRequest(policy, req, 1, model.ReviewReasonStageAdvanced)
 	if rr == nil {
 		t.Fatal("expected a review request")
 	}
-	if rr.Reason != "stage_advanced" || rr.StageIndex != 1 || rr.StageName != "Receiving branch" || rr.TotalStages != 2 || rr.RequiredApprovals != 2 {
+	if rr.Reason != model.ReviewReasonStageAdvanced || rr.StageIndex != 1 || rr.StageName != "Receiving branch" || rr.TotalStages != 2 || rr.RequiredApprovals != 2 {
 		t.Errorf("stage fields = %+v", rr)
 	}
 	if len(rr.AllowedRoles) != 1 || rr.AllowedRoles[0] != "branch_manager" || len(rr.AllowedPermissions) != 1 || rr.AuthorizationMode != model.AuthModeAll {
@@ -96,9 +65,8 @@ func TestBuildReviewRequest_ResolvesStageAndScope(t *testing.T) {
 	if rr.Scope[1].Attribute != "department" || len(rr.Scope[1].Values) != 1 || rr.Scope[1].Values[0] != "ops" {
 		t.Errorf("scope[1] = %+v, want maker's department", rr.Scope[1])
 	}
-	// Maker always excluded; only this stage's voters excluded.
-	if len(rr.ExcludedUserIDs) != 2 || rr.ExcludedUserIDs[0] != req.MakerID || rr.ExcludedUserIDs[1] != "yan" {
-		t.Errorf("excluded = %v", rr.ExcludedUserIDs)
+	if len(rr.ExcludedUserIDs) != 1 || rr.ExcludedUserIDs[0] != req.MakerID {
+		t.Errorf("excluded = %v, want only the maker", rr.ExcludedUserIDs)
 	}
 }
 
@@ -106,7 +74,7 @@ func TestBuildReviewRequest_UnresolvedScopeIsEmptyList(t *testing.T) {
 	policy := testutil.NewPolicy(func(p *model.Policy) {
 		p.Stages[0].Scope = []model.ScopeRule{{Attribute: "branch_id"}}
 	})
-	rr := buildReviewRequest(policy, testutil.NewRequest(), 0, nil, "created")
+	rr := buildReviewRequest(policy, testutil.NewRequest(), 0, model.ReviewReasonCreated)
 	b, _ := json.Marshal(rr.Scope)
 	if string(b) != `[{"attribute":"branch_id","values":[]}]` {
 		t.Errorf("scope json = %s", b)
@@ -114,7 +82,7 @@ func TestBuildReviewRequest_UnresolvedScopeIsEmptyList(t *testing.T) {
 }
 
 func TestBuildReviewRequest_OutOfRangeStage(t *testing.T) {
-	if rr := buildReviewRequest(testutil.NewPolicy(), testutil.NewRequest(), 5, nil, "created"); rr != nil {
+	if rr := buildReviewRequest(testutil.NewPolicy(), testutil.NewRequest(), 5, model.ReviewReasonCreated); rr != nil {
 		t.Errorf("expected nil for missing stage, got %+v", rr)
 	}
 }
@@ -131,19 +99,19 @@ func TestCreate_EmitsReviewRequested(t *testing.T) {
 	policies := &testutil.MockPolicyStore{GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) { return policy, nil }}
 	audits := &testutil.MockAuditStore{CreateFunc: func(ctx context.Context, l *model.AuditLog) error { return nil }}
 	svc := newTestRequestService(requests, &testutil.MockApprovalStore{}, policies, audits, nil)
-	events := installEventCapture(svc, requests, &testutil.MockApprovalStore{})
+	sink := installEventCapture(svc, requests, &testutil.MockApprovalStore{})
 
 	if _, err := svc.Create(context.Background(), &model.Request{Type: "transfer", Payload: []byte(`{"a":1}`), MakerID: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(*events) != 1 {
-		t.Fatalf("events = %+v, want one", *events)
+	if len(sink.events) != 1 {
+		t.Fatalf("events = %+v, want one", sink.events)
 	}
-	e := (*events)[0]
-	if e.event != model.EventReviewRequested || e.review == nil || e.review.Reason != "created" || e.review.StageIndex != 0 {
-		t.Errorf("event = %s review = %+v", e.event, e.review)
+	e := sink.events[0]
+	if e.Name != model.EventReviewRequested || e.Review == nil || e.Review.Reason != model.ReviewReasonCreated || e.Review.StageIndex != 0 {
+		t.Errorf("event = %s review = %+v", e.Name, e.Review)
 	}
-	if e.req.ID == uuid.Nil {
+	if e.Request.ID == uuid.Nil {
 		t.Error("event must carry the persisted request ID")
 	}
 }
@@ -152,14 +120,14 @@ func TestCreate_Bypassed_DoesNotEmitReviewRequested(t *testing.T) {
 	policy := bypassPolicy(model.BypassRule{MakerRoles: []string{"root_admin"}})
 	f := newBypassCreateFixture(policy)
 	svc := newTestRequestService(f.requests, &testutil.MockApprovalStore{}, f.policies, f.audits, nil)
-	events := installEventCapture(svc, f.requests, &testutil.MockApprovalStore{})
+	sink := installEventCapture(svc, f.requests, &testutil.MockApprovalStore{})
 
 	ctx := auth.WithIdentity(context.Background(), &auth.Identity{UserID: "alice", TenantID: "t1", Roles: []string{"root_admin"}})
 	if _, err := svc.Create(ctx, &model.Request{Type: "transfer", Payload: []byte(`{}`), MakerID: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, e := range *events {
-		if e.event == model.EventReviewRequested {
+	for _, e := range sink.events {
+		if e.Name == model.EventReviewRequested {
 			t.Errorf("bypassed request must not ask for review: %+v", e)
 		}
 	}
@@ -173,13 +141,13 @@ func TestCreate_LimitHit_EmitsReviewRequestedWithReason(t *testing.T) {
 		return []model.Request{priorRequest(`{"amount": 1}`)}, nil
 	}
 	svc := newTestRequestService(f.requests, &testutil.MockApprovalStore{}, f.policies, f.audits, nil)
-	events := installEventCapture(svc, f.requests, &testutil.MockApprovalStore{})
+	sink := installEventCapture(svc, f.requests, &testutil.MockApprovalStore{})
 
 	if _, err := svc.Create(context.Background(), &model.Request{Type: "transfer", Payload: []byte(`{"amount": 5}`), MakerID: "alice"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(*events) != 1 || (*events)[0].review == nil || (*events)[0].review.Reason != "bypass_limit_exceeded" {
-		t.Errorf("events = %+v", *events)
+	if len(sink.events) != 1 || sink.events[0].Review == nil || sink.events[0].Review.Reason != model.ReviewReasonBypassLimitExceeded {
+		t.Errorf("events = %+v", sink.events)
 	}
 }
 
@@ -192,40 +160,38 @@ func TestApprove_StageAdvance_EmitsReviewRequestedForNextStage(t *testing.T) {
 		}
 	})
 	requests, approvals, policies, audits := setupApproveTest(req, policy)
-	countVote(approvals)
 	svc := newTestRequestService(requests, approvals, policies, audits, nil)
-	events := installEventCapture(svc, requests, approvals)
+	sink := installEventCapture(svc, requests, approvals)
 
 	if _, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(*events) != 1 {
-		t.Fatalf("events = %+v, want one review_requested", *events)
+	if len(sink.events) != 1 {
+		t.Fatalf("events = %+v, want one review_requested", sink.events)
 	}
-	e := (*events)[0]
-	if e.event != model.EventReviewRequested || e.review.Reason != "stage_advanced" || e.review.StageIndex != 1 || e.review.StageName != "Second" {
-		t.Errorf("event = %+v review = %+v", e.event, e.review)
+	e := sink.events[0]
+	if e.Name != model.EventReviewRequested || e.Review.Reason != model.ReviewReasonStageAdvanced || e.Review.StageIndex != 1 || e.Review.StageName != "Second" {
+		t.Errorf("event = %+v review = %+v", e.Name, e.Review)
 	}
-	if e.req.CurrentStage != 1 {
-		t.Errorf("event request current_stage = %d, want 1", e.req.CurrentStage)
+	if e.Request.CurrentStage != 1 {
+		t.Errorf("event request current_stage = %d, want 1", e.Request.CurrentStage)
 	}
-	if len(e.review.AllowedRoles) != 1 || e.review.AllowedRoles[0] != "compliance" {
-		t.Errorf("allowed roles = %v", e.review.AllowedRoles)
+	if len(e.Review.AllowedRoles) != 1 || e.Review.AllowedRoles[0] != "compliance" {
+		t.Errorf("allowed roles = %v", e.Review.AllowedRoles)
 	}
 }
 
 func TestApprove_Terminal_DoesNotEmitReviewRequested(t *testing.T) {
 	req := testutil.NewRequest()
 	requests, approvals, policies, audits := setupApproveTest(req, testutil.NewPolicy())
-	countVote(approvals)
 	svc := newTestRequestService(requests, approvals, policies, audits, nil)
-	events := installEventCapture(svc, requests, approvals)
+	sink := installEventCapture(svc, requests, approvals)
 
 	if _, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(*events) != 1 || (*events)[0].event != "approved" || (*events)[0].review != nil {
-		t.Errorf("terminal approval should emit exactly one approved event and no review request: %+v", *events)
+	if len(sink.events) != 1 || sink.events[0].Name != "approved" || sink.events[0].Review != nil {
+		t.Errorf("terminal approval should emit exactly one approved event and no review request: %+v", sink.events)
 	}
 }
 

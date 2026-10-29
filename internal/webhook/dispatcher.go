@@ -92,16 +92,17 @@ func NewDispatcher(outbox store.OutboxStore, audits store.AuditStore, cfg Config
 	}
 }
 
-// Enqueue builds outbox entries for an event on a request and writes them
-// using the provided stores. Status events pass the status as the event name;
-// review_requested events also carry a ReviewRequest. The caller should pass tx-bound stores so that the
-// outbox writes are atomic with the status update.
-func (d *Dispatcher) Enqueue(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
+// Enqueue writes an outbox entry for every webhook subscribed to the event,
+// using the given transaction-bound stores so the entries commit or roll back
+// with the state change that caused them.
+func (d *Dispatcher) Enqueue(ctx context.Context, tx *store.Stores, ev model.Event) error {
+	event := ev.Name
+	req := ev.Request
 	payload := model.WebhookPayload{
 		Event:     event,
 		Request:   *req,
-		Approvals: approvals,
-		Review:    review,
+		Approvals: ev.Approvals,
+		Review:    ev.Review,
 		Timestamp: time.Now().UTC(),
 	}
 
@@ -113,7 +114,7 @@ func (d *Dispatcher) Enqueue(ctx context.Context, outbox store.OutboxStore, webh
 	var entries []model.OutboxEntry
 
 	// Find matching global webhooks
-	whs, err := webhooks.ListByEventAndType(ctx, event, req.Type)
+	whs, err := tx.Webhooks.ListByEventAndType(ctx, event, req.Type)
 	if err != nil {
 		return fmt.Errorf("listing webhooks: %w", err)
 	}
@@ -133,7 +134,7 @@ func (d *Dispatcher) Enqueue(ctx context.Context, outbox store.OutboxStore, webh
 		return nil
 	}
 
-	return outbox.CreateBatch(ctx, entries)
+	return tx.Outbox.CreateBatch(ctx, entries)
 }
 
 // Signal wakes the delivery worker to process pending outbox entries.

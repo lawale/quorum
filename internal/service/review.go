@@ -1,25 +1,19 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 
 	"github.com/lawale/quorum/internal/model"
-	"github.com/lawale/quorum/internal/store"
 )
-
-// OutboxEnqueuer writes outbox entries for an event on a request. Status
-// changes pass the status as the event; review_requested also carries a
-// ReviewRequest. It is injected from main so the service never imports the
-// webhook package.
-type OutboxEnqueuer func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error
 
 // buildReviewRequest describes the reviewers a stage is waiting on, resolving
 // everything Quorum knows: the per-request allowlist, the stage's role and
 // permission requirements, scope values computed for this request, and the
-// user IDs that must not be notified because they cannot act (the maker and
-// anyone who already voted on this stage).
-func buildReviewRequest(policy *model.Policy, req *model.Request, stageIndex int, approvals []model.Approval, reason string) *model.ReviewRequest {
+// user IDs that must not be notified because they cannot act. A stage is
+// announced only when it starts, so nobody has voted on it yet and the only
+// exclusion is the maker. EligibleReviewers and Scope always serialise as
+// lists, never null, so consumers can iterate them without a nil check.
+func buildReviewRequest(policy *model.Policy, req *model.Request, stageIndex int, reason string) *model.ReviewRequest {
 	stage := policy.StageAt(stageIndex)
 	if stage == nil {
 		return nil
@@ -33,7 +27,12 @@ func buildReviewRequest(policy *model.Policy, req *model.Request, stageIndex int
 		RequiredApprovals: stage.RequiredApprovals,
 		EligibleReviewers: req.EligibleReviewers,
 		AuthorizationMode: stage.AuthorizationMode,
+		Scope:             []model.ResolvedScope{},
+		ExcludedUserIDs:   []string{req.MakerID},
 		ExpiresAt:         req.ExpiresAt,
+	}
+	if rr.EligibleReviewers == nil {
+		rr.EligibleReviewers = []string{}
 	}
 
 	if len(stage.AllowedCheckerRoles) > 0 {
@@ -62,27 +61,15 @@ func buildReviewRequest(policy *model.Policy, req *model.Request, stageIndex int
 		}
 	}
 
-	excluded := []string{req.MakerID}
-	for _, a := range approvals {
-		if a.StageIndex == stageIndex && a.CheckerID != req.MakerID {
-			excluded = append(excluded, a.CheckerID)
-		}
-	}
-	rr.ExcludedUserIDs = excluded
-
 	return rr
 }
 
-// enqueueReviewRequested writes a review_requested event for the request's
-// current stage using the given (possibly transactional) stores. It is a
-// no-op when no event enqueuer is installed.
-func (s *RequestService) enqueueReviewRequested(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, policy *model.Policy, req *model.Request, approvals []model.Approval, reason string) error {
-	if s.enqueue == nil {
-		return nil
-	}
-	review := buildReviewRequest(policy, req, req.CurrentStage, approvals, reason)
+// emitReviewRequested announces that the request's current stage is waiting
+// on reviewers. A stage the policy no longer defines is not announced.
+func emitReviewRequested(emit emitFunc, policy *model.Policy, req *model.Request, reason string) error {
+	review := buildReviewRequest(policy, req, req.CurrentStage, reason)
 	if review == nil {
 		return nil
 	}
-	return s.enqueue(ctx, outbox, webhooks, model.EventReviewRequested, req, approvals, review)
+	return emit(model.ReviewRequested(req, review))
 }

@@ -216,21 +216,12 @@ func TestCreate_Bypass_UsesTransactionAndEnqueuesWebhooks(t *testing.T) {
 	f := newBypassCreateFixture(policy)
 	svc := newTestRequestService(f.requests, &testutil.MockApprovalStore{}, f.policies, f.audits, nil)
 
-	txRuns, enqueued, signalled := 0, 0, 0
-	svc.SetWebhookDispatch(
-		func(ctx context.Context, fn func(tx *store.Stores) error) error {
-			txRuns++
-			return fn(&store.Stores{Requests: f.requests, Outbox: &testutil.MockOutboxStore{}, Webhooks: &testutil.MockWebhookStore{}})
-		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-			enqueued++
-			if req.Status != model.StatusApproved {
-				t.Errorf("webhook payload status = %v, want approved", req.Status)
-			}
-			return nil
-		},
-		func() { signalled++ },
-	)
+	txRuns := 0
+	sink := &fakeSink{}
+	svc.SetWebhookDispatch(func(ctx context.Context, fn func(tx *store.Stores) error) error {
+		txRuns++
+		return fn(&store.Stores{Requests: f.requests})
+	}, sink)
 
 	result, err := svc.Create(context.Background(), &model.Request{Type: "transfer", Payload: raw(`{"amount": 50}`), MakerID: "alice"})
 	if err != nil {
@@ -239,8 +230,11 @@ func TestCreate_Bypass_UsesTransactionAndEnqueuesWebhooks(t *testing.T) {
 	if result.Status != model.StatusApproved {
 		t.Errorf("status = %v, want approved", result.Status)
 	}
-	if txRuns != 1 || enqueued != 1 || signalled != 1 {
-		t.Errorf("txRuns=%d enqueued=%d signalled=%d, want 1 each", txRuns, enqueued, signalled)
+	if txRuns != 1 || len(sink.events) != 1 || sink.signals != 1 {
+		t.Errorf("txRuns=%d events=%d signals=%d, want 1 each", txRuns, len(sink.events), sink.signals)
+	}
+	if sink.events[0].Request.Status != model.StatusApproved {
+		t.Errorf("webhook payload status = %v, want approved", sink.events[0].Request.Status)
 	}
 }
 

@@ -423,18 +423,28 @@ func setupApproveTest(req *model.Request, policy *model.Policy) (*testutil.MockR
 			return nil
 		},
 	}
+	// Votes are counted inside the transaction after the insert, so the mock
+	// remembers what was inserted and counts it back.
+	var votes []model.Approval
 	approvals := &testutil.MockApprovalStore{
 		ExistsByCheckerAndStageFunc: func(ctx context.Context, reqID uuid.UUID, checkerID string, stageIndex int) (bool, error) {
 			return false, nil
 		},
 		CreateFunc: func(ctx context.Context, approval *model.Approval) error {
+			votes = append(votes, *approval)
 			return nil
 		},
 		CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-			return 0, nil // Counts are read before the vote; 0 existing votes
+			n := 0
+			for _, v := range votes {
+				if v.Decision == decision && v.StageIndex == stageIndex {
+					n++
+				}
+			}
+			return n, nil
 		},
 		ListByRequestIDFunc: func(ctx context.Context, id uuid.UUID) ([]model.Approval, error) {
-			return []model.Approval{}, nil
+			return votes, nil
 		},
 	}
 	policies := &testutil.MockPolicyStore{
@@ -709,46 +719,18 @@ func TestApprove_WebhookDispatch_CalledOnTerminal(t *testing.T) {
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
 
-	enqueueCalled := false
-	signalCalled := false
-	svc.SetWebhookDispatch(
-		func(ctx context.Context, fn func(tx *store.Stores) error) error {
-			// Inside the tx, counts reflect the just-inserted vote.
-			txApprovals := &testutil.MockApprovalStore{
-				CreateFunc:                  approvalStore.CreateFunc,
-				ListByRequestIDFunc:         approvalStore.ListByRequestIDFunc,
-				ExistsByCheckerAndStageFunc: approvalStore.ExistsByCheckerAndStageFunc,
-				CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-					if decision == model.DecisionApproved {
-						return 1, nil // 1 approved vote (just inserted)
-					}
-					return 0, nil
-				},
-			}
-			txStores := &store.Stores{
-				Requests:  requestStore,
-				Approvals: txApprovals,
-				Outbox:    &testutil.MockOutboxStore{},
-				Webhooks:  &testutil.MockWebhookStore{},
-			}
-			return fn(txStores)
-		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-			enqueueCalled = true
-			return nil
-		},
-		func() { signalCalled = true },
-	)
+	sink := &fakeSink{}
+	svc.SetWebhookDispatch(passThrough(&store.Stores{Requests: requestStore, Approvals: approvalStore}), sink)
 
 	_, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !enqueueCalled {
-		t.Error("expected enqueueWebhooks to be called on terminal status")
+	if len(sink.named("approved")) != 1 {
+		t.Errorf("events = %+v, want one approved", sink.events)
 	}
-	if !signalCalled {
-		t.Error("expected signalWebhooks to be called after commit")
+	if sink.signals != 1 {
+		t.Errorf("signals = %d, want 1 after commit", sink.signals)
 	}
 }
 
@@ -761,39 +743,15 @@ func TestApprove_WebhookDispatch_NotCalledWhenPending(t *testing.T) {
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
 
-	enqueueCalled := false
-	svc.SetWebhookDispatch(
-		func(ctx context.Context, fn func(tx *store.Stores) error) error {
-			// Inside the tx, counts reflect: 1 existing + 1 just inserted = 2, need 3 → still pending
-			txApprovals := &testutil.MockApprovalStore{
-				CreateFunc:                  approvalStore.CreateFunc,
-				ListByRequestIDFunc:         approvalStore.ListByRequestIDFunc,
-				ExistsByCheckerAndStageFunc: approvalStore.ExistsByCheckerAndStageFunc,
-				CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-					if decision == model.DecisionApproved {
-						return 2, nil // 2 approved (1 existing + 1 just inserted), need 3
-					}
-					return 0, nil
-				},
-			}
-			return fn(&store.Stores{
-				Requests:  requestStore,
-				Approvals: txApprovals,
-			})
-		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-			enqueueCalled = true
-			return nil
-		},
-		func() {},
-	)
+	sink := &fakeSink{}
+	svc.SetWebhookDispatch(passThrough(&store.Stores{Requests: requestStore, Approvals: approvalStore}), sink)
 
 	_, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if enqueueCalled {
-		t.Error("enqueueWebhooks should not be called when status is still pending")
+	if len(sink.events) != 0 || sink.signals != 0 {
+		t.Errorf("events = %+v signals = %d, want nothing while still pending", sink.events, sink.signals)
 	}
 }
 
@@ -992,33 +950,15 @@ func TestCancel_WebhookDispatch_Called(t *testing.T) {
 	}
 	svc := newTestRequestService(requests, approvalStore, &testutil.MockPolicyStore{}, audits, nil)
 
-	enqueueCalled := false
-	signalCalled := false
-	svc.SetWebhookDispatch(
-		func(ctx context.Context, fn func(tx *store.Stores) error) error {
-			txStores := &store.Stores{
-				Requests: requests,
-				Outbox:   &testutil.MockOutboxStore{},
-				Webhooks: &testutil.MockWebhookStore{},
-			}
-			return fn(txStores)
-		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-			enqueueCalled = true
-			return nil
-		},
-		func() { signalCalled = true },
-	)
+	sink := &fakeSink{}
+	svc.SetWebhookDispatch(passThrough(&store.Stores{Requests: requests, Approvals: approvalStore}), sink)
 
 	_, err := svc.Cancel(context.Background(), req.ID, "maker-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !enqueueCalled {
-		t.Error("expected enqueueWebhooks to be called on cancel")
-	}
-	if !signalCalled {
-		t.Error("expected signalWebhooks to be called on cancel")
+	if len(sink.named("cancelled")) != 1 || sink.signals != 1 {
+		t.Errorf("events = %+v signals = %d, want one cancelled event and one signal", sink.events, sink.signals)
 	}
 }
 
@@ -1166,32 +1106,6 @@ func TestApprove_ConcurrentTerminal_ReturnsNotPending(t *testing.T) {
 	}
 
 	svc := newTestRequestService(requestStore, approvalStore, policyStore, auditStore, nil)
-	svc.SetWebhookDispatch(
-		func(ctx context.Context, fn func(tx *store.Stores) error) error {
-			// Inside the tx, count reflects the just-inserted vote.
-			txApprovals := &testutil.MockApprovalStore{
-				CreateFunc:                  approvalStore.CreateFunc,
-				ListByRequestIDFunc:         approvalStore.ListByRequestIDFunc,
-				ExistsByCheckerAndStageFunc: approvalStore.ExistsByCheckerAndStageFunc,
-				CountByDecisionAndStageFunc: func(ctx context.Context, reqID uuid.UUID, decision model.Decision, stageIndex int) (int, error) {
-					if decision == model.DecisionApproved {
-						return 1, nil // 1 approved (just inserted) → triggers terminal path
-					}
-					return 0, nil
-				},
-			}
-			return fn(&store.Stores{
-				Requests:  requestStore,
-				Approvals: txApprovals,
-				Outbox:    &testutil.MockOutboxStore{},
-				Webhooks:  &testutil.MockWebhookStore{},
-			})
-		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-			return nil
-		},
-		func() {},
-	)
 
 	_, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
 	if !errors.Is(err, ErrRequestNotPending) {
@@ -1245,10 +1159,7 @@ func TestApprove_StageAdvance_Atomic(t *testing.T) {
 			}
 			return fn(txStores)
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-			return nil
-		},
-		func() {},
+		&fakeSink{},
 	)
 
 	result, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil)
@@ -1690,15 +1601,10 @@ func TestApprove_ConcurrentGoroutines_OnlyOneWins(t *testing.T) {
 						return []model.Approval{}, nil
 					},
 				},
-				Outbox:   &testutil.MockOutboxStore{},
-				Webhooks: &testutil.MockWebhookStore{},
 			}
 			return fn(txStores)
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-			return nil
-		},
-		func() {},
+		&fakeSink{},
 	)
 
 	const numGoroutines = 5
