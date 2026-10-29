@@ -637,6 +637,43 @@ Templates are resolved once at creation time, so editing a policy template only 
 
 **Consumer override:** If the request already includes `metadata.display` at creation time, it takes precedence over the policy template. This lets consumers provide custom display data for edge cases.
 
+#### Proposed Changes (Before / After)
+
+Many approvals are not about a new thing but about a change to an existing one: a branch's transaction limit, a user's role, a product's price. For those, the reviewer needs to see what is there now next to what is being proposed. Put both snapshots in the payload and add a `changes` block to the template:
+
+```json
+{
+  "title": "Update Branch {{current.code}}",
+  "changes": {
+    "current_path": "current",
+    "proposed_path": "proposed",
+    "fields": [
+      { "label": "Name", "path": "name" },
+      { "label": "Daily Limit", "path": "daily_limit", "format": "currency" },
+      { "label": "Status", "path": "status" }
+    ]
+  }
+}
+```
+
+With a payload such as:
+
+```json
+{
+  "current":  { "code": "LAG-01", "name": "Lagos Island", "daily_limit": 500000, "status": "active" },
+  "proposed": { "code": "LAG-01", "name": "Lagos Island", "daily_limit": 750000, "status": "inactive" }
+}
+```
+
+Quorum resolves `metadata.display.changes` to one row per field with `from`, `to`, and a `changed` flag. The approval panel widget and the console render these as a before/after table with changed values highlighted, and show how many fields differ.
+
+- **`current_path` / `proposed_path`** — dot-notation paths to the two snapshots inside the payload. Omit the current snapshot for a creation, or the proposed one for a deletion; the missing side renders as `"-"`.
+- **`fields`** — optional. When omitted, Quorum compares every leaf attribute found in either snapshot, sorted by path, with labels derived from the path (`billing.account_id` becomes `Billing / Account Id`). List fields explicitly to control order, labels, and formatting.
+- **`changed`** compares the raw values, not the formatted strings.
+- `changes` can be combined with `title`, `fields`, and `items` in the same template.
+
+Your webhook consumer receives the full request, so on approval it can read the `proposed` snapshot from the payload and apply it. Quorum decides; your application performs the write.
+
 ### Webhook Delivery
 
 Quorum uses a **transactional outbox** to guarantee webhook delivery. Outbox entries are written in the same database transaction as the status update, so no event is ever lost. A signal-driven delivery worker dispatches entries via HTTP POST with HMAC-SHA256 signatures (`X-Signature-256` header), retrying failures with exponential backoff. A configurable heartbeat (default 30s) acts as a safety net for missed signals.

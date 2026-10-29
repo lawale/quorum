@@ -2,7 +2,7 @@ import { css, html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 import { ApiError } from '../lib/api';
-import type { Request, Policy, AuditLog } from '../lib/types';
+import type { Request, Policy, AuditLog, ResolvedChange } from '../lib/types';
 import { formatDate, timeAgo, getDisplay } from '../lib/utils';
 import { QuorumElement, LiveUpdater, defaultTrueConverter, presenceConverter, tokens } from './shared';
 import './internal/status-badge';
@@ -133,6 +133,23 @@ export class QuorumApprovalPanel extends QuorumElement {
       border-radius: var(--_radius-sm);
     }
     .display-item-title { font-size: 13px; font-weight: 600; color: var(--_fg); margin-bottom: 4px; }
+    .changes { margin-top: 12px; border: 1px solid var(--_divider); border-radius: var(--_radius-sm); overflow: hidden; }
+    .changes-head, .change-row {
+      display: grid;
+      grid-template-columns: minmax(100px, 1.2fr) 1fr 1fr;
+      gap: 8px;
+      padding: 6px 12px;
+      font-size: 13px;
+      align-items: baseline;
+    }
+    .changes-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--_muted); background: var(--_surface); }
+    .change-row { border-top: 1px solid var(--_divider); color: var(--_fg); }
+    .change-row.unchanged { color: var(--_muted); }
+    .change-label { font-size: 12px; color: var(--_muted); }
+    .change-from, .change-to { word-break: break-word; }
+    .change-row.changed .change-from { color: var(--quorum-status-rejected-fg, #991b1b); background: var(--quorum-status-rejected-bg, #fee2e2); padding: 1px 6px; border-radius: 4px; text-decoration: line-through; }
+    .change-row.changed .change-to { color: var(--quorum-status-approved-fg, #065f46); background: var(--quorum-status-approved-bg, #d1fae5); padding: 1px 6px; border-radius: 4px; font-weight: 500; }
+    .changes-summary { margin-top: 6px; font-size: 11px; color: var(--_muted); }
     .raw-toggle {
       margin-top: 10px;
       padding: 4px 10px;
@@ -349,11 +366,28 @@ export class QuorumApprovalPanel extends QuorumElement {
               )}
             </div>`
           : nothing}
+        ${this.renderChanges(display.changes)}
         <button class="raw-toggle" @click=${() => (this.showRawPayload = true)}>Show raw payload</button>
       </div>`;
     }
     return html`<pre class="payload" part="payload">${JSON.stringify(req.payload, null, 2)}</pre>
       ${display ? html`<button class="raw-toggle" @click=${() => (this.showRawPayload = false)}>Show formatted view</button>` : nothing}`;
+  }
+
+  private renderChanges(changes?: ResolvedChange[]) {
+    if (!changes || changes.length === 0) return nothing;
+    const changedCount = changes.filter((c) => c.changed).length;
+    return html`<div class="changes" part="changes">
+        <div class="changes-head"><span>Field</span><span>Current</span><span>Proposed</span></div>
+        ${changes.map(
+          (c) => html`<div class="change-row ${c.changed ? 'changed' : 'unchanged'}">
+            <span class="change-label">${c.label}</span>
+            <span class="change-from">${c.from}</span>
+            <span class="change-to">${c.to}</span>
+          </div>`,
+        )}
+      </div>
+      <div class="changes-summary">${changedCount} of ${changes.length} field${changes.length === 1 ? '' : 's'} changed</div>`;
   }
 
   private renderActions() {

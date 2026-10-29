@@ -252,6 +252,23 @@
                   {/each}
                 </div>
               {/if}
+              {#if displayData.changes && displayData.changes.length > 0}
+                <div class="mt-4 rounded-md border border-outline-variant/40 overflow-hidden">
+                  <div class="grid grid-cols-[minmax(120px,1.2fr)_1fr_1fr] gap-3 px-3 py-2 bg-surface-container-low text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                    <span>Field</span><span>Current</span><span>Proposed</span>
+                  </div>
+                  {#each displayData.changes as change}
+                    <div class="grid grid-cols-[minmax(120px,1.2fr)_1fr_1fr] gap-3 px-3 py-2 border-t border-outline-variant/30 text-sm items-baseline {change.changed ? 'text-on-surface' : 'text-on-surface-variant'}">
+                      <span class="text-xs text-on-surface-variant">{change.label}</span>
+                      <span class="break-words {change.changed ? 'inline-block w-fit px-1.5 rounded bg-status-rejected-bg text-status-rejected-text line-through' : ''}">{change.from}</span>
+                      <span class="break-words {change.changed ? 'inline-block w-fit px-1.5 rounded bg-status-approved-bg text-status-approved-text font-medium' : ''}">{change.to}</span>
+                    </div>
+                  {/each}
+                </div>
+                <p class="mt-2 text-xs text-on-surface-variant">
+                  {displayData.changes.filter((c) => c.changed).length} of {displayData.changes.length} field{displayData.changes.length === 1 ? '' : 's'} changed
+                </p>
+              {/if}
             {:else}
               <pre class="bg-surface-container-low rounded-md p-4 text-sm font-mono text-on-surface overflow-x-auto">{formatJson(req.payload)}</pre>
             {/if}
