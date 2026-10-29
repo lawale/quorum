@@ -91,7 +91,7 @@
   let createSubmitting = $state(false);
   let createError = $state('');
 
-  const availableEvents = ['pending', 'approved', 'rejected', 'cancelled', 'expired'];
+  const availableEvents = ['review_requested', 'approved', 'rejected', 'cancelled', 'expired'];
 
   function openCreateModal() {
     newUrl = '';

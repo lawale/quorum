@@ -39,27 +39,13 @@ func validateScope(stage *model.ApprovalStage, req *model.Request, checkerAttrib
 			return fmt.Errorf("%w: checker has no %q attribute", ErrOutOfScope, rule.Attribute)
 		}
 
-		// A rule with no explicit source matches the maker.
-		matchMaker := rule.MatchMaker || !rule.HasSource()
-
-		var expected []string
-		if matchMaker {
-			if v, ok := req.MakerAttributes[rule.Attribute]; ok && v != "" {
-				expected = append(expected, v)
+		if !payloadParsed && rule.PayloadPath != "" {
+			payloadParsed = true
+			if err := json.Unmarshal(req.Payload, &payload); err != nil {
+				payload = nil
 			}
 		}
-		if rule.PayloadPath != "" {
-			if !payloadParsed {
-				payloadParsed = true
-				if err := json.Unmarshal(req.Payload, &payload); err != nil {
-					payload = nil
-				}
-			}
-			if v, ok := scalarAtPath(payload, rule.PayloadPath); ok {
-				expected = append(expected, v)
-			}
-		}
-		expected = append(expected, rule.Values...)
+		expected := scopeExpectedValues(rule, req, payload)
 
 		if len(expected) == 0 {
 			return fmt.Errorf("%w: request has no %q to match against", ErrOutOfScope, rule.Attribute)
@@ -77,6 +63,24 @@ func validateScope(stage *model.ApprovalStage, req *model.Request, checkerAttrib
 		}
 	}
 	return nil
+}
+
+// scopeExpectedValues resolves the values a checker's attribute may take for
+// this rule and request: the maker's attribute, the payload value, and any
+// fixed values. A rule with no explicit source matches the maker.
+func scopeExpectedValues(rule model.ScopeRule, req *model.Request, payload map[string]any) []string {
+	var expected []string
+	if rule.MatchMaker || !rule.HasSource() {
+		if v, ok := req.MakerAttributes[rule.Attribute]; ok && v != "" {
+			expected = append(expected, v)
+		}
+	}
+	if rule.PayloadPath != "" {
+		if v, ok := scalarAtPath(payload, rule.PayloadPath); ok {
+			expected = append(expected, v)
+		}
+	}
+	return append(expected, rule.Values...)
 }
 
 // scalarAtPath walks a dot-notation path into a decoded JSON object and

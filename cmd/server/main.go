@@ -138,6 +138,7 @@ func main() {
 		BlockPrivateIPs: cfg.Webhook.BlockPrivateIPs,
 	})
 	requestService.SetWebhookDispatch(stores.RunInTx, dispatcher.Enqueue, dispatcher.Signal)
+	requestService.SetEventEnqueue(dispatcher.EnqueueEvent)
 
 	// SSE event hub for real-time push to connected widgets
 	eventHub := sse.NewHub()

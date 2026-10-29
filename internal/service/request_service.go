@@ -41,6 +41,7 @@ type RequestService struct {
 	audits            store.AuditStore
 	authorizationHook *auth.AuthorizationHook
 	enqueueWebhooks   func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
+	enqueueEvent      EventEnqueuer
 	signalWebhooks    func()
 	runInTx           func(ctx context.Context, fn func(tx *store.Stores) error) error
 	signalSSE         func(requestID uuid.UUID)
@@ -157,15 +158,32 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 	if rule != nil {
 		return s.createBypassed(ctx, req, rule)
 	}
+	reason := "created"
 	if limitHit != nil {
 		stampLimitExceeded(req, limitHit)
+		reason = "bypass_limit_exceeded"
 	}
 
-	if err := s.requests.Create(ctx, req); err != nil {
+	// Persist and, in the same transaction when one is available, tell
+	// subscribers that stage 0 is waiting on reviewers.
+	if s.runInTx != nil && s.enqueueEvent != nil {
+		err = s.runInTx(ctx, func(tx *store.Stores) error {
+			if err := tx.Requests.Create(ctx, req); err != nil {
+				return err
+			}
+			return s.enqueueReviewRequested(ctx, tx.Outbox, tx.Webhooks, policy, req, nil, reason)
+		})
+	} else {
+		err = s.requests.Create(ctx, req)
+	}
+	if err != nil {
 		if errors.Is(err, store.ErrDuplicateRequest) {
 			return nil, ErrDuplicateRequest
 		}
 		return nil, err
+	}
+	if s.enqueueEvent != nil && s.signalWebhooks != nil {
+		s.signalWebhooks()
 	}
 
 	// Audit log
@@ -501,6 +519,11 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 				if err := txStores.Requests.UpdateStageAndStatus(ctx, requestID, *newStage, model.StatusPending); err != nil {
 					return err
 				}
+				if s.enqueueEvent != nil {
+					advanced := *req
+					advanced.CurrentStage = *newStage
+					return s.enqueueReviewRequested(ctx, txStores.Outbox, txStores.Webhooks, policy, &advanced, nil, "stage_advanced")
+				}
 			}
 			return nil
 		})
@@ -537,6 +560,9 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 				slog.WarnContext(ctx, "failed to marshal stage details for audit", "error", err)
 			}
 			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
+			if s.enqueueEvent != nil && s.signalWebhooks != nil {
+				s.signalWebhooks()
+			}
 			if s.signalSSE != nil {
 				s.signalSSE(requestID)
 			}

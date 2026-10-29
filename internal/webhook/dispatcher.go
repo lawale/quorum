@@ -96,12 +96,17 @@ func NewDispatcher(outbox store.OutboxStore, audits store.AuditStore, cfg Config
 // the provided stores. The caller should pass tx-bound stores so that the
 // outbox writes are atomic with the status update.
 func (d *Dispatcher) Enqueue(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error {
-	event := string(req.Status)
+	return d.EnqueueEvent(ctx, outbox, webhooks, string(req.Status), req, approvals, nil)
+}
 
+// EnqueueEvent is Enqueue for an explicit event name, with an optional
+// ReviewRequest for review_requested events.
+func (d *Dispatcher) EnqueueEvent(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 	payload := model.WebhookPayload{
 		Event:     event,
 		Request:   *req,
 		Approvals: approvals,
+		Review:    review,
 		Timestamp: time.Now().UTC(),
 	}
 

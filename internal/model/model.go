@@ -240,11 +240,45 @@ type AuditLog struct {
 	CreatedAt time.Time       `json:"created_at"`
 }
 
+// EventReviewRequested is emitted whenever a request starts waiting on a
+// stage: on creation and on every stage advance. Unlike the status events it
+// carries a ReviewRequest describing who may act, so the consumer can resolve
+// the reviewers in its own directory and notify them.
+const EventReviewRequested = "review_requested"
+
+// ReviewRequest describes the reviewers a stage is waiting on. Quorum has no
+// user directory, so it resolves everything it can from the policy and the
+// request and leaves identity lookup to the consumer.
+type ReviewRequest struct {
+	Reason             string            `json:"reason"` // created, stage_advanced, bypass_limit_exceeded
+	StageIndex         int               `json:"stage_index"`
+	StageName          string            `json:"stage_name,omitempty"`
+	TotalStages        int               `json:"total_stages"`
+	RequiredApprovals  int               `json:"required_approvals"`
+	EligibleReviewers  []string          `json:"eligible_reviewers,omitempty"`
+	AllowedRoles       []string          `json:"allowed_roles,omitempty"`
+	AllowedPermissions []string          `json:"allowed_permissions,omitempty"`
+	AuthorizationMode  AuthorizationMode `json:"authorization_mode,omitempty"`
+	Scope              []ResolvedScope   `json:"scope,omitempty"`
+	ExcludedUserIDs    []string          `json:"excluded_user_ids,omitempty"`
+	ExpiresAt          *time.Time        `json:"expires_at,omitempty"`
+}
+
+// ResolvedScope is a stage scope rule with its expected values already
+// computed for this request, so a consumer can match reviewers without
+// re-deriving maker attributes or payload paths.
+type ResolvedScope struct {
+	Attribute             string   `json:"attribute"`
+	Values                []string `json:"values"`
+	AllowUnscopedCheckers bool     `json:"allow_unscoped_checkers,omitempty"`
+}
+
 type WebhookPayload struct {
-	Event     string     `json:"event"`
-	Request   Request    `json:"request"`
-	Approvals []Approval `json:"approvals,omitempty"`
-	Timestamp time.Time  `json:"timestamp"`
+	Event     string         `json:"event"`
+	Request   Request        `json:"request"`
+	Approvals []Approval     `json:"approvals,omitempty"`
+	Review    *ReviewRequest `json:"review,omitempty"`
+	Timestamp time.Time      `json:"timestamp"`
 }
 
 // Tenant represents a registered tenant (application) in the system.
