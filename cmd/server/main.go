@@ -175,8 +175,32 @@ func main() {
 	case "trust":
 		authProvider = auth.NewTrustProvider(cfg.Auth.Trust.UserIDHeader, cfg.Auth.Trust.RolesHeader, cfg.Auth.Trust.PermissionsHeader, cfg.Auth.Trust.TenantIDHeader)
 	case "verify":
-		slog.Error("auth mode \"verify\" is not yet implemented")
-		os.Exit(1)
+		v := cfg.Auth.Verify
+		if v.JWKSURL == "" {
+			slog.Error("auth mode \"verify\" requires auth.verify.jwks_url")
+			os.Exit(1)
+		}
+		keys := auth.NewJWKSCache(v.JWKSURL, nil)
+		keys.Start(appCtx, v.JWKSRefresh)
+		provider, err := auth.NewVerifyProvider(auth.VerifyProviderConfig{
+			Keys:     keys,
+			Issuer:   v.Issuer,
+			Audience: v.Audience,
+			Claims: auth.ClaimMapping{
+				UserID:      v.Claims.UserID,
+				Roles:       v.Claims.Roles,
+				Permissions: v.Claims.Permissions,
+				TenantID:    v.Claims.TenantID,
+			},
+			ClockSkew:       v.ClockSkew,
+			DefaultTenantID: v.DefaultTenantID,
+		})
+		if err != nil {
+			slog.Error("configuring verify auth", "error", err)
+			os.Exit(1)
+		}
+		authProvider = provider
+		slog.Info("auth mode verify", "jwks_url", v.JWKSURL, "issuer", v.Issuer, "audience", v.Audience)
 	case "custom":
 		slog.Error("auth mode \"custom\" is not yet implemented")
 		os.Exit(1)

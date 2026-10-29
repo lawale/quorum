@@ -102,6 +102,12 @@ func TestConfig_SetDefaults(t *testing.T) {
 	if cfg.Auth.Trust.RolesHeader != "X-User-Roles" {
 		t.Errorf("default RolesHeader = %q, want %q", cfg.Auth.Trust.RolesHeader, "X-User-Roles")
 	}
+	if cfg.Auth.Verify.Claims.UserID != "sub" || cfg.Auth.Verify.Claims.TenantID != "tenant_id" {
+		t.Errorf("default verify claims = %+v", cfg.Auth.Verify.Claims)
+	}
+	if cfg.Auth.Verify.JWKSRefresh != time.Hour || cfg.Auth.Verify.ClockSkew != 30*time.Second {
+		t.Errorf("default verify timings = refresh %v, skew %v", cfg.Auth.Verify.JWKSRefresh, cfg.Auth.Verify.ClockSkew)
+	}
 	if cfg.Webhook.MaxRetries != 20 {
 		t.Errorf("default MaxRetries = %d, want %d", cfg.Webhook.MaxRetries, 20)
 	}

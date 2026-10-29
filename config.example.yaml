@@ -18,7 +18,7 @@ database:
   #   TrustServerCertificate: "true"
 
 auth:
-  mode: "trust"  # trust (implemented) | verify, custom (planned; server refuses to start)
+  mode: "trust"  # trust | verify  (custom is planned; server refuses to start)
 
   trust:
     user_id_header: "X-User-ID"
@@ -26,12 +26,17 @@ auth:
     tenant_id_header: "X-Tenant-ID"
 
   verify:
-    jwks_url: ""
-    issuer: ""
-    audience: ""
-    claims:
+    jwks_url: ""          # e.g. https://login.example.com/realms/acme/protocol/openid-connect/certs
+    issuer: ""            # expected iss claim; empty disables the check
+    audience: ""          # expected aud claim; empty disables the check
+    jwks_refresh: "1h"    # background key refresh; unknown kids also trigger an immediate refresh
+    clock_skew: "30s"     # leeway for exp / nbf / iat
+    default_tenant_id: "" # used when the tenant claim is absent (single-tenant deployments)
+    claims:               # claim names or dotted paths, e.g. realm_access.roles
       user_id: "sub"
       roles: "roles"
+      permissions: "permissions"
+      tenant_id: "tenant_id"
 
   custom:
     endpoint: ""

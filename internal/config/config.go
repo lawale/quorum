@@ -103,16 +103,24 @@ type TrustConfig struct {
 	TenantIDHeader    string `yaml:"tenant_id_header"`
 }
 
+// VerifyConfig configures JWT verification against a JWKS endpoint.
 type VerifyConfig struct {
-	JWKSURL  string       `yaml:"jwks_url"`
-	Issuer   string       `yaml:"issuer"`
-	Audience string       `yaml:"audience"`
-	Claims   ClaimsConfig `yaml:"claims"`
+	JWKSURL         string        `yaml:"jwks_url"`
+	Issuer          string        `yaml:"issuer"`
+	Audience        string        `yaml:"audience"`
+	Claims          ClaimsConfig  `yaml:"claims"`
+	JWKSRefresh     time.Duration `yaml:"jwks_refresh"`      // background key refresh interval
+	ClockSkew       time.Duration `yaml:"clock_skew"`        // leeway applied to exp/nbf/iat
+	DefaultTenantID string        `yaml:"default_tenant_id"` // used when the tenant claim is absent (single-tenant deployments)
 }
 
+// ClaimsConfig maps JWT claims to identity fields. Each value is a claim name
+// or a dotted path into nested claims (e.g. "realm_access.roles").
 type ClaimsConfig struct {
-	UserID string `yaml:"user_id"`
-	Roles  string `yaml:"roles"`
+	UserID      string `yaml:"user_id"`
+	Roles       string `yaml:"roles"`
+	Permissions string `yaml:"permissions"`
+	TenantID    string `yaml:"tenant_id"`
 }
 
 type CustomConfig struct {
@@ -288,6 +296,24 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Auth.Trust.TenantIDHeader == "" {
 		cfg.Auth.Trust.TenantIDHeader = "X-Tenant-ID"
+	}
+	if cfg.Auth.Verify.Claims.UserID == "" {
+		cfg.Auth.Verify.Claims.UserID = "sub"
+	}
+	if cfg.Auth.Verify.Claims.Roles == "" {
+		cfg.Auth.Verify.Claims.Roles = "roles"
+	}
+	if cfg.Auth.Verify.Claims.Permissions == "" {
+		cfg.Auth.Verify.Claims.Permissions = "permissions"
+	}
+	if cfg.Auth.Verify.Claims.TenantID == "" {
+		cfg.Auth.Verify.Claims.TenantID = "tenant_id"
+	}
+	if cfg.Auth.Verify.JWKSRefresh == 0 {
+		cfg.Auth.Verify.JWKSRefresh = time.Hour
+	}
+	if cfg.Auth.Verify.ClockSkew == 0 {
+		cfg.Auth.Verify.ClockSkew = 30 * time.Second
 	}
 	if cfg.Webhook.MaxRetries == 0 {
 		cfg.Webhook.MaxRetries = 20
