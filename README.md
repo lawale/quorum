@@ -62,7 +62,7 @@ Quorum pulls that logic out of your applications into one self-hosted service. Y
 
 - **Production-Ready from Day One:**
   - **Multi-Database Support** — Choose between PostgreSQL and Microsoft SQL Server.
-  - **Flexible Authentication** — Support for header-based ("trust"), JWT/JWKS verification, or a custom auth endpoint to fit your existing security model.
+  - **Gateway-Friendly Authentication** — Trust mode reads identity, roles, and tenant from headers set by your API gateway, service mesh, or BFF, so Quorum slots into your existing login without a second identity store. Direct JWT/JWKS verification and a custom auth endpoint are configured but not yet implemented; see [Authentication Modes](#authentication-modes).
   - **Observability** — Export key metrics (request volume, approval rates, webhook delivery) to Prometheus for monitoring and alerting.
   - **Audit-Ready** — Every action is permanently logged with actor, timestamp, and details, giving you a complete history for compliance (SOC2, ISO 27001, etc.).
 
@@ -393,11 +393,13 @@ Every config field can be overridden via environment variables using the `QUORUM
 
 ### Authentication Modes
 
-Quorum supports pluggable authentication modes, configured via `auth.mode`:
+Authentication is selected via `auth.mode`. Today only `trust` is implemented; the other two modes have config sections reserved and the server refuses to start if they are selected.
 
-- **`trust`** — Reads user identity from request headers (`X-User-ID`, `X-User-Roles`). Suitable when Quorum sits behind a trusted gateway or service mesh that sets these headers.
-- **`verify`** *(planned)* — Will validate JWT tokens against a JWKS endpoint, extracting user ID and roles from configurable claims.
-- **`custom`** *(planned)* — Will delegate authentication to an external HTTP endpoint.
+- **`trust`** — Reads user identity from request headers (`X-User-ID`, `X-User-Roles`, `X-Tenant-ID`; names are configurable). Suitable when Quorum sits behind a gateway, service mesh, or backend-for-frontend that authenticates the user and sets these headers. Quorum must not be reachable directly by end users in this mode, since anyone who can set the headers can impersonate anyone.
+- **`verify`** *(planned)* — Validate JWT bearer tokens against a JWKS endpoint, extracting user ID, roles, and tenant from configurable claims. This is what will let browsers call Quorum directly with the widgets' `token` attribute.
+- **`custom`** *(planned)* — Delegate authentication to an external HTTP endpoint.
+
+Note that stage-level [external authorization checks](#key-features) are a separate, implemented feature: once a user is authenticated, a policy can still call out to your endpoint to decide whether that user may act on a given stage.
 
 ### Database Support
 
@@ -499,7 +501,7 @@ import { createClient } from '@oluwavader/quorum-embed';
 
 const client = createClient({
   apiUrl: 'https://your-quorum-host',
-  token: 'your-jwt', // sent as "Authorization: Bearer your-jwt"
+  authHeaders: { 'X-User-ID': 'alice', 'X-User-Roles': 'manager' }, // trust mode
 });
 const request = await client.getRequest('uuid-here');
 ```
@@ -511,7 +513,7 @@ const request = await client.getRequest('uuid-here');
 QuorumEmbed.configure({
   apiUrl: 'https://your-quorum-host',
   tenantId: 'acme',
-  token: () => session.accessToken, // static value or getter
+  authHeaders: () => ({ 'X-User-ID': session.userId, 'X-User-Roles': session.roles }), // static value or getter
 });
 ```
 
@@ -528,7 +530,7 @@ QuorumEmbed.configure({
 
 Any attribute (`api-url`, `token`, `tenant-id`, `auth-headers`) set on an element overrides the global value for that element.
 
-**Authentication:** Pass a `token` attribute or config value for Bearer authentication (the `Bearer ` prefix is added for you), or `auth-headers` (a JSON string) for trust-mode headers like `{"X-User-ID": "alice", "X-User-Roles": "manager"}`. Approve and Reject buttons only render when the server reports the viewer may act on the request.
+**Authentication:** With the server in trust mode (the only mode implemented today), pass `auth-headers` (a JSON string) such as `{"X-User-ID": "alice", "X-User-Roles": "manager"}`. In practice that means the page embedding the widgets should be served by a backend that already knows the user, as the sample apps do, and Quorum should sit behind that backend or a gateway rather than be exposed directly. The `token` attribute sends `Authorization: Bearer <token>` and will be honoured once the planned `verify` mode lands. Approve and Reject buttons only render when the server reports the viewer may act on the request.
 
 **Theming:** Set CSS custom properties such as `--quorum-accent`, `--quorum-bg`, or `--quorum-font` on any ancestor to restyle every widget, and use `::part()` selectors for structural overrides. The full token and part list is in the [package README](widgets/frontend/README.md#theming).
 
