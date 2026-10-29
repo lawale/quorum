@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/service"
@@ -340,4 +341,64 @@ func TestPolicyHandler_Delete_InvalidID(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
+}
+
+func TestPolicyHandler_Create_CarriesScopeRules(t *testing.T) {
+	var stored *model.Policy
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) { return nil, nil },
+		CreateFunc:           func(ctx context.Context, policy *model.Policy) error { stored = policy; return nil },
+	}
+	handler := newTestPolicyHandler(policies)
+
+	body := `{"name":"Scoped","request_type":"transfer","stages":[{"index":0,"required_approvals":1,"rejection_policy":"any",
+		"scope":[{"attribute":"branch_id","payload_path":"destination_branch_id","values":["HQ"],"allow_unscoped_checkers":true}]}]}`
+	req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	handler.Create(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	if stored == nil || len(stored.Stages[0].Scope) != 1 {
+		t.Fatalf("scope rules not carried through handler: %+v", stored)
+	}
+	rule := stored.Stages[0].Scope[0]
+	if rule.Attribute != "branch_id" || rule.PayloadPath != "destination_branch_id" || len(rule.Values) != 1 || rule.Values[0] != "HQ" || !rule.AllowUnscopedCheckers {
+		t.Errorf("rule = %+v", rule)
+	}
+}
+
+func TestPolicyHandler_Update_CarriesScopeRules(t *testing.T) {
+	existing := testutil.NewPolicy()
+	var stored *model.Policy
+	policies := &testutil.MockPolicyStore{
+		GetByIDFunc: func(ctx context.Context, id uuid.UUID) (*model.Policy, error) { return existing, nil },
+		UpdateFunc:  func(ctx context.Context, policy *model.Policy) error { stored = policy; return nil },
+	}
+	handler := newTestPolicyHandler(policies)
+
+	body := `{"stages":[{"index":0,"required_approvals":1,"rejection_policy":"any","scope":[{"attribute":"branch_id"}]}]}`
+	req := httptest.NewRequest("PUT", "/"+existing.ID.String(), bytes.NewBufferString(body))
+	req = withURLParam(req, "id", existing.ID.String())
+	rec := httptest.NewRecorder()
+
+	handler.Update(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if stored == nil || len(stored.Stages[0].Scope) != 1 || stored.Stages[0].Scope[0].Attribute != "branch_id" {
+		t.Fatalf("scope rules not carried through update handler: %+v", stored)
+	}
+	if !stored.Stages[0].Scope[0].MatchMaker {
+		t.Error("rule with no source should have been defaulted to match_maker")
+	}
+}
+
+func withURLParam(r *http.Request, key, value string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add(key, value)
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
