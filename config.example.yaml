@@ -18,7 +18,7 @@ database:
   #   TrustServerCertificate: "true"
 
 auth:
-  mode: "trust"  # trust | verify | custom
+  mode: "trust"  # trust (implemented) | verify, custom (planned; server refuses to start)
 
   trust:
     user_id_header: "X-User-ID"

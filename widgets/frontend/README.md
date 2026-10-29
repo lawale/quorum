@@ -38,7 +38,7 @@ import { configure } from '@oluwavader/quorum-embed';
 configure({
   apiUrl: 'https://your-quorum-server.com',
   tenantId: 'your-tenant-id',
-  token: () => getAuthToken(), // static string or getter, called on every request
+  authHeaders: () => ({ 'X-User-ID': currentUser.id, 'X-User-Roles': currentUser.roles }), // static value or getter, called on every request
 });
 ```
 
@@ -52,8 +52,8 @@ Per-element attributes override global config. Order does not matter: elements t
 
 Two mechanisms, matching the server's auth modes:
 
-- **`token`** sends `Authorization: Bearer <token>`. Pass the raw token; the `Bearer ` prefix is added for you.
-- **`auth-headers`** sends arbitrary headers as a JSON string, for the server's trust mode, e.g. `{"X-User-ID": "alice", "X-User-Roles": "manager"}`.
+- **`auth-headers`** sends arbitrary headers as a JSON string, for the server's trust mode, e.g. `{"X-User-ID": "alice", "X-User-Roles": "manager"}`. This is the mode the server implements today, so it is what the sample apps use. Because anyone who can set these headers can impersonate anyone, the embedding page should be served by a backend that has already authenticated the user, and Quorum should not be exposed directly to browsers.
+- **`token`** sends `Authorization: Bearer <token>`. Pass the raw token; the `Bearer ` prefix is added for you. The server's JWT `verify` mode is planned but not yet implemented, so today this header is ignored by Quorum unless something in front of it (a gateway or BFF) exchanges the token for trust headers.
 
 When both are set, `auth-headers` wins and no bearer token is sent. `tenant-id` is sent as `X-Tenant-ID` alongside either.
 
