@@ -85,20 +85,17 @@ func (i *testIssuer) signWith(method jwt.SigningMethod, key any, claims jwt.MapC
 
 func (i *testIssuer) provider(t *testing.T, mutate func(*VerifyProviderConfig)) *VerifyProvider {
 	t.Helper()
-	cache := NewJWKSCache(i.server.URL, i.server.Client())
-	if err := cache.Refresh(context.Background()); err != nil {
-		t.Fatal(err)
-	}
 	cfg := VerifyProviderConfig{
-		Keys:     cache,
-		Issuer:   "https://issuer.test",
-		Audience: "quorum",
-		Claims:   ClaimMapping{UserID: "sub", Roles: "roles", Permissions: "permissions", TenantID: "tenant_id"},
+		JWKSURL:    i.server.URL,
+		HTTPClient: i.server.Client(),
+		Issuer:     "https://issuer.test",
+		Audience:   "quorum",
+		Claims:     ClaimMapping{UserID: "sub", Roles: "roles", Permissions: "permissions", TenantID: "tenant_id"},
 	}
 	if mutate != nil {
 		mutate(&cfg)
 	}
-	p, err := NewVerifyProvider(cfg)
+	p, err := NewVerifyProvider(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -175,6 +175,7 @@ func main() {
 		slog.Error("configuring auth", "error", err)
 		os.Exit(1)
 	}
+	slog.Info("auth configured", "mode", cfg.Auth.Mode)
 
 	// Operator service for admin console (optional)
 	var operatorService *service.OperatorService
@@ -244,45 +245,22 @@ func main() {
 func newAuthProvider(ctx context.Context, cfg config.AuthConfig) (auth.Provider, error) {
 	switch cfg.Mode {
 	case "trust":
-		return newTrustProvider(cfg.Trust), nil
+		t := cfg.Trust
+		return auth.NewTrustProvider(t.UserIDHeader, t.RolesHeader, t.PermissionsHeader, t.TenantIDHeader), nil
 	case "verify":
-		return newVerifyProvider(ctx, cfg.Verify)
+		v := cfg.Verify
+		return auth.NewVerifyProvider(ctx, auth.VerifyProviderConfig{
+			JWKSURL:         v.JWKSURL,
+			JWKSRefresh:     v.JWKSRefresh,
+			Issuer:          v.Issuer,
+			Audience:        v.Audience,
+			Claims:          auth.ClaimMapping(v.Claims),
+			ClockSkew:       v.ClockSkew,
+			DefaultTenantID: v.DefaultTenantID,
+		})
 	case "custom":
 		return nil, errors.New("auth mode \"custom\" is not yet implemented")
 	default:
 		return nil, fmt.Errorf("unknown auth mode %q", cfg.Mode)
 	}
-}
-
-func newTrustProvider(cfg config.TrustConfig) auth.Provider {
-	slog.Info("auth mode trust", "user_id_header", cfg.UserIDHeader, "tenant_id_header", cfg.TenantIDHeader)
-	return auth.NewTrustProvider(cfg.UserIDHeader, cfg.RolesHeader, cfg.PermissionsHeader, cfg.TenantIDHeader)
-}
-
-// newVerifyProvider wires a JWKS cache (refreshed in the background until ctx
-// is cancelled) to a JWT-validating provider.
-func newVerifyProvider(ctx context.Context, cfg config.VerifyConfig) (auth.Provider, error) {
-	if cfg.JWKSURL == "" {
-		return nil, errors.New("auth mode \"verify\" requires auth.verify.jwks_url")
-	}
-	keys := auth.NewJWKSCache(cfg.JWKSURL, nil)
-	keys.Start(ctx, cfg.JWKSRefresh)
-	provider, err := auth.NewVerifyProvider(auth.VerifyProviderConfig{
-		Keys:     keys,
-		Issuer:   cfg.Issuer,
-		Audience: cfg.Audience,
-		Claims: auth.ClaimMapping{
-			UserID:      cfg.Claims.UserID,
-			Roles:       cfg.Claims.Roles,
-			Permissions: cfg.Claims.Permissions,
-			TenantID:    cfg.Claims.TenantID,
-		},
-		ClockSkew:       cfg.ClockSkew,
-		DefaultTenantID: cfg.DefaultTenantID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	slog.Info("auth mode verify", "jwks_url", cfg.JWKSURL, "issuer", cfg.Issuer, "audience", cfg.Audience)
-	return provider, nil
 }

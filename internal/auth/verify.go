@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -31,9 +32,11 @@ type ClaimMapping struct {
 
 // VerifyProviderConfig configures a VerifyProvider.
 type VerifyProviderConfig struct {
-	Keys            *JWKSCache
-	Issuer          string // required iss claim; empty disables the check
-	Audience        string // required aud claim; empty disables the check
+	JWKSURL         string        // identity provider's JWKS endpoint
+	JWKSRefresh     time.Duration // background refresh interval; zero means hourly
+	HTTPClient      *http.Client  // optional; nil uses a default with a timeout
+	Issuer          string        // required iss claim; empty disables the check
+	Audience        string        // required aud claim; empty disables the check
 	Claims          ClaimMapping
 	ClockSkew       time.Duration
 	DefaultTenantID string // used when the tenant claim is absent
@@ -43,12 +46,16 @@ type VerifyProviderConfig struct {
 // against the issuer's published signing keys.
 type VerifyProvider struct {
 	cfg    VerifyProviderConfig
+	keys   *JWKSCache
 	parser *jwt.Parser
 }
 
-func NewVerifyProvider(cfg VerifyProviderConfig) (*VerifyProvider, error) {
-	if cfg.Keys == nil {
-		return nil, errors.New("verify provider requires a JWKS cache")
+// NewVerifyProvider fetches the JWKS at cfg.JWKSURL and keeps it refreshed in
+// the background until ctx is cancelled. An unreachable endpoint at startup is
+// logged, not fatal; keys are fetched on demand when a token arrives.
+func NewVerifyProvider(ctx context.Context, cfg VerifyProviderConfig) (*VerifyProvider, error) {
+	if cfg.JWKSURL == "" {
+		return nil, errors.New("verify provider requires a JWKS URL")
 	}
 	if cfg.Claims.UserID == "" {
 		return nil, errors.New("verify provider requires a user ID claim")
@@ -64,7 +71,13 @@ func NewVerifyProvider(cfg VerifyProviderConfig) (*VerifyProvider, error) {
 	if cfg.Audience != "" {
 		opts = append(opts, jwt.WithAudience(cfg.Audience))
 	}
-	return &VerifyProvider{cfg: cfg, parser: jwt.NewParser(opts...)}, nil
+	refresh := cfg.JWKSRefresh
+	if refresh <= 0 {
+		refresh = time.Hour
+	}
+	keys := NewJWKSCache(cfg.JWKSURL, cfg.HTTPClient)
+	keys.Start(ctx, refresh)
+	return &VerifyProvider{cfg: cfg, keys: keys, parser: jwt.NewParser(opts...)}, nil
 }
 
 func (p *VerifyProvider) Authenticate(r *http.Request) (*Identity, error) {
@@ -104,7 +117,7 @@ func (p *VerifyProvider) Authenticate(r *http.Request) (*Identity, error) {
 func (p *VerifyProvider) keyFunc(r *http.Request) jwt.Keyfunc {
 	return func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
-		return p.cfg.Keys.Key(r.Context(), kid)
+		return p.keys.Key(r.Context(), kid)
 	}
 }
 
