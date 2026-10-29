@@ -169,6 +169,11 @@ func TestVerifyProvider_Rejections(t *testing.T) {
 			c["nbf"] = time.Now().Add(2 * time.Minute).Unix()
 			return c
 		}(), iss.kid), want: "not valid yet"},
+		"issued in the future": {token: iss.sign(func() jwt.MapClaims {
+			c := baseClaims()
+			c["iat"] = time.Now().Add(2 * time.Minute).Unix()
+			return c
+		}(), iss.kid), want: "not valid yet"},
 		"wrong issuer": {token: iss.sign(func() jwt.MapClaims {
 			c := baseClaims()
 			c["iss"] = "https://evil.test"
@@ -227,6 +232,7 @@ func TestVerifyProvider_ClockSkew(t *testing.T) {
 	iss := newTestIssuer(t)
 	c := baseClaims()
 	c["exp"] = time.Now().Add(-10 * time.Second).Unix()
+	c["iat"] = time.Now().Add(10 * time.Second).Unix()
 	tok := iss.sign(c, iss.kid)
 
 	strict := iss.provider(t, nil)
@@ -313,6 +319,30 @@ func TestClaimAt_LiteralKeyWinsOverPath(t *testing.T) {
 	delete(claims, "a.b")
 	if got := claimAt(claims, "a.b"); got != "nested" {
 		t.Errorf("claimAt(a.b) after delete = %v, want nested", got)
+	}
+}
+
+func TestNewVerifyProvider_RequiresHTTPSJWKSURL(t *testing.T) {
+	cases := map[string]bool{
+		"https://login.example.com/certs": true,
+		"http://localhost:8080/certs":     true,
+		"http://127.0.0.1:8080/certs":     true,
+		"http://[::1]:8080/certs":         true,
+		"http://login.example.com/certs":  false,
+		"http://10.0.0.5/certs":           false,
+		"ftp://login.example.com/certs":   false,
+		"login.example.com/certs":         false,
+	}
+	for raw, ok := range cases {
+		t.Run(raw, func(t *testing.T) {
+			err := checkJWKSURL(raw)
+			if ok && err != nil {
+				t.Errorf("expected %q to be accepted: %v", raw, err)
+			}
+			if !ok && err == nil {
+				t.Errorf("expected %q to be rejected", raw)
+			}
+		})
 	}
 }
 

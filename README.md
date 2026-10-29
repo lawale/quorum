@@ -373,7 +373,7 @@ See [`config.example.yaml`](config.example.yaml) for all available options.
 | `server.port` | `8080` | Listen port |
 | `database.driver` | `postgres` | `postgres` or `mssql` |
 | `auth.mode` | `trust` | `trust` or `verify` (`custom` planned) |
-| `auth.verify.jwks_url` | | JWKS endpoint of your identity provider (required for `verify`) |
+| `auth.verify.jwks_url` | | JWKS endpoint of your identity provider (required for `verify`; must be `https`, plain `http` only for localhost) |
 | `auth.verify.issuer` | | Expected `iss` claim; empty disables the check |
 | `auth.verify.audience` | | Expected `aud` claim; empty disables the check |
 | `auth.verify.claims.user_id` | `sub` | Claim carrying the user ID |

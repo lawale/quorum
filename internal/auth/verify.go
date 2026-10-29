@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -60,9 +62,13 @@ func NewVerifyProvider(ctx context.Context, cfg VerifyProviderConfig) (*VerifyPr
 	if cfg.Claims.UserID == "" {
 		return nil, errors.New("verify provider requires a user ID claim")
 	}
+	if err := checkJWKSURL(cfg.JWKSURL); err != nil {
+		return nil, err
+	}
 	opts := []jwt.ParserOption{
 		jwt.WithValidMethods(allowedAlgorithms),
 		jwt.WithExpirationRequired(),
+		jwt.WithIssuedAt(),
 		jwt.WithLeeway(cfg.ClockSkew),
 	}
 	if cfg.Issuer != "" {
@@ -78,6 +84,29 @@ func NewVerifyProvider(ctx context.Context, cfg VerifyProviderConfig) (*VerifyPr
 	keys := NewJWKSCache(cfg.JWKSURL, cfg.HTTPClient)
 	keys.Start(ctx, refresh)
 	return &VerifyProvider{cfg: cfg, keys: keys, parser: jwt.NewParser(opts...)}, nil
+}
+
+// checkJWKSURL insists on HTTPS: the key set is the root of trust for every
+// identity Quorum accepts, and fetching it in cleartext would let an on-path
+// attacker substitute keys and mint arbitrary users. Plain HTTP is allowed
+// only to loopback, for local development against an IdP on the same host.
+func checkJWKSURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid JWKS URL: %w", err)
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		host := u.Hostname()
+		if host == "localhost" || net.ParseIP(host).IsLoopback() {
+			return nil
+		}
+		return fmt.Errorf("JWKS URL %q must use https (plain http is allowed only for localhost)", raw)
+	default:
+		return fmt.Errorf("JWKS URL %q must use https", raw)
+	}
 }
 
 func (p *VerifyProvider) Authenticate(r *http.Request) (*Identity, error) {
@@ -140,7 +169,7 @@ func classify(err error) error {
 	switch {
 	case errors.Is(err, jwt.ErrTokenExpired):
 		return errors.New("expired")
-	case errors.Is(err, jwt.ErrTokenNotValidYet):
+	case errors.Is(err, jwt.ErrTokenNotValidYet), errors.Is(err, jwt.ErrTokenUsedBeforeIssued):
 		return errors.New("not valid yet")
 	case errors.Is(err, jwt.ErrTokenInvalidIssuer):
 		return errors.New("wrong issuer")
