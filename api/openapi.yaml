@@ -1,0 +1,1161 @@
+openapi: 3.0.3
+info:
+  title: Quorum API
+  version: "1"
+  description: |
+    Quorum is an approval engine. A maker submits a request; one or more
+    checkers approve or reject it according to the policy for its type; the
+    consuming application learns the outcome by webhook or by the per-request
+    event stream and then performs the actual change itself.
+
+    Identity is established by the deployment's auth mode: either a bearer
+    token (`verify`) or trusted gateway headers (`trust`). The header names
+    shown here are the defaults; a deployment may rename them.
+
+    This document is validated against the real server in the test suite, so
+    it describes exactly what the server accepts and returns.
+
+servers:
+  - url: /
+
+security:
+  - bearerAuth: []
+  - trustHeaders: []
+
+tags:
+  - name: Requests
+  - name: Policies
+  - name: Webhooks
+  - name: System
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      operationId: getHealth
+      responses:
+        "200":
+          description: All components healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: At least one component unhealthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /api/v1/requests:
+    post:
+      tags: [Requests]
+      summary: Create a request
+      operationId: createRequest
+      description: |
+        Submits a change for approval. The caller is the maker. The request
+        type selects the policy; if a bypass rule matches, the request is
+        approved immediately. Send an `Idempotency-Key` to make retries safe:
+        a repeated key returns the original request unchanged.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRequestInput"
+      responses:
+        "201":
+          description: Request created (or an idempotent replay of an earlier one).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: A pending request with the same identity fields already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    get:
+      tags: [Requests]
+      summary: List requests
+      operationId: listRequests
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/RequestStatus"
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: maker_id
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One page of requests, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestPage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/requests/{id}:
+    parameters:
+      - $ref: "#/components/parameters/RequestID"
+    get:
+      tags: [Requests]
+      summary: Get a request
+      operationId: getRequest
+      description: |
+        Returns the request with its approvals so far. `viewer_can_act` says
+        whether the caller may approve or reject it right now.
+      responses:
+        "200":
+          description: The request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/requests/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/RequestID"
+    post:
+      tags: [Requests]
+      summary: Approve a request
+      operationId: approveRequest
+      description: Records the caller's approval at the current stage.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionInput"
+      responses:
+        "200":
+          description: The request after the decision was applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/requests/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/RequestID"
+    post:
+      tags: [Requests]
+      summary: Reject a request
+      operationId: rejectRequest
+      description: Records the caller's rejection at the current stage.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionInput"
+      responses:
+        "200":
+          description: The request after the decision was applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/requests/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/RequestID"
+    post:
+      tags: [Requests]
+      summary: Cancel a request
+      operationId: cancelRequest
+      description: Withdraws a pending request. Only the maker may cancel.
+      responses:
+        "200":
+          description: The cancelled request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Request"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/requests/{id}/audit:
+    parameters:
+      - $ref: "#/components/parameters/RequestID"
+    get:
+      tags: [Requests]
+      summary: Audit trail of a request
+      operationId: getRequestAudit
+      responses:
+        "200":
+          description: Every recorded action on the request, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/requests/{id}/events:
+    parameters:
+      - $ref: "#/components/parameters/RequestID"
+    get:
+      tags: [Requests]
+      summary: Event stream for a request
+      operationId: streamRequestEvents
+      description: |
+        Server-sent events. While the request is pending the stream stays open
+        and sends an `updated` event (`{"request_id": "..."}`) on every state
+        change; fetch the request to see what changed. If the request is
+        already terminal the stream sends one `status` event
+        (`{"request_id": "...", "status": "approved"}`) and closes. A
+        `: keepalive` comment is written every 30 seconds.
+      responses:
+        "200":
+          description: An event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/policies:
+    post:
+      tags: [Policies]
+      summary: Create a policy
+      operationId: createPolicy
+      description: One policy per request type per tenant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyInput"
+      responses:
+        "201":
+          description: Policy created. `warnings` lists advisory problems that did not block the save.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: A policy for this request type already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    get:
+      tags: [Policies]
+      summary: List policies
+      operationId: listPolicies
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: One page of policies, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/policies/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [Policies]
+      summary: Get a policy
+      operationId: getPolicy
+      responses:
+        "200":
+          description: The policy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    put:
+      tags: [Policies]
+      summary: Update a policy
+      operationId: updatePolicy
+      description: |
+        Partial update. A field that is absent keeps its stored value; send an
+        empty list to clear a list field such as `bypass_rules`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicyUpdate"
+      responses:
+        "200":
+          description: The updated policy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags: [Policies]
+      summary: Delete a policy
+      operationId: deletePolicy
+      responses:
+        "204":
+          description: Deleted.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/webhooks:
+    post:
+      tags: [Webhooks]
+      summary: Subscribe a webhook
+      operationId: createWebhook
+      description: |
+        Deliveries are HTTP POSTs of a `WebhookPayload`, signed with
+        HMAC-SHA256 over the raw body using the subscription's secret and sent
+        in the `X-Signature-256` header as `sha256=<hex>`. The URL must be
+        public: private and loopback addresses are refused.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookInput"
+      responses:
+        "201":
+          description: Subscription created. The secret is never returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      operationId: listWebhooks
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: One page of subscriptions, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/v1/webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Webhooks]
+      summary: Delete a webhook
+      operationId: deleteWebhook
+      responses:
+        "204":
+          description: Deleted.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Used when the server runs in `verify` mode. Roles, permissions, tenant and attributes are read from claims.
+    trustHeaders:
+      type: apiKey
+      in: header
+      name: X-User-ID
+      description: |
+        Used when the server runs in `trust` mode behind a gateway. Along with
+        `X-User-ID`, the gateway sets `X-Tenant-ID` (required), `X-User-Roles`
+        and `X-User-Permissions` (comma-separated) and any configured
+        attribute headers such as `X-User-Branch`.
+
+  parameters:
+    RequestID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      description: Capped at 100.
+      schema:
+        type: integer
+        minimum: 1
+        default: 20
+
+  responses:
+    BadRequest:
+      description: The request was malformed or failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: No usable identity on the request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The caller is not allowed to take this action on this request.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: No such resource in the caller's tenant.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The request is no longer pending, or the caller already acted on this stage.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerError:
+      description: Something failed on the server; the cause is in its logs.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, components]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        components:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            required: [status]
+            properties:
+              status:
+                type: string
+              error:
+                type: string
+
+    RequestStatus:
+      type: string
+      enum: [pending, approved, rejected, cancelled, expired]
+
+    Decision:
+      type: string
+      enum: [approved, rejected]
+
+    Duration:
+      type: string
+      description: A Go duration such as `24h`, `1h30m` or `90s`.
+      example: 24h
+
+    JSONObject:
+      type: object
+      additionalProperties: true
+
+    CreateRequestInput:
+      type: object
+      additionalProperties: false
+      required: [type, payload]
+      properties:
+        type:
+          type: string
+          description: Selects the policy.
+        payload:
+          allOf:
+            - $ref: "#/components/schemas/JSONObject"
+          description: The change being proposed. Must be a non-empty object. Quorum stores it and hands it back; it never interprets it beyond policy rules.
+        eligible_reviewers:
+          type: array
+          items:
+            type: string
+          description: Per-request allowlist of checker IDs. Overrides role and permission rules when set.
+        metadata:
+          allOf:
+            - $ref: "#/components/schemas/JSONObject"
+          description: Free-form data for the consumer. `metadata.display` is rendered by the console and widgets.
+
+    DecisionInput:
+      type: object
+      additionalProperties: false
+      properties:
+        comment:
+          type: string
+
+    Request:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_id, type, payload, status, maker_id, current_stage, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        idempotency_key:
+          type: string
+        type:
+          type: string
+        payload:
+          $ref: "#/components/schemas/JSONObject"
+        status:
+          $ref: "#/components/schemas/RequestStatus"
+        maker_id:
+          type: string
+        maker_attributes:
+          type: object
+          additionalProperties:
+            type: string
+          description: The maker's identity attributes captured at creation, such as `branch_id`.
+        eligible_reviewers:
+          type: array
+          items:
+            type: string
+        metadata:
+          allOf:
+            - $ref: "#/components/schemas/JSONObject"
+          nullable: true
+        fingerprint:
+          type: string
+          description: Hash of the policy's identity fields, used to refuse duplicate pending requests.
+        current_stage:
+          type: integer
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        approvals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Approval"
+        viewer_can_act:
+          type: boolean
+          description: Whether the caller may approve or reject right now. Present on reads and decisions.
+        total_stages:
+          type: integer
+
+    Approval:
+      type: object
+      additionalProperties: false
+      required: [id, request_id, checker_id, decision, stage_index, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        request_id:
+          type: string
+          format: uuid
+        checker_id:
+          type: string
+        decision:
+          $ref: "#/components/schemas/Decision"
+        stage_index:
+          type: integer
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    RequestPage:
+      type: object
+      additionalProperties: false
+      required: [data, total, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Request"
+        total:
+          type: integer
+        page:
+          type: integer
+
+    AuditLog:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_id, request_id, action, actor_id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        request_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          description: created, approved, rejected, cancelled, expired, bypassed, stage_advanced, webhook_sent, webhook_failed.
+        actor_id:
+          type: string
+        details:
+          allOf:
+            - $ref: "#/components/schemas/JSONObject"
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    AuditList:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+
+    ScopeRule:
+      type: object
+      additionalProperties: false
+      required: [attribute]
+      description: |
+        Restricts a stage to checkers whose identity attribute equals one of
+        the values the rule's sources produce. With no source set the rule
+        matches the maker's attribute.
+      properties:
+        attribute:
+          type: string
+        match_maker:
+          type: boolean
+        payload_path:
+          type: string
+          description: Dot-notation path into the payload.
+        values:
+          type: array
+          items:
+            type: string
+        allow_unscoped_checkers:
+          type: boolean
+          description: Lets a checker with no value for the attribute act on any request.
+
+    ApprovalStage:
+      type: object
+      additionalProperties: false
+      required: [index, required_approvals]
+      properties:
+        index:
+          type: integer
+          description: Sequential from 0.
+        name:
+          type: string
+        required_approvals:
+          type: integer
+          minimum: 1
+        allowed_checker_roles:
+          type: array
+          items:
+            type: string
+        allowed_permissions:
+          type: array
+          items:
+            type: string
+        authorization_mode:
+          type: string
+          enum: [role, permission, any, all, ""]
+          description: Required when both roles and permissions are set.
+        rejection_policy:
+          type: string
+          enum: [any, threshold, ""]
+          description: Defaults to `any`.
+        max_checkers:
+          type: integer
+          description: Required for the `threshold` rejection policy.
+        scope:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScopeRule"
+
+    BypassCondition:
+      type: object
+      additionalProperties: false
+      required: [path, op, value]
+      properties:
+        path:
+          type: string
+        op:
+          type: string
+          enum: [eq, ne, lt, lte, gt, gte, in]
+        value: {}
+
+    BypassLimit:
+      type: object
+      additionalProperties: false
+      required: [window]
+      properties:
+        window:
+          type: string
+          description: A Go duration, additionally accepting a `d` suffix.
+        max_count:
+          type: integer
+        max_sum:
+          type: object
+          additionalProperties: false
+          required: [path, value]
+          properties:
+            path:
+              type: string
+            value:
+              type: number
+        group_by:
+          type: array
+          items:
+            type: string
+
+    BypassRule:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        maker_roles:
+          type: array
+          items:
+            type: string
+        maker_permissions:
+          type: array
+          items:
+            type: string
+        maker_attributes:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        payload:
+          type: array
+          items:
+            $ref: "#/components/schemas/BypassCondition"
+        limits:
+          type: array
+          items:
+            $ref: "#/components/schemas/BypassLimit"
+
+    PolicyInput:
+      type: object
+      additionalProperties: false
+      required: [name, request_type, stages]
+      properties:
+        name:
+          type: string
+        request_type:
+          type: string
+        stages:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ApprovalStage"
+        identity_fields:
+          type: array
+          items:
+            type: string
+          description: Payload paths that identify the thing being changed; two pending requests may not share them.
+        dynamic_authorization_url:
+          type: string
+        dynamic_authorization_secret:
+          type: string
+        auto_expire_duration:
+          $ref: "#/components/schemas/Duration"
+        display_template:
+          $ref: "#/components/schemas/JSONObject"
+        bypass_rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/BypassRule"
+
+    PolicyUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalStage"
+        identity_fields:
+          type: array
+          items:
+            type: string
+        dynamic_authorization_url:
+          type: string
+        dynamic_authorization_secret:
+          type: string
+        auto_expire_duration:
+          $ref: "#/components/schemas/Duration"
+        display_template:
+          $ref: "#/components/schemas/JSONObject"
+        bypass_rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/BypassRule"
+
+    Policy:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_id, name, request_type, stages, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        name:
+          type: string
+        request_type:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApprovalStage"
+        identity_fields:
+          type: array
+          items:
+            type: string
+        dynamic_authorization_url:
+          type: string
+        auto_expire_duration:
+          $ref: "#/components/schemas/Duration"
+        display_template:
+          allOf:
+            - $ref: "#/components/schemas/JSONObject"
+          nullable: true
+        bypass_rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/BypassRule"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        warnings:
+          type: array
+          items:
+            type: string
+
+    PolicyPage:
+      type: object
+      additionalProperties: false
+      required: [data, total, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Policy"
+        total:
+          type: integer
+        page:
+          type: integer
+
+    WebhookInput:
+      type: object
+      additionalProperties: false
+      required: [url, events, secret]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/WebhookEvent"
+        secret:
+          type: string
+          description: Shared secret for the HMAC signature.
+        request_type:
+          type: string
+          description: Restrict deliveries to one request type.
+
+    WebhookEvent:
+      type: string
+      enum: [review_requested, approved, rejected, cancelled, expired]
+
+    Webhook:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_id, url, events, active, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+        url:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        request_type:
+          type: string
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    WebhookPage:
+      type: object
+      additionalProperties: false
+      required: [data, total, page]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Webhook"
+        total:
+          type: integer
+        page:
+          type: integer
+
+    WebhookPayload:
+      type: object
+      description: The body of every webhook delivery.
+      additionalProperties: false
+      required: [event, request, timestamp]
+      properties:
+        event:
+          $ref: "#/components/schemas/WebhookEvent"
+        request:
+          $ref: "#/components/schemas/Request"
+        approvals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Approval"
+        review:
+          $ref: "#/components/schemas/ReviewRequest"
+        timestamp:
+          type: string
+          format: date-time
+
+    ReviewRequest:
+      type: object
+      description: Who may act on the stage a request is waiting on. Sent with `review_requested`.
+      additionalProperties: false
+      required: [reason, stage_index, total_stages, required_approvals, eligible_reviewers, scope]
+      properties:
+        reason:
+          type: string
+          enum: [created, stage_advanced, bypass_limit_exceeded]
+        stage_index:
+          type: integer
+        stage_name:
+          type: string
+        total_stages:
+          type: integer
+        required_approvals:
+          type: integer
+        eligible_reviewers:
+          type: array
+          items:
+            type: string
+        allowed_roles:
+          type: array
+          items:
+            type: string
+        allowed_permissions:
+          type: array
+          items:
+            type: string
+        authorization_mode:
+          type: string
+        scope:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResolvedScope"
+        excluded_user_ids:
+          type: array
+          items:
+            type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    ResolvedScope:
+      type: object
+      additionalProperties: false
+      required: [attribute, values]
+      properties:
+        attribute:
+          type: string
+        values:
+          type: array
+          items:
+            type: string
+        allow_unscoped_checkers:
+          type: boolean

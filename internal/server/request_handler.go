@@ -145,7 +145,7 @@ func (h *RequestHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.Page[model.Request]{Data: requests, Total: total, Page: filter.Page})
+	writeJSON(w, http.StatusOK, model.NewPage(requests, total, filter.Page))
 }
 
 func (h *RequestHandler) Approve(w http.ResponseWriter, r *http.Request) {
@@ -229,6 +229,8 @@ func (h *RequestHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, err.Error())
 		case errors.Is(err, service.ErrRequestNotPending):
 			writeError(w, http.StatusConflict, err.Error())
+		case errors.Is(err, service.ErrNotMaker):
+			writeError(w, http.StatusForbidden, err.Error())
 		default:
 			writeServerError(w, r, err, "failed to cancel request")
 		}

@@ -92,7 +92,7 @@ func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeServerError(w, r, err, "failed to list policies")
 		return
 	}
-	writeJSON(w, http.StatusOK, model.Page[model.Policy]{Data: policies, Total: total, Page: filter.Page})
+	writeJSON(w, http.StatusOK, model.NewPage(policies, total, filter.Page))
 }
 
 func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +137,7 @@ func (h *PolicyHandler) RequestTypes(w http.ResponseWriter, r *http.Request) {
 		writeServerError(w, r, err, "failed to list request types")
 		return
 	}
-	writeJSON(w, http.StatusOK, model.List[string]{Data: types})
+	writeJSON(w, http.StatusOK, model.NewList(types))
 }
 
 func (h *PolicyHandler) Delete(w http.ResponseWriter, r *http.Request) {

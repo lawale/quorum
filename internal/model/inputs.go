@@ -61,6 +61,38 @@ type PolicyUpdate struct {
 	BypassRules                []BypassRule    `json:"bypass_rules,omitempty"`
 }
 
+// MarshalJSON sends a list field only when it is set, so that an empty list
+// clears the stored value while a nil one leaves it alone. Plain omitempty
+// would drop both.
+func (u PolicyUpdate) MarshalJSON() ([]byte, error) {
+	out := map[string]any{}
+	if u.Name != "" {
+		out["name"] = u.Name
+	}
+	if u.Stages != nil {
+		out["stages"] = u.Stages
+	}
+	if u.IdentityFields != nil {
+		out["identity_fields"] = u.IdentityFields
+	}
+	if u.DynamicAuthorizationURL != nil {
+		out["dynamic_authorization_url"] = u.DynamicAuthorizationURL
+	}
+	if u.DynamicAuthorizationSecret != nil {
+		out["dynamic_authorization_secret"] = u.DynamicAuthorizationSecret
+	}
+	if u.AutoExpireDuration != nil {
+		out["auto_expire_duration"] = u.AutoExpireDuration
+	}
+	if u.DisplayTemplate != nil {
+		out["display_template"] = u.DisplayTemplate
+	}
+	if u.BypassRules != nil {
+		out["bypass_rules"] = u.BypassRules
+	}
+	return json.Marshal(out)
+}
+
 // ApplyTo copies every field the update sets onto p.
 func (u PolicyUpdate) ApplyTo(p *Policy) {
 	if u.Name != "" {
@@ -114,9 +146,25 @@ type Page[T any] struct {
 	Page  int `json:"page"`
 }
 
+// NewPage builds a Page whose Data is never null on the wire.
+func NewPage[T any](data []T, total, page int) Page[T] {
+	if data == nil {
+		data = []T{}
+	}
+	return Page[T]{Data: data, Total: total, Page: page}
+}
+
 // List is the envelope of an unpaginated list such as a request's audit trail.
 type List[T any] struct {
 	Data []T `json:"data"`
+}
+
+// NewList builds a List whose Data is never null on the wire.
+func NewList[T any](data []T) List[T] {
+	if data == nil {
+		data = []T{}
+	}
+	return List[T]{Data: data}
 }
 
 // ErrorResponse is the body of every non-2xx API response.

@@ -56,7 +56,7 @@ func (h *DeliveryHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.Page[model.OutboxEntry]{Data: entries, Total: total, Page: filter.Page})
+	writeJSON(w, http.StatusOK, model.NewPage(entries, total, filter.Page))
 }
 
 func (h *DeliveryHandler) Stats(w http.ResponseWriter, r *http.Request) {

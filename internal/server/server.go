@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/api"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/config"
 	"github.com/lawale/quorum/internal/health"
@@ -111,6 +112,12 @@ func (s *Server) setupRoutes() {
 			statusStr = "unhealthy"
 		}
 		writeJSON(w, status, map[string]any{"status": statusStr, "components": components})
+	})
+
+	// OpenAPI document — no auth
+	r.Get("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(api.Spec)
 	})
 
 	// Metrics endpoint — no auth
@@ -244,7 +251,7 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, model.List[model.AuditLog]{Data: logs})
+	writeJSON(w, http.StatusOK, model.NewList(logs))
 }
 
 func (s *Server) Handler() http.Handler {

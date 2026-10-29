@@ -32,6 +32,7 @@ var (
 	ErrInvalidStage             = errors.New("request is at an invalid stage for this policy")
 	ErrMissingIdentityFields    = errors.New("missing identity field in payload")
 	ErrOutOfScope               = errors.New("checker is outside the scope of this request")
+	ErrNotMaker                 = errors.New("only the maker can cancel their own request")
 )
 
 type RequestService struct {
@@ -300,7 +301,7 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 		return nil, ErrRequestNotPending
 	}
 	if req.MakerID != makerID {
-		return nil, errors.New("only the maker can cancel their own request")
+		return nil, ErrNotMaker
 	}
 
 	err = s.transact(ctx, func(tx *store.Stores, emit emitFunc) error {

@@ -55,7 +55,7 @@ func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeServerError(w, r, err, "failed to list webhooks")
 		return
 	}
-	writeJSON(w, http.StatusOK, model.Page[model.Webhook]{Data: webhooks, Total: total, Page: filter.Page})
+	writeJSON(w, http.StatusOK, model.NewPage(webhooks, total, filter.Page))
 }
 
 func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
