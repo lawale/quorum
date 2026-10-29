@@ -227,10 +227,12 @@ func (k jwk) publicKey() (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("y: %w", err)
 		}
-		if !curve.IsOnCurve(x, y) {
-			return nil, errors.New("point is not on curve")
+		pub := &ecdsa.PublicKey{Curve: curve, X: x, Y: y}
+		// ECDH() validates that the point is on the curve; the ECDH key itself is discarded.
+		if _, err := pub.ECDH(); err != nil {
+			return nil, fmt.Errorf("invalid EC point: %w", err)
 		}
-		return &ecdsa.PublicKey{Curve: curve, X: x, Y: y}, nil
+		return pub, nil
 	default:
 		return nil, fmt.Errorf("unsupported key type %q", k.Kty)
 	}
