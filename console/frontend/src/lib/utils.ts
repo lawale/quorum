@@ -74,16 +74,29 @@ export function humanize(slug: string): string {
 }
 
 /**
- * Converts a Go time.Duration (nanoseconds) to a human-readable string.
- * e.g. 86400000000000 → "1d", 259200000000000 → "3d", 90000000000000 → "1d1h"
+ * Parse a Go duration string ("24h", "1h30m", "90s") into whole seconds.
+ * A bare number is treated as nanoseconds, which is how older servers
+ * serialised durations.
  */
-export function formatDuration(ns: number | string): string {
-  let val = typeof ns === 'string' ? Number(ns) : ns;
-  if (!val || isNaN(val) || val <= 0) return '—';
+function parseGoDurationSeconds(s: string): number {
+  if (/^\d+$/.test(s)) return Math.floor(Number(s) / 1_000_000_000);
+  const unitSeconds: Record<string, number> = { h: 3600, m: 60, s: 1, ms: 0.001, us: 0.000001, µs: 0.000001, ns: 1e-9 };
+  let total = 0;
+  let matched = false;
+  for (const [, num, unit] of s.matchAll(/(\d+(?:\.\d+)?)(h|ms|m|s|us|µs|ns)/g)) {
+    total += Number(num) * unitSeconds[unit];
+    matched = true;
+  }
+  return matched ? Math.floor(total) : NaN;
+}
 
-  // Convert nanoseconds to seconds
-  let seconds = Math.floor(val / 1_000_000_000);
-  if (seconds <= 0) return '—';
+/**
+ * Converts a policy duration ("24h", "72h", "25h", or legacy nanoseconds) to a
+ * compact human-readable string: "1d", "3d", "1d1h".
+ */
+export function formatDuration(value: number | string): string {
+  let seconds = typeof value === 'string' ? parseGoDurationSeconds(value) : Math.floor(value / 1_000_000_000);
+  if (!seconds || isNaN(seconds) || seconds <= 0) return '—';
 
   const parts: string[] = [];
 

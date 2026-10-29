@@ -25,8 +25,8 @@ type stageBody struct {
 	Index               int               `json:"index"`
 	Name                string            `json:"name,omitempty"`
 	RequiredApprovals   int               `json:"required_approvals"`
-	AllowedCheckerRoles json.RawMessage   `json:"allowed_checker_roles,omitempty"`
-	AllowedPermissions  json.RawMessage   `json:"allowed_permissions,omitempty"`
+	AllowedCheckerRoles []string          `json:"allowed_checker_roles,omitempty"`
+	AllowedPermissions  []string          `json:"allowed_permissions,omitempty"`
 	AuthorizationMode   string            `json:"authorization_mode,omitempty"`
 	RejectionPolicy     string            `json:"rejection_policy,omitempty"`
 	MaxCheckers         *int              `json:"max_checkers,omitempty"`
@@ -97,7 +97,7 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid auto_expire_duration format, use Go duration syntax (e.g. 24h, 30m)")
 			return
 		}
-		policy.AutoExpireDuration = &d
+		policy.AutoExpireDuration = model.NewDuration(d)
 	}
 
 	if err := h.policyService.Create(r.Context(), policy); err != nil {
@@ -222,7 +222,7 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid auto_expire_duration format")
 			return
 		}
-		existing.AutoExpireDuration = &d
+		existing.AutoExpireDuration = model.NewDuration(d)
 	}
 	if body.DisplayTemplate != nil {
 		existing.DisplayTemplate = body.DisplayTemplate

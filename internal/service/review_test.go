@@ -27,8 +27,8 @@ func TestBuildReviewRequest_ResolvesStageAndScope(t *testing.T) {
 			{Index: 0, Name: "Branch", RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
 			{
 				Index: 1, Name: "Receiving branch", RequiredApprovals: 2, RejectionPolicy: model.RejectionPolicyAny,
-				AllowedCheckerRoles: []byte(`["branch_manager"]`),
-				AllowedPermissions:  []byte(`["approve_transfer"]`),
+				AllowedCheckerRoles: []string{"branch_manager"},
+				AllowedPermissions:  []string{"approve_transfer"},
 				AuthorizationMode:   model.AuthModeAll,
 				Scope: []model.ScopeRule{
 					{Attribute: "branch_id", PayloadPath: "destination_branch_id", Values: []string{"HQ"}},
@@ -156,7 +156,7 @@ func TestApprove_StageAdvance_EmitsReviewRequestedForNextStage(t *testing.T) {
 	policy := testutil.NewPolicy(func(p *model.Policy) {
 		p.Stages = []model.ApprovalStage{
 			{Index: 0, Name: "First", RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny},
-			{Index: 1, Name: "Second", RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny, AllowedCheckerRoles: []byte(`["compliance"]`)},
+			{Index: 1, Name: "Second", RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny, AllowedCheckerRoles: []string{"compliance"}},
 		}
 	})
 	requests, approvals, policies, audits := setupApproveTest(req, policy)

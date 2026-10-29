@@ -35,12 +35,8 @@ func buildReviewRequest(policy *model.Policy, req *model.Request, stageIndex int
 		rr.EligibleReviewers = []string{}
 	}
 
-	if len(stage.AllowedCheckerRoles) > 0 {
-		_ = json.Unmarshal(stage.AllowedCheckerRoles, &rr.AllowedRoles)
-	}
-	if len(stage.AllowedPermissions) > 0 {
-		_ = json.Unmarshal(stage.AllowedPermissions, &rr.AllowedPermissions)
-	}
+	rr.AllowedRoles = stage.AllowedCheckerRoles
+	rr.AllowedPermissions = stage.AllowedPermissions
 
 	if len(stage.Scope) > 0 {
 		var payload map[string]any

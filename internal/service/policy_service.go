@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -162,8 +161,8 @@ func validateAndDefaultStages(stages []model.ApprovalStage) error {
 			return fmt.Errorf("%w (stage %d)", ErrThresholdNoMaxCheckers, i)
 		}
 
-		hasRoles := isNonEmptyJSONArray(stages[i].AllowedCheckerRoles)
-		hasPermissions := isNonEmptyJSONArray(stages[i].AllowedPermissions)
+		hasRoles := len(stages[i].AllowedCheckerRoles) > 0
+		hasPermissions := len(stages[i].AllowedPermissions) > 0
 		mode := stages[i].AuthorizationMode
 
 		switch {
@@ -205,17 +204,6 @@ func validateAndDefaultStages(stages []model.ApprovalStage) error {
 }
 
 // isNonEmptyJSONArray returns true if raw is a JSON array with at least one element.
-func isNonEmptyJSONArray(raw json.RawMessage) bool {
-	if len(raw) == 0 {
-		return false
-	}
-	var arr []json.RawMessage
-	if err := json.Unmarshal(raw, &arr); err != nil {
-		return false
-	}
-	return len(arr) > 0
-}
-
 func (s *PolicyService) GetByID(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
 	policy, err := s.policies.GetByID(ctx, id)
 	if err != nil {

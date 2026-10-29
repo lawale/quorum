@@ -283,7 +283,7 @@ func (s *PolicyStore) scanSingleRow(row *sql.Row) (*model.Policy, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parsing auto expire duration: %w", err)
 		}
-		p.AutoExpireDuration = &d
+		p.AutoExpireDuration = model.NewDuration(d)
 	}
 
 	return p, nil
@@ -325,7 +325,7 @@ func (s *PolicyStore) scanPolicyRow(rows *sql.Rows) (*model.Policy, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parsing auto expire duration: %w", err)
 		}
-		p.AutoExpireDuration = &d
+		p.AutoExpireDuration = model.NewDuration(d)
 	}
 
 	return p, nil
