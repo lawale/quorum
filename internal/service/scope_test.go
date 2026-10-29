@@ -104,6 +104,78 @@ func TestValidateScope_PayloadPath(t *testing.T) {
 	}
 }
 
+func TestValidateScope_FixedValues(t *testing.T) {
+	stage := &model.ApprovalStage{Scope: []model.ScopeRule{{Attribute: "branch_id", Values: []string{"HQ", "REGIONAL"}}}}
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.MakerAttributes = map[string]string{"branch_id": "LAG-01"}
+	})
+
+	if err := validateScope(stage, req, map[string]string{"branch_id": "HQ"}); err != nil {
+		t.Errorf("listed value should pass: %v", err)
+	}
+	if err := validateScope(stage, req, map[string]string{"branch_id": "LAG-01"}); !errors.Is(err, ErrOutOfScope) {
+		t.Errorf("maker's branch is not a source when only values are set: err = %v", err)
+	}
+}
+
+func TestValidateScope_UnionOfSources(t *testing.T) {
+	// Same branch as the maker, or the destination branch, or head office.
+	stage := &model.ApprovalStage{Scope: []model.ScopeRule{{
+		Attribute:   "branch_id",
+		MatchMaker:  true,
+		PayloadPath: "destination_branch_id",
+		Values:      []string{"HQ"},
+	}}}
+	req := testutil.NewRequest(func(r *model.Request) {
+		r.Payload = []byte(`{"destination_branch_id": "ABJ-02"}`)
+		r.MakerAttributes = map[string]string{"branch_id": "LAG-01"}
+	})
+
+	for _, ok := range []string{"LAG-01", "ABJ-02", "HQ"} {
+		if err := validateScope(stage, req, map[string]string{"branch_id": ok}); err != nil {
+			t.Errorf("%s should pass: %v", ok, err)
+		}
+	}
+	if err := validateScope(stage, req, map[string]string{"branch_id": "PHC-03"}); !errors.Is(err, ErrOutOfScope) {
+		t.Errorf("unrelated branch: err = %v, want ErrOutOfScope", err)
+	}
+}
+
+func TestValidateScope_UnionStillFailsClosedWhenNoSourceResolves(t *testing.T) {
+	stage := &model.ApprovalStage{Scope: []model.ScopeRule{{Attribute: "branch_id", MatchMaker: true, PayloadPath: "missing"}}}
+	req := testutil.NewRequest() // no maker attributes, no payload value
+
+	if err := validateScope(stage, req, map[string]string{"branch_id": "LAG-01"}); !errors.Is(err, ErrOutOfScope) {
+		t.Errorf("err = %v, want ErrOutOfScope", err)
+	}
+}
+
+func TestPolicyCreate_ScopeRule_DefaultsToMatchMaker(t *testing.T) {
+	var stored *model.Policy
+	policies := &testutil.MockPolicyStore{
+		GetByRequestTypeFunc: func(ctx context.Context, rt string) (*model.Policy, error) { return nil, nil },
+		CreateFunc:           func(ctx context.Context, p *model.Policy) error { stored = p; return nil },
+	}
+	svc := NewPolicyService(policies)
+
+	policy := scopedPolicy(
+		model.ScopeRule{Attribute: "branch_id"},
+		model.ScopeRule{Attribute: "dept", Values: []string{" ops ", ""}},
+	)
+	if err := svc.Create(context.Background(), policy); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !stored.Stages[0].Scope[0].MatchMaker {
+		t.Error("rule with no source should default to match_maker")
+	}
+	if stored.Stages[0].Scope[1].MatchMaker {
+		t.Error("rule with values must not default to match_maker")
+	}
+	if got := stored.Stages[0].Scope[1].Values; len(got) != 1 || got[0] != "ops" {
+		t.Errorf("values = %v, want [ops]", got)
+	}
+}
+
 func TestValidateScope_AllRulesMustPass(t *testing.T) {
 	stage := &model.ApprovalStage{Scope: []model.ScopeRule{{Attribute: "branch_id"}, {Attribute: "department"}}}
 	req := testutil.NewRequest(func(r *model.Request) {

@@ -10,13 +10,14 @@ import (
 )
 
 // validateScope enforces the stage's scope rules against the checker's
-// identity attributes. Each rule names an attribute the checker must hold with
-// a value equal to the maker's attribute of the same name, or, when
-// payload_path is set, to the value at that path in the request payload.
+// identity attributes. Each rule names an attribute and one or more sources of
+// acceptable values: the maker's attribute of the same name, a path into the
+// payload, and fixed values. The checker passes a rule when their attribute
+// equals any value the sources produce. All rules must pass.
 //
-// Rules fail closed: if the expected value cannot be determined, or the checker
-// lacks the attribute and the rule does not allow unscoped checkers, the
-// checker is out of scope.
+// Rules fail closed: if no source yields a value, or the checker lacks the
+// attribute and the rule does not allow unscoped checkers, the checker is out
+// of scope.
 func validateScope(stage *model.ApprovalStage, req *model.Request, checkerAttributes map[string]string) error {
 	if len(stage.Scope) == 0 {
 		return nil
@@ -38,8 +39,15 @@ func validateScope(stage *model.ApprovalStage, req *model.Request, checkerAttrib
 			return fmt.Errorf("%w: checker has no %q attribute", ErrOutOfScope, rule.Attribute)
 		}
 
-		var expected string
-		var ok bool
+		// A rule with no explicit source matches the maker.
+		matchMaker := rule.MatchMaker || !rule.HasSource()
+
+		var expected []string
+		if matchMaker {
+			if v, ok := req.MakerAttributes[rule.Attribute]; ok && v != "" {
+				expected = append(expected, v)
+			}
+		}
 		if rule.PayloadPath != "" {
 			if !payloadParsed {
 				payloadParsed = true
@@ -47,16 +55,24 @@ func validateScope(stage *model.ApprovalStage, req *model.Request, checkerAttrib
 					payload = nil
 				}
 			}
-			expected, ok = scalarAtPath(payload, rule.PayloadPath)
-		} else {
-			expected, ok = req.MakerAttributes[rule.Attribute]
-			ok = ok && expected != ""
+			if v, ok := scalarAtPath(payload, rule.PayloadPath); ok {
+				expected = append(expected, v)
+			}
 		}
-		if !ok {
+		expected = append(expected, rule.Values...)
+
+		if len(expected) == 0 {
 			return fmt.Errorf("%w: request has no %q to match against", ErrOutOfScope, rule.Attribute)
 		}
 
-		if checkerValue != expected {
+		matched := false
+		for _, v := range expected {
+			if v == checkerValue {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return fmt.Errorf("%w: %s mismatch", ErrOutOfScope, rule.Attribute)
 		}
 	}

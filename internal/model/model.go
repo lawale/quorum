@@ -77,16 +77,25 @@ const (
 	AuthModeAll        AuthorizationMode = "all"
 )
 
-// ScopeRule restricts a stage to checkers whose identity attribute matches a
-// value tied to the request. By default the checker's attribute must equal the
-// maker's attribute of the same name captured at creation. When PayloadPath is
-// set, it must instead equal the value at that dot-notation path in the payload.
+// ScopeRule restricts a stage to checkers whose identity attribute equals one
+// of the values the rule's sources produce. A rule may draw from the maker's
+// attribute of the same name (captured at creation), from a dot-notation path
+// into the payload, and from fixed values; it passes when the checker matches
+// any of them. When no source is set the rule matches the maker. Multiple
+// rules on a stage must all pass.
 type ScopeRule struct {
-	Attribute   string `json:"attribute"`
-	PayloadPath string `json:"payload_path,omitempty"`
+	Attribute   string   `json:"attribute"`
+	MatchMaker  bool     `json:"match_maker,omitempty"`
+	PayloadPath string   `json:"payload_path,omitempty"`
+	Values      []string `json:"values,omitempty"`
 	// AllowUnscopedCheckers lets a checker who has no value for the attribute
 	// (for example a head-office user with no branch) act on any request.
 	AllowUnscopedCheckers bool `json:"allow_unscoped_checkers,omitempty"`
+}
+
+// HasSource reports whether the rule names at least one source of expected values.
+func (r ScopeRule) HasSource() bool {
+	return r.MatchMaker || r.PayloadPath != "" || len(r.Values) > 0
 }
 
 type ApprovalStage struct {

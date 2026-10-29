@@ -100,6 +100,21 @@ func validateAndDefaultStages(stages []model.ApprovalStage) error {
 			if rule.Attribute == "" {
 				return fmt.Errorf("%w (stage %d, rule %d)", ErrInvalidScopeRule, i, j)
 			}
+			values := rule.Values[:0]
+			for _, v := range rule.Values {
+				if v = strings.TrimSpace(v); v != "" {
+					values = append(values, v)
+				}
+			}
+			rule.Values = values
+			if len(rule.Values) == 0 {
+				rule.Values = nil
+			}
+			// A rule that names no source matches the maker; make that explicit
+			// in the stored policy so readers do not have to know the default.
+			if !rule.HasSource() {
+				rule.MatchMaker = true
+			}
 		}
 	}
 	return nil

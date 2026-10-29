@@ -19,7 +19,9 @@ export interface Operator {
 
 export interface ScopeRule {
   attribute: string;
+  match_maker?: boolean;
   payload_path?: string;
+  values?: string[];
   allow_unscoped_checkers?: boolean;
 }
 
