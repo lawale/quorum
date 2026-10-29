@@ -116,7 +116,7 @@ Get Quorum up and running in minutes.
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - PostgreSQL 14+ or SQL Server 2019+
 
 ### 1. Get Quorum
@@ -163,7 +163,7 @@ The Quick Start above builds Quorum as a headless API server. To run the complet
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 22+
 - Docker (for PostgreSQL)
 - [`golang-migrate`](https://github.com/golang-migrate/migrate) CLI
