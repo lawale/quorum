@@ -97,10 +97,11 @@ type AuthConfig struct {
 }
 
 type TrustConfig struct {
-	UserIDHeader      string `yaml:"user_id_header"`
-	RolesHeader       string `yaml:"roles_header"`
-	PermissionsHeader string `yaml:"permissions_header"`
-	TenantIDHeader    string `yaml:"tenant_id_header"`
+	UserIDHeader      string            `yaml:"user_id_header"`
+	RolesHeader       string            `yaml:"roles_header"`
+	PermissionsHeader string            `yaml:"permissions_header"`
+	TenantIDHeader    string            `yaml:"tenant_id_header"`
+	AttributeHeaders  map[string]string `yaml:"attribute_headers"` // attribute name -> header, e.g. branch_id: X-User-Branch
 }
 
 // VerifyConfig configures JWT verification against a JWKS endpoint.
@@ -117,10 +118,11 @@ type VerifyConfig struct {
 // ClaimsConfig maps JWT claims to identity fields. Each value is a claim name
 // or a dotted path into nested claims (e.g. "realm_access.roles").
 type ClaimsConfig struct {
-	UserID      string `yaml:"user_id"`
-	Roles       string `yaml:"roles"`
-	Permissions string `yaml:"permissions"`
-	TenantID    string `yaml:"tenant_id"`
+	UserID      string            `yaml:"user_id"`
+	Roles       string            `yaml:"roles"`
+	Permissions string            `yaml:"permissions"`
+	TenantID    string            `yaml:"tenant_id"`
+	Attributes  map[string]string `yaml:"attributes"` // attribute name -> claim path, e.g. branch_id: branch_id
 }
 
 type CustomConfig struct {

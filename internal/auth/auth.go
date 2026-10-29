@@ -12,6 +12,7 @@ const (
 	rolesKey       contextKey = "user_roles"
 	permissionsKey contextKey = "user_permissions"
 	tenantIDKey    contextKey = "tenant_id"
+	attributesKey  contextKey = "user_attributes"
 )
 
 // Identity represents the authenticated user extracted from the request.
@@ -20,6 +21,10 @@ type Identity struct {
 	Roles       []string
 	Permissions []string
 	TenantID    string
+	// Attributes are named identity facts beyond roles and permissions, such
+	// as branch_id or department. Policies use them to scope which checkers
+	// may act on a request. Keys are the names configured for the auth mode.
+	Attributes map[string]string
 }
 
 // Provider extracts identity from an HTTP request.
@@ -33,6 +38,7 @@ func WithIdentity(ctx context.Context, id *Identity) context.Context {
 	ctx = context.WithValue(ctx, rolesKey, id.Roles)
 	ctx = context.WithValue(ctx, permissionsKey, id.Permissions)
 	ctx = context.WithValue(ctx, tenantIDKey, id.TenantID)
+	ctx = context.WithValue(ctx, attributesKey, id.Attributes)
 	return ctx
 }
 
@@ -56,6 +62,13 @@ func UserIDFromContext(ctx context.Context) string {
 // RolesFromContext extracts the roles from the context.
 func RolesFromContext(ctx context.Context) []string {
 	v, _ := ctx.Value(rolesKey).([]string)
+	return v
+}
+
+// AttributesFromContext extracts the identity attributes from the context.
+// The result may be nil.
+func AttributesFromContext(ctx context.Context) map[string]string {
+	v, _ := ctx.Value(attributesKey).(map[string]string)
 	return v
 }
 

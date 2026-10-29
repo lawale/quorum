@@ -137,6 +137,15 @@
     stages[stageIdx].allowed_permissions = [...perms, p];
   }
 
+  function addScopeRule(stageIdx: number) {
+    stages[stageIdx].scope = [...(stages[stageIdx].scope || []), { attribute: '', payload_path: '', allow_unscoped_checkers: false }];
+  }
+
+  function removeScopeRule(stageIdx: number, ruleIdx: number) {
+    stages[stageIdx].scope = (stages[stageIdx].scope || []).filter((_, i) => i !== ruleIdx);
+    clearFieldError(`stage_${stageIdx}_scope_${ruleIdx}`);
+  }
+
   function removePermission(stageIdx: number, perm: string) {
     stages[stageIdx].allowed_permissions = (stages[stageIdx].allowed_permissions || []).filter(p => p !== perm);
   }
@@ -188,6 +197,11 @@
       if ((mode === 'any' || mode === 'all') && !hasPerms) {
         validationErrors[`stage_${i}_perms`] = 'At least one permission is required';
       }
+      (stages[i].scope || []).forEach((rule, j) => {
+        if (!rule.attribute.trim()) {
+          validationErrors[`stage_${i}_scope_${j}`] = 'Attribute name is required';
+        }
+      });
     }
 
     if (identityFields.trim()) {
@@ -244,6 +258,13 @@
           allowed_permissions: wantsPerms && s.allowed_permissions?.length ? s.allowed_permissions : undefined,
           authorization_mode: mode || undefined,
           max_checkers: s.rejection_policy === 'threshold' ? s.max_checkers : undefined,
+          scope: s.scope?.length
+            ? s.scope.map((r) => ({
+                attribute: r.attribute.trim(),
+                payload_path: r.payload_path?.trim() || undefined,
+                allow_unscoped_checkers: r.allow_unscoped_checkers || undefined,
+              }))
+            : undefined,
         };
       }),
     };
@@ -544,6 +565,48 @@
                     {/if}
                   </div>
                 {/if}
+              </div>
+
+              <!-- Reviewer Scope -->
+              <div class="mt-4 pt-4 border-t border-outline-variant/10">
+                <div class="flex items-center justify-between mb-2">
+                  <div>
+                    <span class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Reviewer Scope</span>
+                    <p class="text-xs text-on-surface-variant mt-1">Require the checker's identity attribute to match the maker's, or a value in the payload.</p>
+                  </div>
+                  <button type="button" onclick={() => addScopeRule(i)} class="px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-container text-on-surface border border-outline-variant/30 hover:bg-surface-container-high transition-colors">+ Add rule</button>
+                </div>
+                {#each (stage.scope || []) as rule, j}
+                  <div class="grid grid-cols-[1fr_1fr_auto_auto] gap-3 items-start mt-2">
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Attribute, e.g. branch_id"
+                        bind:value={rule.attribute}
+                        oninput={() => clearFieldError(`stage_${i}_scope_${j}`)}
+                        aria-label="Scope attribute"
+                        class="w-full px-3 py-2 text-sm border rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary {validationErrors[`stage_${i}_scope_${j}`] ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
+                      />
+                      {#if validationErrors[`stage_${i}_scope_${j}`]}
+                        <p class="mt-1 text-xs text-status-rejected-text">{validationErrors[`stage_${i}_scope_${j}`]}</p>
+                      {/if}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Payload path (optional), e.g. current.branch_id"
+                      bind:value={rule.payload_path}
+                      aria-label="Scope payload path"
+                      class="w-full px-3 py-2 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <label class="flex items-center gap-2 text-xs text-on-surface-variant whitespace-nowrap py-2">
+                      <input type="checkbox" bind:checked={rule.allow_unscoped_checkers} class="rounded border-outline-variant/40" />
+                      Allow checkers without it
+                    </label>
+                    <button type="button" onclick={() => removeScopeRule(i, j)} class="p-2 text-on-surface-variant hover:text-status-rejected-text transition-colors" aria-label="Remove scope rule">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                {/each}
               </div>
             </div>
           {/each}

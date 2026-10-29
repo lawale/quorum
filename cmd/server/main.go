@@ -246,7 +246,8 @@ func newAuthProvider(ctx context.Context, cfg config.AuthConfig) (auth.Provider,
 	switch cfg.Mode {
 	case "trust":
 		t := cfg.Trust
-		return auth.NewTrustProvider(t.UserIDHeader, t.RolesHeader, t.PermissionsHeader, t.TenantIDHeader), nil
+		return auth.NewTrustProvider(t.UserIDHeader, t.RolesHeader, t.PermissionsHeader, t.TenantIDHeader).
+			WithAttributeHeaders(t.AttributeHeaders), nil
 	case "verify":
 		v := cfg.Verify
 		return auth.NewVerifyProvider(ctx, auth.VerifyProviderConfig{

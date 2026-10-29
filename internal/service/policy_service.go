@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
@@ -21,6 +22,7 @@ var (
 	ErrInvalidDisplayTemplate   = errors.New("invalid display template")
 	ErrThresholdNoMaxCheckers   = errors.New("max_checkers is required when rejection_policy is 'threshold'")
 	ErrInvalidAuthorizationMode = errors.New("authorization_mode must be 'any' or 'all' when both allowed_checker_roles and allowed_permissions are set")
+	ErrInvalidScopeRule         = errors.New("scope rules require a non-empty attribute")
 )
 
 type PolicyService struct {
@@ -89,6 +91,15 @@ func validateAndDefaultStages(stages []model.ApprovalStage) error {
 			return fmt.Errorf("%w (stage %d)", ErrInvalidAuthorizationMode, i)
 		case hasPermissions && !hasRoles && mode == model.AuthModeRole:
 			return fmt.Errorf("%w (stage %d)", ErrInvalidAuthorizationMode, i)
+		}
+
+		for j := range stages[i].Scope {
+			rule := &stages[i].Scope[j]
+			rule.Attribute = strings.TrimSpace(rule.Attribute)
+			rule.PayloadPath = strings.TrimSpace(rule.PayloadPath)
+			if rule.Attribute == "" {
+				return fmt.Errorf("%w (stage %d, rule %d)", ErrInvalidScopeRule, i, j)
+			}
 		}
 	}
 	return nil

@@ -572,3 +572,37 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+func TestVerifyProvider_Attributes(t *testing.T) {
+	iss := newTestIssuer(t)
+	p := iss.provider(t, func(c *VerifyProviderConfig) {
+		c.Claims.Attributes = map[string]string{
+			"branch_id":  "branch_id",
+			"department": "org.department",
+			"level":      "level",
+			"active":     "active",
+			"roles_copy": "roles", // arrays are not attributes
+			"missing":    "nope",
+		}
+	})
+
+	claims := baseClaims()
+	claims["branch_id"] = "LAG-01"
+	claims["org"] = map[string]any{"department": "ops"}
+	claims["level"] = 3
+	claims["active"] = true
+
+	id, err := p.Authenticate(request(iss.sign(claims, iss.kid)))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := map[string]string{"branch_id": "LAG-01", "department": "ops", "level": "3", "active": "true"}
+	if len(id.Attributes) != len(want) {
+		t.Fatalf("Attributes = %v, want %v", id.Attributes, want)
+	}
+	for k, v := range want {
+		if id.Attributes[k] != v {
+			t.Errorf("Attributes[%q] = %q, want %q", k, id.Attributes[k], v)
+		}
+	}
+}

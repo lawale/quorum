@@ -131,3 +131,38 @@ func TestTrustProvider_Authenticate_CustomHeaders(t *testing.T) {
 		t.Errorf("TenantID = %q, want %q", id.TenantID, "custom-tenant")
 	}
 }
+
+func TestTrustProvider_Authenticate_Attributes(t *testing.T) {
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-User-Permissions", "X-Tenant-ID").
+		WithAttributeHeaders(map[string]string{"branch_id": "X-User-Branch", "department": "X-User-Dept"})
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-User-ID", "user-123")
+	r.Header.Set("X-Tenant-ID", "test-tenant")
+	r.Header.Set("X-User-Branch", " LAG-01 ")
+
+	id, err := p.Authenticate(r)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := id.Attributes["branch_id"]; got != "LAG-01" {
+		t.Errorf("branch_id = %q, want LAG-01", got)
+	}
+	if _, ok := id.Attributes["department"]; ok {
+		t.Error("absent header must not produce an attribute")
+	}
+}
+
+func TestTrustProvider_Authenticate_NoAttributeHeaders(t *testing.T) {
+	p := NewTrustProvider("X-User-ID", "X-User-Roles", "X-User-Permissions", "X-Tenant-ID")
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("X-User-ID", "user-123")
+	r.Header.Set("X-Tenant-ID", "test-tenant")
+
+	id, err := p.Authenticate(r)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id.Attributes != nil {
+		t.Errorf("Attributes = %v, want nil", id.Attributes)
+	}
+}

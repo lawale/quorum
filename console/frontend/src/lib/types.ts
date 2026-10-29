@@ -17,6 +17,12 @@ export interface Operator {
   updated_at: string;
 }
 
+export interface ScopeRule {
+  attribute: string;
+  payload_path?: string;
+  allow_unscoped_checkers?: boolean;
+}
+
 export interface ApprovalStage {
   index: number;
   name?: string;
@@ -26,6 +32,7 @@ export interface ApprovalStage {
   authorization_mode?: string;
   rejection_policy: string;
   max_checkers?: number;
+  scope?: ScopeRule[];
 }
 
 export interface Policy {
