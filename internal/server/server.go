@@ -10,6 +10,7 @@ import (
 	"github.com/lawale/quorum/internal/config"
 	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/metrics"
+	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/service"
 	"github.com/lawale/quorum/internal/sse"
 	"github.com/lawale/quorum/internal/store"
@@ -243,7 +244,7 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"data": logs})
+	writeJSON(w, http.StatusOK, model.List[model.AuditLog]{Data: logs})
 }
 
 func (s *Server) Handler() http.Handler {
