@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,10 @@ type ClaimMapping struct {
 	Roles       string
 	Permissions string
 	TenantID    string
+	// Attributes maps an attribute name to the claim (or dotted path) that
+	// carries it, e.g. {"branch_id": "branch_id"}. Only scalar claim values
+	// are read; absent claims are skipped.
+	Attributes map[string]string
 }
 
 // VerifyProviderConfig configures a VerifyProvider.
@@ -135,12 +140,38 @@ func (p *VerifyProvider) Authenticate(r *http.Request) (*Identity, error) {
 		return nil, errors.New("invalid token: missing tenant claim")
 	}
 
+	var attrs map[string]string
+	for name, path := range p.cfg.Claims.Attributes {
+		if v, ok := scalarString(claimAt(claims, path)); ok {
+			if attrs == nil {
+				attrs = make(map[string]string, len(p.cfg.Claims.Attributes))
+			}
+			attrs[name] = v
+		}
+	}
+
 	return &Identity{
 		UserID:      userID,
 		Roles:       stringList(claimAt(claims, p.cfg.Claims.Roles)),
 		Permissions: stringList(claimAt(claims, p.cfg.Claims.Permissions)),
 		TenantID:    tenantID,
+		Attributes:  attrs,
 	}, nil
+}
+
+// scalarString renders a scalar claim value as the string an attribute
+// comparison expects. Arrays and objects are not attributes and yield false.
+func scalarString(v any) (string, bool) {
+	switch x := v.(type) {
+	case string:
+		return x, x != ""
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64), true
+	case bool:
+		return strconv.FormatBool(x), true
+	default:
+		return "", false
+	}
 }
 
 func (p *VerifyProvider) keyFunc(r *http.Request) jwt.Keyfunc {

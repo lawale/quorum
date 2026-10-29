@@ -31,6 +31,7 @@ var (
 	ErrNotEligibleReviewer      = errors.New("checker is not in the eligible reviewers list")
 	ErrInvalidStage             = errors.New("request is at an invalid stage for this policy")
 	ErrMissingIdentityFields    = errors.New("missing identity field in payload")
+	ErrOutOfScope               = errors.New("checker is outside the scope of this request")
 )
 
 type RequestService struct {
@@ -128,6 +129,12 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 		if existing != nil {
 			return nil, ErrDuplicateRequest
 		}
+	}
+
+	// Capture the maker's identity attributes so stage scope rules can
+	// compare checkers against them later.
+	if req.MakerAttributes == nil {
+		req.MakerAttributes = auth.AttributesFromContext(ctx)
 	}
 
 	// Set expiry from policy
@@ -328,6 +335,11 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 		return nil, err
 	}
 
+	checkerAttributes := auth.AttributesFromContext(ctx)
+	if err := validateScope(stage, req, checkerAttributes); err != nil {
+		return nil, err
+	}
+
 	// Check eligible reviewers (per-request whitelist)
 	if len(req.EligibleReviewers) > 0 && !slices.Contains(req.EligibleReviewers, checkerID) {
 		return nil, ErrNotEligibleReviewer
@@ -336,11 +348,13 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 	// Dynamic authorization hook (external check via consuming system)
 	if policy.DynamicAuthorizationURL != nil && *policy.DynamicAuthorizationURL != "" && s.authorizationHook != nil {
 		hookReq := model.AuthorizationHookRequest{
-			RequestID:   requestID,
-			RequestType: req.Type,
-			CheckerID:   checkerID,
-			MakerID:     req.MakerID,
-			Payload:     req.Payload,
+			RequestID:         requestID,
+			RequestType:       req.Type,
+			CheckerID:         checkerID,
+			CheckerAttributes: checkerAttributes,
+			MakerID:           req.MakerID,
+			MakerAttributes:   req.MakerAttributes,
+			Payload:           req.Payload,
 		}
 		secret := ""
 		if policy.DynamicAuthorizationSecret != nil {
@@ -793,6 +807,10 @@ func (s *RequestService) CanViewerAct(ctx context.Context, req *model.Request, v
 	}
 
 	if err := validateAuthorization(stage, viewerRoles, viewerPermissions); err != nil {
+		return false
+	}
+
+	if err := validateScope(stage, req, auth.AttributesFromContext(ctx)); err != nil {
 		return false
 	}
 

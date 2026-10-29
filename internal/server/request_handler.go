@@ -214,6 +214,8 @@ func (h *RequestHandler) handleDecision(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusForbidden, err.Error())
 		case errors.Is(err, service.ErrInvalidCheckerPermission):
 			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, service.ErrOutOfScope):
+			writeError(w, http.StatusForbidden, err.Error())
 		default:
 			writeServerError(w, r, err, "failed to process decision")
 		}

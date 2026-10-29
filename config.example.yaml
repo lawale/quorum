@@ -24,6 +24,7 @@ auth:
     user_id_header: "X-User-ID"
     roles_header: "X-User-Roles"
     tenant_id_header: "X-Tenant-ID"
+    attribute_headers: {}   # identity attributes for stage scope rules, e.g. { branch_id: "X-User-Branch" }
 
   verify:
     jwks_url: ""          # e.g. https://login.example.com/realms/acme/protocol/openid-connect/certs
@@ -37,6 +38,7 @@ auth:
       roles: "roles"
       permissions: "permissions"
       tenant_id: "tenant_id"
+      attributes: {}      # identity attributes for stage scope rules, e.g. { branch_id: "branch_id", department: "org.department" }
 
   custom:
     endpoint: ""

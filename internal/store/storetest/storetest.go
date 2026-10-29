@@ -160,6 +160,38 @@ func TestRequestStore(t *testing.T, s store.RequestStore) {
 		}
 	})
 
+	t.Run("MakerAttributes roundtrip", func(t *testing.T) {
+		req := &model.Request{
+			Type:            "transfer",
+			Payload:         json.RawMessage(`{}`),
+			MakerID:         "user-1",
+			MakerAttributes: map[string]string{"branch_id": "LAG-01", "department": "ops"},
+		}
+		if err := s.Create(ctx, req); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		got, err := s.GetByID(ctx, req.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if got.MakerAttributes["branch_id"] != "LAG-01" || got.MakerAttributes["department"] != "ops" {
+			t.Errorf("MakerAttributes = %v", got.MakerAttributes)
+		}
+
+		plain := &model.Request{Type: "transfer", Payload: json.RawMessage(`{}`), MakerID: "user-2"}
+		if err := s.Create(ctx, plain); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		gotPlain, err := s.GetByID(ctx, plain.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if gotPlain.MakerAttributes != nil {
+			t.Errorf("MakerAttributes = %v, want nil", gotPlain.MakerAttributes)
+		}
+	})
+
 	t.Run("Metadata roundtrip", func(t *testing.T) {
 		meta := json.RawMessage(`{"env":"prod"}`)
 		req := &model.Request{

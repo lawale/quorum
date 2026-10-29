@@ -117,6 +117,7 @@ func main() {
 
 	// Services
 	policyService := service.NewPolicyService(stores.Policies)
+	policyService.SetKnownAttributes(cfg.Auth.Mode, configuredAttributeNames(cfg.Auth))
 	requestService := service.NewRequestService(stores.Requests, stores.Approvals, stores.Policies, stores.Audits, authorizationHook)
 	webhookService := service.NewWebhookService(stores.Webhooks)
 	tenantService := service.NewTenantService(stores.Tenants)
@@ -241,12 +242,30 @@ func main() {
 	slog.Info("server stopped")
 }
 
+// configuredAttributeNames lists the identity attribute names the active auth
+// mode can supply, used to warn about scope rules nothing will ever satisfy.
+func configuredAttributeNames(cfg config.AuthConfig) []string {
+	var src map[string]string
+	switch cfg.Mode {
+	case "trust":
+		src = cfg.Trust.AttributeHeaders
+	case "verify":
+		src = cfg.Verify.Claims.Attributes
+	}
+	names := make([]string, 0, len(src))
+	for n := range src {
+		names = append(names, n)
+	}
+	return names
+}
+
 // newAuthProvider builds the request authenticator for the configured auth mode.
 func newAuthProvider(ctx context.Context, cfg config.AuthConfig) (auth.Provider, error) {
 	switch cfg.Mode {
 	case "trust":
 		t := cfg.Trust
-		return auth.NewTrustProvider(t.UserIDHeader, t.RolesHeader, t.PermissionsHeader, t.TenantIDHeader), nil
+		return auth.NewTrustProvider(t.UserIDHeader, t.RolesHeader, t.PermissionsHeader, t.TenantIDHeader).
+			WithAttributeHeaders(t.AttributeHeaders), nil
 	case "verify":
 		v := cfg.Verify
 		return auth.NewVerifyProvider(ctx, auth.VerifyProviderConfig{

@@ -16,7 +16,7 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
+const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at, maker_attributes`
 
 type RequestStore struct {
 	db *DB
@@ -29,7 +29,7 @@ func NewRequestStore(db *DB) *RequestStore {
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
 		INSERT INTO requests (` + requestColumns + `)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
 
 	now := time.Now().UTC()
 	if req.ID == uuid.Nil {
@@ -51,10 +51,19 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 		}
 	}
 
+	var makerAttrsJSON []byte
+	if len(req.MakerAttributes) > 0 {
+		var err error
+		makerAttrsJSON, err = json.Marshal(req.MakerAttributes)
+		if err != nil {
+			return fmt.Errorf("marshaling maker attributes: %w", err)
+		}
+	}
+
 	_, err := s.db.Pool.Exec(ctx, query,
 		req.ID, req.TenantID, req.IdempotencyKey, req.Type, req.Payload, req.Status,
 		req.MakerID, eligibleJSON, req.Metadata, req.Fingerprint,
-		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
+		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt, makerAttrsJSON,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -216,12 +225,12 @@ func (s *RequestStore) ListExpired(ctx context.Context) ([]model.Request, error)
 // scanOne scans a single request row, returning nil if not found.
 func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (*model.Request, error) {
 	req := &model.Request{}
-	var eligibleJSON []byte
+	var eligibleJSON, makerAttrsJSON []byte
 
 	err := s.db.Pool.QueryRow(ctx, query, args...).Scan(
 		&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
 		&req.MakerID, &eligibleJSON, &req.Metadata, &req.Fingerprint,
-		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt, &makerAttrsJSON,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -233,6 +242,11 @@ func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (
 	if eligibleJSON != nil {
 		if err := json.Unmarshal(eligibleJSON, &req.EligibleReviewers); err != nil {
 			return nil, fmt.Errorf("unmarshaling eligible reviewers: %w", err)
+		}
+	}
+	if makerAttrsJSON != nil {
+		if err := json.Unmarshal(makerAttrsJSON, &req.MakerAttributes); err != nil {
+			return nil, fmt.Errorf("unmarshaling maker attributes: %w", err)
 		}
 	}
 
@@ -250,12 +264,12 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 	var requests []model.Request
 	for rows.Next() {
 		var req model.Request
-		var eligibleJSON []byte
+		var eligibleJSON, makerAttrsJSON []byte
 
 		if err := rows.Scan(
 			&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &req.Payload, &req.Status,
 			&req.MakerID, &eligibleJSON, &req.Metadata, &req.Fingerprint,
-			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt, &makerAttrsJSON,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning request: %w", err)
 		}
@@ -263,6 +277,11 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 		if eligibleJSON != nil {
 			if err := json.Unmarshal(eligibleJSON, &req.EligibleReviewers); err != nil {
 				return nil, 0, fmt.Errorf("unmarshaling eligible reviewers: %w", err)
+			}
+		}
+		if makerAttrsJSON != nil {
+			if err := json.Unmarshal(makerAttrsJSON, &req.MakerAttributes); err != nil {
+				return nil, 0, fmt.Errorf("unmarshaling maker attributes: %w", err)
 			}
 		}
 

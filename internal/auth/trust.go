@@ -12,6 +12,9 @@ type TrustProvider struct {
 	RolesHeader       string
 	PermissionsHeader string
 	TenantIDHeader    string
+	// AttributeHeaders maps an attribute name to the header that carries it,
+	// e.g. {"branch_id": "X-User-Branch"}. Absent headers are skipped.
+	AttributeHeaders map[string]string
 }
 
 func NewTrustProvider(userIDHeader, rolesHeader, permissionsHeader, tenantIDHeader string) *TrustProvider {
@@ -21,6 +24,12 @@ func NewTrustProvider(userIDHeader, rolesHeader, permissionsHeader, tenantIDHead
 		PermissionsHeader: permissionsHeader,
 		TenantIDHeader:    tenantIDHeader,
 	}
+}
+
+// WithAttributeHeaders configures the headers read into Identity.Attributes.
+func (p *TrustProvider) WithAttributeHeaders(headers map[string]string) *TrustProvider {
+	p.AttributeHeaders = headers
+	return p
 }
 
 func (p *TrustProvider) Authenticate(r *http.Request) (*Identity, error) {
@@ -37,11 +46,22 @@ func (p *TrustProvider) Authenticate(r *http.Request) (*Identity, error) {
 	roles := parseCommaSeparated(r.Header.Get(p.RolesHeader))
 	permissions := parseCommaSeparated(r.Header.Get(p.PermissionsHeader))
 
+	var attrs map[string]string
+	for name, header := range p.AttributeHeaders {
+		if v := strings.TrimSpace(r.Header.Get(header)); v != "" {
+			if attrs == nil {
+				attrs = make(map[string]string, len(p.AttributeHeaders))
+			}
+			attrs[name] = v
+		}
+	}
+
 	return &Identity{
 		UserID:      userID,
 		Roles:       roles,
 		Permissions: permissions,
 		TenantID:    tenantID,
+		Attributes:  attrs,
 	}, nil
 }
 

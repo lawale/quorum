@@ -48,6 +48,7 @@ Quorum pulls that logic out of your applications into one self-hosted service. Y
   - **Eligible reviewers** — Optionally restrict each request to a specific set of allowed reviewers.
   - **Role-based stage access** — Each approval stage can define which roles are allowed to act (e.g., only `manager` for Stage 1, only `compliance_officer` for Stage 2).
   - **Permission-based stage access** — Each approval stage can define which permissions are required (e.g., only users with `approve_transfers` permission for Stage 2). When both roles and permissions are configured, `authorization_mode` controls whether either suffices (`"any"`) or both are required (`"all"`).
+  - **Reviewer scoping** — Each stage can require the checker's identity attribute (such as `branch_id` or `department`) to match the maker's, or a value in the payload, so a branch manager only acts on requests from their own branch. See [Reviewer Scoping](#reviewer-scoping).
   - **External authorization checks** — Delegate to an external HTTP endpoint for custom business logic (e.g., "only managers in the same department can approve").
   - **Duplicate vote prevention** — A checker can only act once per stage.
   - **Request fingerprinting** — Configurable identity fields prevent duplicate pending requests for the same underlying resource.
@@ -313,6 +314,7 @@ Quorum enforces a layered permission model on every approval action. When a user
 | **Allowed checker roles** | Per-stage | Each approval stage can restrict which roles are permitted. The checker must hold at least one matching role. |
 | **Allowed permissions** | Per-stage | Each approval stage can restrict which permissions are required. The checker must hold at least one matching permission. |
 | **Authorization mode** | Per-stage | When both `allowed_checker_roles` and `allowed_permissions` are set, controls whether either suffices (`"any"`) or both are required (`"all"`). |
+| **Reviewer scope** | Per-stage | `scope` rules require the checker's identity attribute to equal the maker's attribute of the same name, or a value at a `payload_path`. See [Reviewer Scoping](#reviewer-scoping). |
 | **Dynamic authorization URL** | Per-policy | An external HTTP endpoint called before each approval. The endpoint receives the full request context and returns `{"allowed": true/false}`. Use this for custom business logic your domain requires. |
 | **Duplicate vote prevention** | Per-stage | A checker can only vote once per stage. They may vote on different stages of the same request. |
 | **Request fingerprinting** | Per-policy | Configurable `identity_fields` extracted from the payload and hashed. Prevents duplicate pending requests for the same resource. |
@@ -355,7 +357,7 @@ Approve/Reject Request
 
 ### Dynamic Authorization Check
 
-When a policy has a `dynamic_authorization_url`, Quorum POSTs the full request context (request ID, type, checker, maker, and payload) to your endpoint before allowing the approval. Your endpoint responds with `{"allowed": true}` or `{"allowed": false, "reason": "..."}`. This lets you implement arbitrary business rules — department separation, conflict-of-interest checks, rate limiting — without modifying Quorum.
+When a policy has a `dynamic_authorization_url`, Quorum POSTs the full request context (request ID, type, checker and maker IDs, their identity attributes, and payload) to your endpoint before allowing the approval. Your endpoint responds with `{"allowed": true}` or `{"allowed": false, "reason": "..."}`. This lets you implement arbitrary business rules — department separation, conflict-of-interest checks, rate limiting — without modifying Quorum.
 
 ---
 
@@ -595,6 +597,69 @@ Any attribute (`api-url`, `token`, `tenant-id`, `auth-headers`) set on an elemen
 **Error handling:** Set `suppress-errors` on the widget to hide inline error messages. Listen for `quorum:error` events to handle errors externally (e.g., toast notifications). The event detail includes `{ action, message, status }` where `action` is `"load"`, `"approve"`, or `"reject"`.
 
 **Events:** Widgets dispatch custom events you can listen for: `quorum:approved`, `quorum:rejected`, `quorum:select`, and `quorum:error`.
+
+### Reviewer Scoping
+
+Roles say *what kind* of person may approve. Scope says *which* of them: the manager of the same branch, a lead in the same department, the owner of the affected cost centre. Without it, every manager in the organisation can act on every branch's requests.
+
+**1. Tell Quorum which identity attributes to read.** In `trust` mode they come from headers; in `verify` mode from JWT claims. The names you choose here are the names policies refer to.
+
+```yaml
+auth:
+  trust:
+    attribute_headers:
+      branch_id: "X-User-Branch"
+  verify:
+    claims:
+      attributes:
+        branch_id: "branch_id"           # or a dotted path such as org.branch.id
+```
+
+Only scalar values are read. Quorum captures the maker's attributes on every request it creates and stores them as `maker_attributes`.
+
+**2. Add `scope` rules to a stage.**
+
+```json
+{
+  "index": 0,
+  "name": "Branch Manager",
+  "required_approvals": 1,
+  "allowed_checker_roles": ["branch_manager"],
+  "rejection_policy": "any",
+  "scope": [
+    { "attribute": "branch_id" }
+  ]
+}
+```
+
+This stage now accepts a checker only if their `branch_id` equals the maker's `branch_id`.
+
+A rule names an **attribute** and one or more **sources** of acceptable values. The checker passes the rule when their attribute equals any value the sources produce. Every rule on a stage must pass.
+
+- **`attribute`** — the identity attribute name, as configured above. Required.
+- **`match_maker`** — accept the maker's attribute of the same name, captured when the request was created. This is the default when no other source is given.
+- **`payload_path`** — accept the value at a dot-notation path in the request payload, for example `"destination_branch_id"`. Use this when a stage belongs to a branch other than the maker's.
+- **`values`** — accept any of a fixed list, for example `["HQ"]`.
+- **`allow_unscoped_checkers`** — when `true`, a checker who has no value for the attribute at all may act on any request. A checker who *does* have the attribute is still held to it. Defaults to `false`.
+
+Because scope is per stage, a request can travel between branches:
+
+```json
+"stages": [
+  { "index": 0, "name": "Originating branch", "required_approvals": 1, "rejection_policy": "any",
+    "scope": [{ "attribute": "branch_id" }] },
+  { "index": 1, "name": "Receiving branch or head office", "required_approvals": 1, "rejection_policy": "any",
+    "scope": [{ "attribute": "branch_id", "payload_path": "destination_branch_id", "values": ["HQ"] }] }
+]
+```
+
+Stage 0 is reviewed in the maker's branch. Stage 1 is reviewed by the branch named in the payload, or by head office.
+
+Attribute names in a policy must match the names configured in step 1. Saving a policy whose scope rules reference an attribute the active auth mode does not supply still succeeds, but the response carries a `warnings` array (and the console shows it) explaining that the stage can never be approved as configured.
+
+Rules fail closed: if no source yields a value, because the maker had no such attribute and the payload path is missing, the checker is out of scope. Out-of-scope decisions return `403`, and `viewer_can_act` on a request reflects the scope check so widgets hide the buttons.
+
+Both sets of attributes are also passed to the [dynamic authorization URL](#permission-guards) as `maker_attributes` and `checker_attributes`, so an external check can build on them.
 
 ### Display Templates
 

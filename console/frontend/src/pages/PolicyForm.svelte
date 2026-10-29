@@ -77,6 +77,9 @@
             mode = 'permission';
           }
         }
+        (stage.scope || []).forEach((rule, j) => {
+          scopeValuesText[scopeKey(stage.index, j)] = (rule.values || []).join(', ');
+        });
         return { ...stage, authorization_mode: mode };
       });
       identityFields = (p.identity_fields || []).join(', ');
@@ -137,6 +140,38 @@
     stages[stageIdx].allowed_permissions = [...perms, p];
   }
 
+  // Fixed values are edited as one comma-separated string per rule.
+  let scopeValuesText: Record<string, string> = $state({});
+
+  function scopeKey(stageIdx: number, ruleIdx: number) {
+    return `${stageIdx}:${ruleIdx}`;
+  }
+
+  function addScopeRule(stageIdx: number) {
+    const rules = stages[stageIdx].scope || [];
+    scopeValuesText[scopeKey(stageIdx, rules.length)] = '';
+    stages[stageIdx].scope = [...rules, { attribute: '', match_maker: true, payload_path: '', values: [], allow_unscoped_checkers: false }];
+  }
+
+  function parseScopeValues(text: string): string[] {
+    return text.split(',').map((v) => v.trim()).filter(Boolean);
+  }
+
+  function removeScopeRule(stageIdx: number, ruleIdx: number) {
+    const rules = (stages[stageIdx].scope || []).filter((_, i) => i !== ruleIdx);
+    stages[stageIdx].scope = rules;
+    // Re-key the values text to follow the remaining rules.
+    const next: Record<string, string> = {};
+    for (const [k, v] of Object.entries(scopeValuesText)) {
+      const [s, r] = k.split(':').map(Number);
+      if (s !== stageIdx) next[k] = v;
+      else if (r < ruleIdx) next[k] = v;
+      else if (r > ruleIdx) next[scopeKey(s, r - 1)] = v;
+    }
+    scopeValuesText = next;
+    clearFieldError(`stage_${stageIdx}_scope_${ruleIdx}`);
+  }
+
   function removePermission(stageIdx: number, perm: string) {
     stages[stageIdx].allowed_permissions = (stages[stageIdx].allowed_permissions || []).filter(p => p !== perm);
   }
@@ -188,6 +223,13 @@
       if ((mode === 'any' || mode === 'all') && !hasPerms) {
         validationErrors[`stage_${i}_perms`] = 'At least one permission is required';
       }
+      (stages[i].scope || []).forEach((rule, j) => {
+        if (!rule.attribute.trim()) {
+          validationErrors[`stage_${i}_scope_${j}`] = 'Attribute name is required';
+        } else if (!rule.match_maker && !rule.payload_path?.trim() && parseScopeValues(scopeValuesText[scopeKey(i, j)] || '').length === 0) {
+          validationErrors[`stage_${i}_scope_${j}`] = "Pick at least one source: maker's value, a payload path, or fixed values";
+        }
+      });
     }
 
     if (identityFields.trim()) {
@@ -244,6 +286,18 @@
           allowed_permissions: wantsPerms && s.allowed_permissions?.length ? s.allowed_permissions : undefined,
           authorization_mode: mode || undefined,
           max_checkers: s.rejection_policy === 'threshold' ? s.max_checkers : undefined,
+          scope: s.scope?.length
+            ? s.scope.map((r, j) => {
+                const values = parseScopeValues(scopeValuesText[scopeKey(i, j)] || '');
+                return {
+                  attribute: r.attribute.trim(),
+                  match_maker: r.match_maker || undefined,
+                  payload_path: r.payload_path?.trim() || undefined,
+                  values: values.length ? values : undefined,
+                  allow_unscoped_checkers: r.allow_unscoped_checkers || undefined,
+                };
+              })
+            : undefined,
         };
       }),
     };
@@ -267,19 +321,23 @@
     }
 
     try {
+      let saved: Policy | undefined;
       if (isEdit && id) {
-        await policiesApi.update(id, payload);
+        saved = await policiesApi.update(id, payload);
         addToast('Policy updated', 'success');
       } else {
         // Temporarily set the global tenant to the form selection for the create call
         const previousTenant = get(selectedTenant);
         if (formTenantId) selectedTenant.set(formTenantId);
         try {
-          await policiesApi.create(payload);
+          saved = await policiesApi.create(payload);
         } finally {
           selectedTenant.set(previousTenant);
         }
         addToast('Policy created', 'success');
+      }
+      for (const w of saved?.warnings ?? []) {
+        addToast(w, 'error', 10000);
       }
       window.location.hash = '#/policies';
     } catch (err) {
@@ -544,6 +602,63 @@
                     {/if}
                   </div>
                 {/if}
+              </div>
+
+              <!-- Reviewer Scope -->
+              <div class="mt-4 pt-4 border-t border-outline-variant/10">
+                <div class="flex items-center justify-between mb-2">
+                  <div>
+                    <span class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Reviewer Scope</span>
+                    <p class="text-xs text-on-surface-variant mt-1">Require the checker's identity attribute to equal the maker's value, a value in the payload, or a fixed value. A rule passes on any match; all rules must pass.</p>
+                  </div>
+                  <button type="button" onclick={() => addScopeRule(i)} class="px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-container text-on-surface border border-outline-variant/30 hover:bg-surface-container-high transition-colors">+ Add rule</button>
+                </div>
+                {#each (stage.scope || []) as rule, j}
+                  <div class="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-start mt-2">
+                    <div>
+                      <input
+                        type="text"
+                        placeholder="Attribute, e.g. branch_id"
+                        bind:value={rule.attribute}
+                        oninput={() => clearFieldError(`stage_${i}_scope_${j}`)}
+                        aria-label="Scope attribute"
+                        class="w-full px-3 py-2 text-sm border rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary {validationErrors[`stage_${i}_scope_${j}`] ? 'border-status-rejected-text/30' : 'border-outline-variant/40'}"
+                      />
+                      {#if validationErrors[`stage_${i}_scope_${j}`]}
+                        <p class="mt-1 text-xs text-status-rejected-text">{validationErrors[`stage_${i}_scope_${j}`]}</p>
+                      {/if}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Payload path, e.g. destination_branch_id"
+                      bind:value={rule.payload_path}
+                      oninput={() => clearFieldError(`stage_${i}_scope_${j}`)}
+                      aria-label="Scope payload path"
+                      class="w-full px-3 py-2 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Fixed values, e.g. HQ, REGIONAL"
+                      bind:value={scopeValuesText[scopeKey(i, j)]}
+                      oninput={() => clearFieldError(`stage_${i}_scope_${j}`)}
+                      aria-label="Scope fixed values"
+                      class="w-full px-3 py-2 text-sm border border-outline-variant/40 rounded-lg bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <button type="button" onclick={() => removeScopeRule(i, j)} class="p-2 text-on-surface-variant hover:text-status-rejected-text transition-colors" aria-label="Remove scope rule">
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                    <div class="col-span-4 flex flex-wrap gap-5 -mt-1">
+                      <label class="flex items-center gap-2 text-xs text-on-surface-variant">
+                        <input type="checkbox" bind:checked={rule.match_maker} onchange={() => clearFieldError(`stage_${i}_scope_${j}`)} class="rounded border-outline-variant/40" />
+                        Match the maker's value
+                      </label>
+                      <label class="flex items-center gap-2 text-xs text-on-surface-variant">
+                        <input type="checkbox" bind:checked={rule.allow_unscoped_checkers} class="rounded border-outline-variant/40" />
+                        Allow checkers without this attribute
+                      </label>
+                    </div>
+                  </div>
+                {/each}
               </div>
             </div>
           {/each}

@@ -50,6 +50,7 @@ func setupMSSQL(t *testing.T) *mssql.DB {
 		"006_create_audit_logs.up.sql",
 		"007_create_operators.up.sql",
 		"008_create_webhook_outbox.up.sql",
+		"009_add_maker_attributes.up.sql",
 	}
 
 	migDB, err := sql.Open("sqlserver", connStr)

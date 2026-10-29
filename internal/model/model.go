@@ -36,23 +36,26 @@ const (
 )
 
 type Request struct {
-	ID                uuid.UUID       `json:"id"`
-	TenantID          string          `json:"tenant_id"`
-	IdempotencyKey    *string         `json:"idempotency_key,omitempty"`
-	Type              string          `json:"type"`
-	Payload           json.RawMessage `json:"payload"`
-	Status            RequestStatus   `json:"status"`
-	MakerID           string          `json:"maker_id"`
-	EligibleReviewers []string        `json:"eligible_reviewers,omitempty"`
-	Metadata          json.RawMessage `json:"metadata,omitempty"`
-	Fingerprint       *string         `json:"fingerprint,omitempty"`
-	CurrentStage      int             `json:"current_stage"`
-	ExpiresAt         *time.Time      `json:"expires_at,omitempty"`
-	CreatedAt         time.Time       `json:"created_at"`
-	UpdatedAt         time.Time       `json:"updated_at"`
-	Approvals         []Approval      `json:"approvals,omitempty"`
-	ViewerCanAct      *bool           `json:"viewer_can_act,omitempty"`
-	TotalStages       *int            `json:"total_stages,omitempty"`
+	ID             uuid.UUID       `json:"id"`
+	TenantID       string          `json:"tenant_id"`
+	IdempotencyKey *string         `json:"idempotency_key,omitempty"`
+	Type           string          `json:"type"`
+	Payload        json.RawMessage `json:"payload"`
+	Status         RequestStatus   `json:"status"`
+	MakerID        string          `json:"maker_id"`
+	// MakerAttributes are the maker's identity attributes captured at creation
+	// (for example branch_id). Stage scope rules compare checkers against them.
+	MakerAttributes   map[string]string `json:"maker_attributes,omitempty"`
+	EligibleReviewers []string          `json:"eligible_reviewers,omitempty"`
+	Metadata          json.RawMessage   `json:"metadata,omitempty"`
+	Fingerprint       *string           `json:"fingerprint,omitempty"`
+	CurrentStage      int               `json:"current_stage"`
+	ExpiresAt         *time.Time        `json:"expires_at,omitempty"`
+	CreatedAt         time.Time         `json:"created_at"`
+	UpdatedAt         time.Time         `json:"updated_at"`
+	Approvals         []Approval        `json:"approvals,omitempty"`
+	ViewerCanAct      *bool             `json:"viewer_can_act,omitempty"`
+	TotalStages       *int              `json:"total_stages,omitempty"`
 }
 
 type Approval struct {
@@ -74,6 +77,27 @@ const (
 	AuthModeAll        AuthorizationMode = "all"
 )
 
+// ScopeRule restricts a stage to checkers whose identity attribute equals one
+// of the values the rule's sources produce. A rule may draw from the maker's
+// attribute of the same name (captured at creation), from a dot-notation path
+// into the payload, and from fixed values; it passes when the checker matches
+// any of them. When no source is set the rule matches the maker. Multiple
+// rules on a stage must all pass.
+type ScopeRule struct {
+	Attribute   string   `json:"attribute"`
+	MatchMaker  bool     `json:"match_maker,omitempty"`
+	PayloadPath string   `json:"payload_path,omitempty"`
+	Values      []string `json:"values,omitempty"`
+	// AllowUnscopedCheckers lets a checker who has no value for the attribute
+	// (for example a head-office user with no branch) act on any request.
+	AllowUnscopedCheckers bool `json:"allow_unscoped_checkers,omitempty"`
+}
+
+// HasSource reports whether the rule names at least one source of expected values.
+func (r ScopeRule) HasSource() bool {
+	return r.MatchMaker || r.PayloadPath != "" || len(r.Values) > 0
+}
+
 type ApprovalStage struct {
 	Index               int               `json:"index"`
 	Name                string            `json:"name,omitempty"`
@@ -83,6 +107,7 @@ type ApprovalStage struct {
 	AuthorizationMode   AuthorizationMode `json:"authorization_mode,omitempty"`
 	RejectionPolicy     RejectionPolicy   `json:"rejection_policy"`
 	MaxCheckers         *int              `json:"max_checkers,omitempty"`
+	Scope               []ScopeRule       `json:"scope,omitempty"`
 }
 
 type Policy struct {
@@ -98,6 +123,10 @@ type Policy struct {
 	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
 	CreatedAt                  time.Time       `json:"created_at"`
 	UpdatedAt                  time.Time       `json:"updated_at"`
+	// Warnings are advisory notes produced when a policy is saved, such as a
+	// scope rule naming an identity attribute the auth mode does not provide.
+	// They are returned to the caller and never stored.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // StageAt returns the approval stage at the given index, or nil if out of range.
@@ -114,11 +143,13 @@ func (p *Policy) TotalStages() int {
 }
 
 type AuthorizationHookRequest struct {
-	RequestID   uuid.UUID       `json:"request_id"`
-	RequestType string          `json:"request_type"`
-	CheckerID   string          `json:"checker_id"`
-	MakerID     string          `json:"maker_id"`
-	Payload     json.RawMessage `json:"payload"`
+	RequestID         uuid.UUID         `json:"request_id"`
+	RequestType       string            `json:"request_type"`
+	CheckerID         string            `json:"checker_id"`
+	CheckerAttributes map[string]string `json:"checker_attributes,omitempty"`
+	MakerID           string            `json:"maker_id"`
+	MakerAttributes   map[string]string `json:"maker_attributes,omitempty"`
+	Payload           json.RawMessage   `json:"payload"`
 }
 
 type AuthorizationHookResponse struct {

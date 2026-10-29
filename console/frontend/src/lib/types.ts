@@ -17,6 +17,14 @@ export interface Operator {
   updated_at: string;
 }
 
+export interface ScopeRule {
+  attribute: string;
+  match_maker?: boolean;
+  payload_path?: string;
+  values?: string[];
+  allow_unscoped_checkers?: boolean;
+}
+
 export interface ApprovalStage {
   index: number;
   name?: string;
@@ -26,6 +34,7 @@ export interface ApprovalStage {
   authorization_mode?: string;
   rejection_policy: string;
   max_checkers?: number;
+  scope?: ScopeRule[];
 }
 
 export interface Policy {
@@ -41,6 +50,7 @@ export interface Policy {
   display_template?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  warnings?: string[];
 }
 
 export interface Webhook {

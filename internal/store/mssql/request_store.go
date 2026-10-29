@@ -14,7 +14,7 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at`
+const requestColumns = `id, tenant_id, idempotency_key, type, payload, status, maker_id, eligible_reviewers, metadata, fingerprint, current_stage, expires_at, created_at, updated_at, maker_attributes`
 
 type RequestStore struct {
 	db *DB
@@ -27,7 +27,7 @@ func NewRequestStore(db *DB) *RequestStore {
 func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 	query := `
 		INSERT INTO [quorum].[requests] (` + requestColumns + `)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14)`
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13, @p14, @p15)`
 
 	now := time.Now().UTC()
 	if req.ID == uuid.Nil {
@@ -49,10 +49,19 @@ func (s *RequestStore) Create(ctx context.Context, req *model.Request) error {
 		}
 	}
 
+	var makerAttrsJSON []byte
+	if len(req.MakerAttributes) > 0 {
+		var err error
+		makerAttrsJSON, err = json.Marshal(req.MakerAttributes)
+		if err != nil {
+			return fmt.Errorf("marshaling maker attributes: %w", err)
+		}
+	}
+
 	_, err := s.db.Pool.ExecContext(ctx, query,
 		req.ID, req.TenantID, req.IdempotencyKey, req.Type, string(req.Payload), req.Status,
 		req.MakerID, nullableString(eligibleJSON), nullableString(req.Metadata), req.Fingerprint,
-		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt,
+		req.CurrentStage, req.ExpiresAt, req.CreatedAt, req.UpdatedAt, nullableString(makerAttrsJSON),
 	)
 	if err != nil {
 		if isDuplicateKeyError(err) {
@@ -215,12 +224,12 @@ func (s *RequestStore) ListExpired(ctx context.Context) ([]model.Request, error)
 // scanOne scans a single request row, returning nil if not found.
 func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (*model.Request, error) {
 	req := &model.Request{}
-	var eligibleJSON, payload, metadata sql.NullString
+	var eligibleJSON, payload, metadata, makerAttrsJSON sql.NullString
 
 	err := s.db.Pool.QueryRowContext(ctx, query, args...).Scan(
 		&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
 		&req.MakerID, &eligibleJSON, &metadata, &req.Fingerprint,
-		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+		&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt, &makerAttrsJSON,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -240,6 +249,11 @@ func (s *RequestStore) scanOne(ctx context.Context, query string, args ...any) (
 			return nil, fmt.Errorf("unmarshaling eligible reviewers: %w", err)
 		}
 	}
+	if makerAttrsJSON.Valid {
+		if err := json.Unmarshal([]byte(makerAttrsJSON.String), &req.MakerAttributes); err != nil {
+			return nil, fmt.Errorf("unmarshaling maker attributes: %w", err)
+		}
+	}
 
 	return req, nil
 }
@@ -255,12 +269,12 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 	var requests []model.Request
 	for rows.Next() {
 		var req model.Request
-		var eligibleJSON, payload, metadata sql.NullString
+		var eligibleJSON, payload, metadata, makerAttrsJSON sql.NullString
 
 		if err := rows.Scan(
 			&req.ID, &req.TenantID, &req.IdempotencyKey, &req.Type, &payload, &req.Status,
 			&req.MakerID, &eligibleJSON, &metadata, &req.Fingerprint,
-			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt,
+			&req.CurrentStage, &req.ExpiresAt, &req.CreatedAt, &req.UpdatedAt, &makerAttrsJSON,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scanning request: %w", err)
 		}
@@ -274,6 +288,11 @@ func (s *RequestStore) scanMany(ctx context.Context, query string, args ...any) 
 		if eligibleJSON.Valid {
 			if err := json.Unmarshal([]byte(eligibleJSON.String), &req.EligibleReviewers); err != nil {
 				return nil, 0, fmt.Errorf("unmarshaling eligible reviewers: %w", err)
+			}
+		}
+		if makerAttrsJSON.Valid {
+			if err := json.Unmarshal([]byte(makerAttrsJSON.String), &req.MakerAttributes); err != nil {
+				return nil, 0, fmt.Errorf("unmarshaling maker attributes: %w", err)
 			}
 		}
 
