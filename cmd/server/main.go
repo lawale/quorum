@@ -170,20 +170,12 @@ func main() {
 	tenantService.StartCacheRefresh(appCtx, cfg.Tenant.CacheRefreshInterval)
 
 	// Auth provider
-	var authProvider auth.Provider
-	switch cfg.Auth.Mode {
-	case "trust":
-		authProvider = auth.NewTrustProvider(cfg.Auth.Trust.UserIDHeader, cfg.Auth.Trust.RolesHeader, cfg.Auth.Trust.PermissionsHeader, cfg.Auth.Trust.TenantIDHeader)
-	case "verify":
-		slog.Error("auth mode \"verify\" is not yet implemented")
-		os.Exit(1)
-	case "custom":
-		slog.Error("auth mode \"custom\" is not yet implemented")
-		os.Exit(1)
-	default:
-		slog.Error("unknown auth mode", "mode", cfg.Auth.Mode)
+	authProvider, err := newAuthProvider(appCtx, cfg.Auth)
+	if err != nil {
+		slog.Error("configuring auth", "error", err)
 		os.Exit(1)
 	}
+	slog.Info("auth configured", "mode", cfg.Auth.Mode)
 
 	// Operator service for admin console (optional)
 	var operatorService *service.OperatorService
@@ -247,4 +239,28 @@ func main() {
 	}
 
 	slog.Info("server stopped")
+}
+
+// newAuthProvider builds the request authenticator for the configured auth mode.
+func newAuthProvider(ctx context.Context, cfg config.AuthConfig) (auth.Provider, error) {
+	switch cfg.Mode {
+	case "trust":
+		t := cfg.Trust
+		return auth.NewTrustProvider(t.UserIDHeader, t.RolesHeader, t.PermissionsHeader, t.TenantIDHeader), nil
+	case "verify":
+		v := cfg.Verify
+		return auth.NewVerifyProvider(ctx, auth.VerifyProviderConfig{
+			JWKSURL:         v.JWKSURL,
+			JWKSRefresh:     v.JWKSRefresh,
+			Issuer:          v.Issuer,
+			Audience:        v.Audience,
+			Claims:          auth.ClaimMapping(v.Claims),
+			ClockSkew:       v.ClockSkew,
+			DefaultTenantID: v.DefaultTenantID,
+		})
+	case "custom":
+		return nil, errors.New("auth mode \"custom\" is not yet implemented")
+	default:
+		return nil, fmt.Errorf("unknown auth mode %q", cfg.Mode)
+	}
 }
