@@ -59,12 +59,14 @@ func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
 func (i *testIssuer) jwks(kid string) []byte {
 	pub := i.rsaKey.PublicKey
-	ec := i.ecKey.PublicKey
+	// Uncompressed SEC 1 point: 0x04 || X (32 bytes) || Y (32 bytes).
+	ecPoint, _ := i.ecKey.PublicKey.Bytes()
+	ecX, ecY := ecPoint[1:33], ecPoint[33:65]
 	set := map[string]any{"keys": []map[string]any{
 		{"kty": "RSA", "kid": kid, "use": "sig", "alg": "RS256",
 			"n": b64(pub.N.Bytes()), "e": b64(big.NewInt(int64(pub.E)).Bytes())},
 		{"kty": "EC", "kid": kid + "-ec", "use": "sig", "crv": "P-256",
-			"x": b64(ec.X.FillBytes(make([]byte, 32))), "y": b64(ec.Y.FillBytes(make([]byte, 32)))},
+			"x": b64(ecX), "y": b64(ecY)},
 		{"kty": "RSA", "kid": "enc-key", "use": "enc", "n": b64(pub.N.Bytes()), "e": "AQAB"},
 	}}
 	b, _ := json.Marshal(set)
