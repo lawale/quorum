@@ -14,9 +14,10 @@ import (
 // Template defines a display template stored on a policy.
 // It maps payload fields to human-readable labels with optional formatting.
 type Template struct {
-	Title  string          `json:"title,omitempty"`
-	Fields []TemplateField `json:"fields"`
-	Items  *TemplateItems  `json:"items,omitempty"`
+	Title   string           `json:"title,omitempty"`
+	Fields  []TemplateField  `json:"fields"`
+	Items   *TemplateItems   `json:"items,omitempty"`
+	Changes *TemplateChanges `json:"changes,omitempty"`
 }
 
 // TemplateField maps a label to a dot-notation path into the payload.
@@ -33,11 +34,31 @@ type TemplateItems struct {
 	Fields    []TemplateField `json:"fields"`
 }
 
+// TemplateChanges describes a request that proposes a change to an existing
+// entity. CurrentPath and ProposedPath point at the before and after snapshots
+// inside the payload. Fields selects which attributes to compare; when omitted,
+// every leaf attribute present in either snapshot is compared.
+type TemplateChanges struct {
+	CurrentPath  string          `json:"current_path"`
+	ProposedPath string          `json:"proposed_path"`
+	Fields       []TemplateField `json:"fields,omitempty"`
+}
+
 // Resolved is the output stored in metadata.display after template resolution.
 type Resolved struct {
-	Title  string          `json:"title,omitempty"`
-	Fields []ResolvedField `json:"fields"`
-	Items  []ResolvedItem  `json:"items,omitempty"`
+	Title   string           `json:"title,omitempty"`
+	Fields  []ResolvedField  `json:"fields"`
+	Items   []ResolvedItem   `json:"items,omitempty"`
+	Changes []ResolvedChange `json:"changes,omitempty"`
+}
+
+// ResolvedChange is one attribute compared across the current and proposed
+// snapshots. Changed is true when the underlying values differ.
+type ResolvedChange struct {
+	Label   string `json:"label"`
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Changed bool   `json:"changed"`
 }
 
 // ResolvedField is a label-value pair.
@@ -69,8 +90,8 @@ func ValidateTemplate(raw json.RawMessage) error {
 		return fmt.Errorf("invalid display_template JSON: %w", err)
 	}
 
-	if t.Title == "" && len(t.Fields) == 0 && t.Items == nil {
-		return fmt.Errorf("display_template must have at least a title, fields, or items")
+	if t.Title == "" && len(t.Fields) == 0 && t.Items == nil && t.Changes == nil {
+		return fmt.Errorf("display_template must have at least a title, fields, items, or changes")
 	}
 
 	for i, f := range t.Fields {
@@ -102,6 +123,29 @@ func ValidateTemplate(raw json.RawMessage) error {
 		}
 	}
 
+	if t.Changes != nil {
+		if t.Changes.CurrentPath == "" {
+			return fmt.Errorf("display_template changes: current_path is required")
+		}
+		if t.Changes.ProposedPath == "" {
+			return fmt.Errorf("display_template changes: proposed_path is required")
+		}
+		if t.Changes.CurrentPath == t.Changes.ProposedPath {
+			return fmt.Errorf("display_template changes: current_path and proposed_path must differ")
+		}
+		for i, f := range t.Changes.Fields {
+			if f.Label == "" {
+				return fmt.Errorf("display_template changes.fields[%d]: label is required", i)
+			}
+			if f.Path == "" {
+				return fmt.Errorf("display_template changes.fields[%d]: path is required", i)
+			}
+			if f.Format != "" && !validFormatters[f.Format] {
+				return fmt.Errorf("display_template changes.fields[%d]: unknown format %q (valid: currency, date, number, truncate)", i, f.Format)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -117,7 +161,7 @@ func Resolve(tmpl json.RawMessage, payload json.RawMessage) (json.RawMessage, er
 		return nil, fmt.Errorf("parsing display template: %w", err)
 	}
 
-	if len(t.Fields) == 0 && t.Title == "" && t.Items == nil {
+	if len(t.Fields) == 0 && t.Title == "" && t.Items == nil && t.Changes == nil {
 		return nil, nil
 	}
 
@@ -133,6 +177,10 @@ func Resolve(tmpl json.RawMessage, payload json.RawMessage) (json.RawMessage, er
 
 	if t.Items != nil {
 		resolved.Items = resolveItems(t.Items, data)
+	}
+
+	if t.Changes != nil {
+		resolved.Changes = resolveChanges(t.Changes, data)
 	}
 
 	out, err := json.Marshal(resolved)

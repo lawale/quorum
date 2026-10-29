@@ -151,10 +151,18 @@ export interface ResolvedItem {
   fields: ResolvedField[];
 }
 
+export interface ResolvedChange {
+  label: string;
+  from: string;
+  to: string;
+  changed: boolean;
+}
+
 export interface ResolvedDisplay {
   title?: string;
   fields: ResolvedField[];
   items?: ResolvedItem[];
+  changes?: ResolvedChange[];
 }
 
 export function getDisplay(metadata?: Record<string, unknown>): ResolvedDisplay | null {

@@ -80,7 +80,7 @@ Full detail panel for a single request. Shows status, stage progress, a formatte
 | `sse` | `true` | Set to `"false"` to disable Server-Sent Events and poll only |
 | `suppress-errors` | | When present, hides inline error messages |
 
-The Payload tab shows a label-value view when the request carries [display template](https://github.com/lawale/quorum#display-templates) metadata, with a toggle to the raw JSON.
+The Payload tab shows a label-value view when the request carries [display template](https://github.com/lawale/quorum#display-templates) metadata, with a toggle to the raw JSON. When the template defines a `changes` block, it also renders a before/after table (styleable via `::part(changes)`) with changed values highlighted.
 
 ### `<quorum-request-list>`
 
