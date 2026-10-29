@@ -250,7 +250,7 @@ const EventReviewRequested = "review_requested"
 const (
 	ReviewReasonCreated             = "created"
 	ReviewReasonStageAdvanced       = "stage_advanced"
-	ReviewReasonBypassLimitExceeded = "bypass_limit_exceeded"
+	ReviewReasonBypassLimitExceeded = "bypass_limit_exceeded" //nolint:gosec // G101: a reason label; "pass" in Bypass trips the credential heuristic
 )
 
 // ReviewRequest describes the reviewers a stage is waiting on. Quorum has no
