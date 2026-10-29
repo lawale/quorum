@@ -48,6 +48,7 @@ Quorum pulls that logic out of your applications into one self-hosted service. Y
   - **Eligible reviewers** — Optionally restrict each request to a specific set of allowed reviewers.
   - **Role-based stage access** — Each approval stage can define which roles are allowed to act (e.g., only `manager` for Stage 1, only `compliance_officer` for Stage 2).
   - **Permission-based stage access** — Each approval stage can define which permissions are required (e.g., only users with `approve_transfers` permission for Stage 2). When both roles and permissions are configured, `authorization_mode` controls whether either suffices (`"any"`) or both are required (`"all"`).
+  - **Bypass rules** — Declare which requests need no review at all, such as a root admin's own changes or transfers under a threshold. Matching requests are approved on creation, with the rule recorded in the audit trail. See [Bypass Rules](#bypass-rules).
   - **Reviewer scoping** — Each stage can require the checker's identity attribute (such as `branch_id` or `department`) to match the maker's, or a value in the payload, so a branch manager only acts on requests from their own branch. See [Reviewer Scoping](#reviewer-scoping).
   - **External authorization checks** — Delegate to an external HTTP endpoint for custom business logic (e.g., "only managers in the same department can approve").
   - **Duplicate vote prevention** — A checker can only act once per stage.
@@ -318,6 +319,7 @@ Quorum enforces a layered permission model on every approval action. When a user
 | **Dynamic authorization URL** | Per-policy | An external HTTP endpoint called before each approval. The endpoint receives the full request context and returns `{"allowed": true/false}`. Use this for custom business logic your domain requires. |
 | **Duplicate vote prevention** | Per-stage | A checker can only vote once per stage. They may vote on different stages of the same request. |
 | **Request fingerprinting** | Per-policy | Configurable `identity_fields` extracted from the payload and hashed. Prevents duplicate pending requests for the same resource. |
+| **Bypass rules** | Per-policy | `bypass_rules` describe requests that need no review. A matching request is approved on creation and audited as `bypassed`. See [Bypass Rules](#bypass-rules). |
 
 ```
 Approve/Reject Request
@@ -597,6 +599,65 @@ Any attribute (`api-url`, `token`, `tenant-id`, `auth-headers`) set on an elemen
 **Error handling:** Set `suppress-errors` on the widget to hide inline error messages. Listen for `quorum:error` events to handle errors externally (e.g., toast notifications). The event detail includes `{ action, message, status }` where `action` is `"load"`, `"approve"`, or `"reject"`.
 
 **Events:** Widgets dispatch custom events you can listen for: `quorum:approved`, `quorum:rejected`, `quorum:select`, and `quorum:error`.
+
+### Bypass Rules
+
+Not everything needs a second pair of eyes. A root administrator correcting a branch address, or a transfer under a small threshold, usually goes straight through in a hand-rolled maker-checker, and that exemption lives in code where nobody can see it. Quorum makes it policy.
+
+```json
+"bypass_rules": [
+  {
+    "name": "root admin",
+    "maker_roles": ["root_admin"]
+  },
+  {
+    "name": "small internal transfer",
+    "maker_attributes": { "branch_id": ["HQ"] },
+    "payload": [
+      { "path": "amount",   "op": "lt", "value": 1000 },
+      { "path": "currency", "op": "in", "value": ["NGN", "GHS"] }
+    ]
+  }
+]
+```
+
+When a request is created, Quorum tries the rules in order. A rule matches when **every** condition it specifies holds:
+
+- **`maker_roles`** — the maker holds at least one of these roles.
+- **`maker_permissions`** — the maker holds at least one of these permissions.
+- **`maker_attributes`** — for each attribute listed, the maker's value is one of the allowed values. Attributes come from the same configuration as [Reviewer Scoping](#reviewer-scoping).
+- **`payload`** — every condition is true for the request payload. `op` is one of `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`. Ordering operators compare numbers only; `in` takes an array. A missing path never satisfies a condition, including `ne`.
+
+A rule must specify at least one condition; an empty rule is rejected, since it would bypass everything.
+
+**Velocity limits.** A threshold on its own invites structuring: anyone who learns that transfers under 1,000 skip review will send 900 five times. Give the rule `limits` and it stops matching once recent activity is too high:
+
+```json
+{
+  "name": "small internal transfer",
+  "payload": [ { "path": "amount", "op": "lt", "value": 1000 } ],
+  "limits": [
+    { "window": "24h", "max_count": 3 },
+    { "window": "24h", "max_sum": { "path": "amount", "value": 2500 } },
+    { "window": "7d",  "max_sum": { "path": "amount", "value": 5000 }, "group_by": ["payload:destination_account"] }
+  ]
+}
+```
+
+- **`window`** — how far back to look. Go durations such as `24h` or `90m`, plus a `d` suffix for days.
+- **`max_count`** — the most requests allowed in the window, counting the one being created.
+- **`max_sum`** — the most a numeric payload field may total across the window, again including the new request. Numeric strings are accepted.
+- **`group_by`** — what makes two requests "the same activity". Defaults to `["maker"]`. Add `payload:<path>` entries to group by a payload value instead of, or as well as, the maker. The third limit above catches five different people each sending 900 to one destination account.
+
+Every request of the policy's type in the window counts, whatever its status and whether or not it was bypassed. When any limit would be exceeded the rule does not match and Quorum tries the next rule; if none matches, the request goes through the normal stages. Bypass fails safe into review, never into rejection, and a database error during the check is treated the same way.
+
+When a limit is what sent a request to review, Quorum writes `metadata.bypass_limit_exceeded` with the rule, window, measure, observed value and limit, and records a `bypass_limit_exceeded` audit entry. The console and the approval panel widget show this as a notice above the request, so the reviewer knows they are looking at the fourth transfer today rather than just another 900.
+
+Limits make a bypass threshold safe to offer. They are not transaction monitoring: patterns across request types or tenants, or over months, belong in the AML tooling behind your application. Quorum's job is to make sure that when the pattern is visible at approval time, a human sees it.
+
+On the first match the request is created and approved in one step. No approval rows are written. The audit log records `created` followed by `bypassed` with the rule name, the usual `approved` webhooks fire, and SSE subscribers are notified. The response to the create call already carries `"status": "approved"`, so your application can act immediately. Requests that match no rule proceed through the stages as normal.
+
+Bypass applies to the whole policy, not to a stage. If what you want is "head office may approve any branch's request", that is a [scope](#reviewer-scoping) rule on the stage, not a bypass.
 
 ### Reviewer Scoping
 

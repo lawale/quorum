@@ -22,6 +22,14 @@ type MockRequestStore struct {
 	UpdateStatusFunc             func(ctx context.Context, id uuid.UUID, status model.RequestStatus) error
 	UpdateStageAndStatusFunc     func(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error
 	ListExpiredFunc              func(ctx context.Context) ([]model.Request, error)
+	ListRecentByTypeFunc         func(ctx context.Context, reqType string, since time.Time, makerID string) ([]model.Request, error)
+}
+
+func (m *MockRequestStore) ListRecentByType(ctx context.Context, reqType string, since time.Time, makerID string) ([]model.Request, error) {
+	if m.ListRecentByTypeFunc != nil {
+		return m.ListRecentByTypeFunc(ctx, reqType, since, makerID)
+	}
+	return nil, nil
 }
 
 func (m *MockRequestStore) Create(ctx context.Context, req *model.Request) error {

@@ -160,6 +160,46 @@ func TestRequestStore(t *testing.T, s store.RequestStore) {
 		}
 	})
 
+	t.Run("ListRecentByType", func(t *testing.T) {
+		rt := "recent-" + uuid.NewString()
+		mk := func(maker string) *model.Request {
+			r := &model.Request{Type: rt, Payload: json.RawMessage(`{"amount": 1}`), MakerID: maker}
+			if err := s.Create(ctx, r); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+			return r
+		}
+		mk("alice")
+		mk("alice")
+		mk("bob")
+		if err := s.Create(ctx, &model.Request{Type: "other-" + uuid.NewString(), Payload: json.RawMessage(`{}`), MakerID: "alice"}); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		since := time.Now().UTC().Add(-time.Hour)
+		all, err := s.ListRecentByType(ctx, rt, since, "")
+		if err != nil {
+			t.Fatalf("ListRecentByType: %v", err)
+		}
+		if len(all) != 3 {
+			t.Errorf("all makers: got %d, want 3", len(all))
+		}
+		alice, err := s.ListRecentByType(ctx, rt, since, "alice")
+		if err != nil {
+			t.Fatalf("ListRecentByType(alice): %v", err)
+		}
+		if len(alice) != 2 {
+			t.Errorf("alice: got %d, want 2", len(alice))
+		}
+		future, err := s.ListRecentByType(ctx, rt, time.Now().UTC().Add(time.Hour), "")
+		if err != nil {
+			t.Fatalf("ListRecentByType(future): %v", err)
+		}
+		if len(future) != 0 {
+			t.Errorf("future window: got %d, want 0", len(future))
+		}
+	})
+
 	t.Run("MakerAttributes roundtrip", func(t *testing.T) {
 		req := &model.Request{
 			Type:            "transfer",
@@ -583,6 +623,50 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 		}
 		if got.AutoExpireDuration == nil || *got.AutoExpireDuration != 2*time.Hour {
 			t.Errorf("AutoExpireDuration = %v, want 2h", got.AutoExpireDuration)
+		}
+	})
+
+	t.Run("BypassRules roundtrip", func(t *testing.T) {
+		policy := &model.Policy{
+			Name:        "Bypass Policy",
+			RequestType: "bypass-" + uuid.NewString(),
+			Stages:      []model.ApprovalStage{{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny}},
+			BypassRules: []model.BypassRule{{
+				Name:            "small-internal",
+				MakerRoles:      []string{"teller"},
+				MakerAttributes: map[string][]string{"branch_id": {"HQ"}},
+				Payload:         []model.BypassCondition{{Path: "amount", Op: "lt", Value: json.RawMessage(`100`)}},
+			}},
+		}
+		if err := s.Create(ctx, policy); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+		got, err := s.GetByID(ctx, policy.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if len(got.BypassRules) != 1 || got.BypassRules[0].Name != "small-internal" {
+			t.Fatalf("BypassRules = %+v", got.BypassRules)
+		}
+		r := got.BypassRules[0]
+		if len(r.MakerRoles) != 1 || r.MakerRoles[0] != "teller" || r.MakerAttributes["branch_id"][0] != "HQ" {
+			t.Errorf("rule maker conditions = %+v", r)
+		}
+		if len(r.Payload) != 1 || r.Payload[0].Path != "amount" || r.Payload[0].Op != "lt" || !jsonEqual(r.Payload[0].Value, []byte(`100`)) {
+			t.Errorf("rule payload conditions = %+v", r.Payload)
+		}
+
+		// Clearing the rules persists as none.
+		got.BypassRules = nil
+		if err := s.Update(ctx, got); err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		again, err := s.GetByID(ctx, policy.ID)
+		if err != nil {
+			t.Fatalf("GetByID: %v", err)
+		}
+		if again.BypassRules != nil {
+			t.Errorf("BypassRules after clear = %+v, want nil", again.BypassRules)
 		}
 	})
 

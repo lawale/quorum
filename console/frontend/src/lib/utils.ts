@@ -49,6 +49,13 @@ export function formatDetails(details: Record<string, unknown>, action?: string)
   if (action === 'stage_advanced' && 'from_stage' in details && 'to_stage' in details) {
     return `Stage ${details.from_stage} → ${details.to_stage}`;
   }
+  if (action === 'bypass_limit_exceeded' && 'measure' in details) {
+    const what = details.measure === 'sum' ? `total ${details.path} of ${details.observed}` : `${details.observed} requests`;
+    return `Bypass rule "${details.rule}" skipped: ${what} in ${details.window} exceeds limit ${details.limit}`;
+  }
+  if (action === 'bypassed' && 'rule' in details) {
+    return details.rule ? `Auto-approved by rule "${details.rule}"` : 'Auto-approved by a bypass rule';
+  }
 
   return Object.entries(details)
     .map(([key, value]) => `${formatDetailsLabel(key)}: ${value}`)

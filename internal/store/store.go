@@ -52,6 +52,10 @@ type RequestStore interface {
 	UpdateStatus(ctx context.Context, id uuid.UUID, status model.RequestStatus) error
 	UpdateStageAndStatus(ctx context.Context, id uuid.UUID, stage int, status model.RequestStatus) error
 	ListExpired(ctx context.Context) ([]model.Request, error)
+	// ListRecentByType returns requests of a type created at or after since,
+	// in any status, optionally restricted to one maker. Bypass limits use it
+	// to measure recent activity.
+	ListRecentByType(ctx context.Context, reqType string, since time.Time, makerID string) ([]model.Request, error)
 }
 
 type ApprovalStore interface {

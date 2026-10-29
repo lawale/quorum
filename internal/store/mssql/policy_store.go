@@ -13,7 +13,7 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-const policyColumns = `id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at`
+const policyColumns = `id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at, bypass_rules`
 
 type PolicyStore struct {
 	db *DB
@@ -26,7 +26,7 @@ func NewPolicyStore(db *DB) *PolicyStore {
 func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	query := `
 		INSERT INTO [quorum].[policies] (` + policyColumns + `)
-		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12)`
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10, @p11, @p12, @p13)`
 
 	now := time.Now().UTC()
 	if policy.ID == uuid.Nil {
@@ -46,6 +46,14 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 		return fmt.Errorf("marshaling identity fields: %w", err)
 	}
 
+	var bypassJSON []byte
+	if len(policy.BypassRules) > 0 {
+		bypassJSON, err = json.Marshal(policy.BypassRules)
+		if err != nil {
+			return fmt.Errorf("marshaling bypass rules: %w", err)
+		}
+	}
+
 	var autoExpire *string
 	if policy.AutoExpireDuration != nil {
 		s := policy.AutoExpireDuration.String()
@@ -54,7 +62,7 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 
 	_, err = s.db.Pool.ExecContext(ctx, query,
 		policy.ID, policy.TenantID, policy.Name, policy.RequestType, string(stagesJSON),
-		nullableString(identityFieldsJSON), policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, autoExpire, nullableString(policy.DisplayTemplate), policy.CreatedAt, policy.UpdatedAt,
+		nullableString(identityFieldsJSON), policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, autoExpire, nullableString(policy.DisplayTemplate), policy.CreatedAt, policy.UpdatedAt, nullableString(bypassJSON),
 	)
 	if err != nil {
 		return fmt.Errorf("inserting policy: %w", err)
@@ -133,10 +141,10 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 	tenantID := auth.TenantIDFromContext(ctx)
 	query := `
 		UPDATE [quorum].[policies] SET name = @p1, stages = @p2, identity_fields = @p3,
-		dynamic_authorization_url = @p4, dynamic_authorization_secret = @p5, auto_expire_duration = @p6, display_template = @p7, updated_at = @p8
+		dynamic_authorization_url = @p4, dynamic_authorization_secret = @p5, auto_expire_duration = @p6, display_template = @p7, updated_at = @p8, bypass_rules = @p10
 		WHERE id = @p9`
 	if tenantID != "" {
-		query += ` AND tenant_id = @p10`
+		query += ` AND tenant_id = @p11`
 	}
 
 	policy.UpdatedAt = time.Now().UTC()
@@ -151,6 +159,14 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 		return fmt.Errorf("marshaling identity fields: %w", err)
 	}
 
+	var bypassJSON []byte
+	if len(policy.BypassRules) > 0 {
+		bypassJSON, err = json.Marshal(policy.BypassRules)
+		if err != nil {
+			return fmt.Errorf("marshaling bypass rules: %w", err)
+		}
+	}
+
 	var autoExpire *string
 	if policy.AutoExpireDuration != nil {
 		s := policy.AutoExpireDuration.String()
@@ -159,7 +175,7 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 
 	args := []any{
 		policy.Name, string(stagesJSON), nullableString(identityFieldsJSON),
-		policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, autoExpire, nullableString(policy.DisplayTemplate), policy.UpdatedAt, policy.ID,
+		policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, autoExpire, nullableString(policy.DisplayTemplate), policy.UpdatedAt, policy.ID, nullableString(bypassJSON),
 	}
 	if tenantID != "" {
 		args = append(args, tenantID)
@@ -233,12 +249,12 @@ func (s *PolicyStore) scanPolicy(ctx context.Context, query string, args ...any)
 
 func (s *PolicyStore) scanSingleRow(row *sql.Row) (*model.Policy, error) {
 	p := &model.Policy{}
-	var stagesJSON, identityFieldsJSON, displayTemplate sql.NullString
+	var stagesJSON, identityFieldsJSON, displayTemplate, bypassJSON sql.NullString
 	var autoExpire *string
 
 	err := row.Scan(
 		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
-		&identityFieldsJSON, &p.DynamicAuthorizationURL, &p.DynamicAuthorizationSecret, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.DynamicAuthorizationURL, &p.DynamicAuthorizationSecret, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt, &bypassJSON,
 	)
 	if err != nil {
 		return nil, err
@@ -257,6 +273,11 @@ func (s *PolicyStore) scanSingleRow(row *sql.Row) (*model.Policy, error) {
 	if displayTemplate.Valid {
 		p.DisplayTemplate = json.RawMessage(displayTemplate.String)
 	}
+	if bypassJSON.Valid {
+		if err := json.Unmarshal([]byte(bypassJSON.String), &p.BypassRules); err != nil {
+			return nil, fmt.Errorf("unmarshaling bypass rules: %w", err)
+		}
+	}
 	if autoExpire != nil {
 		d, err := time.ParseDuration(*autoExpire)
 		if err != nil {
@@ -270,12 +291,12 @@ func (s *PolicyStore) scanSingleRow(row *sql.Row) (*model.Policy, error) {
 
 func (s *PolicyStore) scanPolicyRow(rows *sql.Rows) (*model.Policy, error) {
 	p := &model.Policy{}
-	var stagesJSON, identityFieldsJSON, displayTemplate sql.NullString
+	var stagesJSON, identityFieldsJSON, displayTemplate, bypassJSON sql.NullString
 	var autoExpire *string
 
 	err := rows.Scan(
 		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
-		&identityFieldsJSON, &p.DynamicAuthorizationURL, &p.DynamicAuthorizationSecret, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.DynamicAuthorizationURL, &p.DynamicAuthorizationSecret, &autoExpire, &displayTemplate, &p.CreatedAt, &p.UpdatedAt, &bypassJSON,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scanning policy: %w", err)
@@ -293,6 +314,11 @@ func (s *PolicyStore) scanPolicyRow(rows *sql.Rows) (*model.Policy, error) {
 	}
 	if displayTemplate.Valid {
 		p.DisplayTemplate = json.RawMessage(displayTemplate.String)
+	}
+	if bypassJSON.Valid {
+		if err := json.Unmarshal([]byte(bypassJSON.String), &p.BypassRules); err != nil {
+			return nil, fmt.Errorf("unmarshaling bypass rules: %w", err)
+		}
 	}
 	if autoExpire != nil {
 		d, err := time.ParseDuration(*autoExpire)

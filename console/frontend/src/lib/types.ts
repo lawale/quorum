@@ -37,6 +37,43 @@ export interface ApprovalStage {
   scope?: ScopeRule[];
 }
 
+export interface BypassCondition {
+  path: string;
+  op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in';
+  value: unknown;
+}
+
+export interface BypassLimit {
+  window: string;
+  max_count?: number;
+  max_sum?: { path: string; value: number };
+  group_by?: string[];
+}
+
+export interface BypassRule {
+  name?: string;
+  maker_roles?: string[];
+  maker_permissions?: string[];
+  maker_attributes?: Record<string, string[]>;
+  payload?: BypassCondition[];
+  limits?: BypassLimit[];
+}
+
+export interface BypassLimitExceeded {
+  rule: string;
+  window: string;
+  measure: 'count' | 'sum';
+  path?: string;
+  observed: number;
+  limit: number;
+  group_by?: string[];
+}
+
+export function getBypassLimitExceeded(metadata?: Record<string, unknown>): BypassLimitExceeded | null {
+  const hit = metadata?.bypass_limit_exceeded as BypassLimitExceeded | undefined;
+  return hit && typeof hit.measure === 'string' ? hit : null;
+}
+
 export interface Policy {
   id: string;
   tenant_id: string;
@@ -48,6 +85,7 @@ export interface Policy {
   dynamic_authorization_secret?: string;
   auto_expire_duration?: string;
   display_template?: Record<string, unknown>;
+  bypass_rules?: BypassRule[];
   created_at: string;
   updated_at: string;
   warnings?: string[];

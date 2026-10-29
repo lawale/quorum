@@ -25,8 +25,8 @@ func NewPolicyStore(db *DB) *PolicyStore {
 
 func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 	query := `
-		INSERT INTO policies (id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+		INSERT INTO policies (id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at, bypass_rules)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 
 	now := time.Now().UTC()
 	if policy.ID == uuid.Nil {
@@ -46,9 +46,14 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 		return fmt.Errorf("marshaling identity fields: %w", err)
 	}
 
+	bypassJSON, err := marshalBypassRules(policy.BypassRules)
+	if err != nil {
+		return err
+	}
+
 	_, err = s.db.Pool.Exec(ctx, query,
 		policy.ID, policy.TenantID, policy.Name, policy.RequestType, stagesJSON,
-		identityFieldsJSON, policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, policy.AutoExpireDuration, policy.DisplayTemplate, policy.CreatedAt, policy.UpdatedAt,
+		identityFieldsJSON, policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, policy.AutoExpireDuration, policy.DisplayTemplate, policy.CreatedAt, policy.UpdatedAt, bypassJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting policy: %w", err)
@@ -58,7 +63,7 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 }
 
 func (s *PolicyStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Policy, error) {
-	query := "SELECT id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at FROM policies WHERE id = $1"
+	query := "SELECT id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at, bypass_rules FROM policies WHERE id = $1"
 	tenant := auth.TenantIDFromContext(ctx)
 	if tenant != "" {
 		query += " AND tenant_id = $2"
@@ -68,7 +73,7 @@ func (s *PolicyStore) GetByID(ctx context.Context, id uuid.UUID) (*model.Policy,
 }
 
 func (s *PolicyStore) GetByRequestType(ctx context.Context, requestType string) (*model.Policy, error) {
-	query := "SELECT id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at FROM policies WHERE request_type = $1"
+	query := "SELECT id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at, bypass_rules FROM policies WHERE request_type = $1"
 	tenant := auth.TenantIDFromContext(ctx)
 	if tenant != "" {
 		query += " AND tenant_id = $2"
@@ -104,7 +109,7 @@ func (s *PolicyStore) List(ctx context.Context, filter store.PolicyFilter) ([]mo
 	}
 
 	dataQuery := fmt.Sprintf(
-		`SELECT id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at FROM policies %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		`SELECT id, tenant_id, name, request_type, stages, identity_fields, dynamic_authorization_url, dynamic_authorization_secret, auto_expire_duration, display_template, created_at, updated_at, bypass_rules FROM policies %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		where, argIdx, argIdx+1,
 	)
 	args = append(args, filter.PerPage, offset)
@@ -130,7 +135,7 @@ func (s *PolicyStore) List(ctx context.Context, filter store.PolicyFilter) ([]mo
 func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 	query := `
 		UPDATE policies SET name = $1, stages = $2, identity_fields = $3,
-		dynamic_authorization_url = $4, dynamic_authorization_secret = $5, auto_expire_duration = $6, display_template = $7, updated_at = $8
+		dynamic_authorization_url = $4, dynamic_authorization_secret = $5, auto_expire_duration = $6, display_template = $7, updated_at = $8, bypass_rules = $10
 		WHERE id = $9`
 
 	policy.UpdatedAt = time.Now().UTC()
@@ -145,14 +150,19 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 		return fmt.Errorf("marshaling identity fields: %w", err)
 	}
 
+	bypassJSON, err := marshalBypassRules(policy.BypassRules)
+	if err != nil {
+		return err
+	}
+
 	args := []any{
 		policy.Name, stagesJSON, identityFieldsJSON,
-		policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, policy.AutoExpireDuration, policy.DisplayTemplate, policy.UpdatedAt, policy.ID,
+		policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, policy.AutoExpireDuration, policy.DisplayTemplate, policy.UpdatedAt, policy.ID, bypassJSON,
 	}
 
 	tenant := auth.TenantIDFromContext(ctx)
 	if tenant != "" {
-		query += " AND tenant_id = $10"
+		query += " AND tenant_id = $11"
 		args = append(args, tenant)
 	}
 
@@ -225,12 +235,12 @@ func (s *PolicyStore) scanPolicy(ctx context.Context, query string, args ...any)
 
 func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 	p := &model.Policy{}
-	var stagesJSON, identityFieldsJSON []byte
+	var stagesJSON, identityFieldsJSON, bypassJSON []byte
 	var autoExpire *time.Duration
 
 	err := row.Scan(
 		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
-		&identityFieldsJSON, &p.DynamicAuthorizationURL, &p.DynamicAuthorizationSecret, &autoExpire, &p.DisplayTemplate, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.DynamicAuthorizationURL, &p.DynamicAuthorizationSecret, &autoExpire, &p.DisplayTemplate, &p.CreatedAt, &p.UpdatedAt, &bypassJSON,
 	)
 	if err != nil {
 		return nil, err
@@ -247,6 +257,12 @@ func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 		}
 	}
 
+	if bypassJSON != nil {
+		if err := json.Unmarshal(bypassJSON, &p.BypassRules); err != nil {
+			return nil, fmt.Errorf("unmarshaling bypass rules: %w", err)
+		}
+	}
+
 	p.AutoExpireDuration = autoExpire
 
 	return p, nil
@@ -254,12 +270,12 @@ func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 
 func (s *PolicyStore) scanPolicyRow(rows pgx.Rows) (*model.Policy, error) {
 	p := &model.Policy{}
-	var stagesJSON, identityFieldsJSON []byte
+	var stagesJSON, identityFieldsJSON, bypassJSON []byte
 	var autoExpire *time.Duration
 
 	err := rows.Scan(
 		&p.ID, &p.TenantID, &p.Name, &p.RequestType, &stagesJSON,
-		&identityFieldsJSON, &p.DynamicAuthorizationURL, &p.DynamicAuthorizationSecret, &autoExpire, &p.DisplayTemplate, &p.CreatedAt, &p.UpdatedAt,
+		&identityFieldsJSON, &p.DynamicAuthorizationURL, &p.DynamicAuthorizationSecret, &autoExpire, &p.DisplayTemplate, &p.CreatedAt, &p.UpdatedAt, &bypassJSON,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("scanning policy: %w", err)
@@ -276,7 +292,25 @@ func (s *PolicyStore) scanPolicyRow(rows pgx.Rows) (*model.Policy, error) {
 		}
 	}
 
+	if bypassJSON != nil {
+		if err := json.Unmarshal(bypassJSON, &p.BypassRules); err != nil {
+			return nil, fmt.Errorf("unmarshaling bypass rules: %w", err)
+		}
+	}
+
 	p.AutoExpireDuration = autoExpire
 
 	return p, nil
+}
+
+// marshalBypassRules encodes rules for storage, writing NULL when there are none.
+func marshalBypassRules(rules []model.BypassRule) ([]byte, error) {
+	if len(rules) == 0 {
+		return nil, nil
+	}
+	b, err := json.Marshal(rules)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling bypass rules: %w", err)
+	}
+	return b, nil
 }

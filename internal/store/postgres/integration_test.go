@@ -36,6 +36,7 @@ func setupPostgres(t *testing.T) *postgres.DB {
 			filepath.Join(migrationsDir(), "007_create_operators.up.sql"),
 			filepath.Join(migrationsDir(), "008_create_webhook_outbox.up.sql"),
 			filepath.Join(migrationsDir(), "009_add_maker_attributes.up.sql"),
+			filepath.Join(migrationsDir(), "010_add_policy_bypass_rules.up.sql"),
 		),
 		tcpostgres.BasicWaitStrategies(),
 		tcpostgres.WithSQLDriver("pgx"),

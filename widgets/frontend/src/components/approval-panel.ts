@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
 import { ApiError } from '../lib/api';
 import type { Request, Policy, AuditLog, ResolvedChange } from '../lib/types';
-import { formatDate, timeAgo, getDisplay } from '../lib/utils';
+import { formatDate, timeAgo, getDisplay, getBypassLimitExceeded } from '../lib/utils';
 import { QuorumElement, LiveUpdater, defaultTrueConverter, presenceConverter, tokens } from './shared';
 import './internal/status-badge';
 import './internal/stage-bar';
@@ -150,6 +150,16 @@ export class QuorumApprovalPanel extends QuorumElement {
     .change-row.changed .change-from { color: var(--quorum-status-rejected-fg, #991b1b); background: var(--quorum-status-rejected-bg, #fee2e2); padding: 1px 6px; border-radius: 4px; text-decoration: line-through; }
     .change-row.changed .change-to { color: var(--quorum-status-approved-fg, #065f46); background: var(--quorum-status-approved-bg, #d1fae5); padding: 1px 6px; border-radius: 4px; font-weight: 500; }
     .changes-summary { margin-top: 6px; font-size: 11px; color: var(--_muted); }
+    .limit-notice {
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      border-radius: var(--_radius-sm);
+      font-size: 12px;
+      color: var(--quorum-status-pending-fg, #92400e);
+      background: var(--quorum-status-pending-bg, #fef3c7);
+      border: 1px solid var(--quorum-status-pending-border, rgba(146, 64, 14, 0.25));
+    }
+    .limit-notice strong { display: block; margin-bottom: 2px; }
     .raw-toggle {
       margin-top: 10px;
       padding: 4px 10px;
@@ -338,10 +348,23 @@ export class QuorumApprovalPanel extends QuorumElement {
     }
   }
 
+  private renderLimitNotice(req: Request) {
+    const hit = getBypassLimitExceeded(req.metadata);
+    if (!hit) return nothing;
+    const why = hit.measure === 'sum'
+      ? `the total ${hit.path} in the last ${hit.window} is ${hit.observed}, above the limit of ${hit.limit}`
+      : `it is request number ${hit.observed} in the last ${hit.window}, above the limit of ${hit.limit}`;
+    return html`<div class="limit-notice" part="limit-notice">
+      <strong>Needs review: bypass limit exceeded</strong>
+      This request matched the bypass rule "${hit.rule}" but ${why}.
+    </div>`;
+  }
+
   private renderPayload(req: Request) {
     const display = getDisplay(req.metadata);
+    const notice = this.renderLimitNotice(req);
     if (display && !this.showRawPayload) {
-      return html`<div class="display-view">
+      return html`${notice}<div class="display-view">
         ${display.title ? html`<h3 class="display-title">${display.title}</h3>` : nothing}
         <div class="display-fields">
           ${display.fields.map(
@@ -370,7 +393,7 @@ export class QuorumApprovalPanel extends QuorumElement {
         <button class="raw-toggle" @click=${() => (this.showRawPayload = true)}>Show raw payload</button>
       </div>`;
     }
-    return html`<pre class="payload" part="payload">${JSON.stringify(req.payload, null, 2)}</pre>
+    return html`${notice}<pre class="payload" part="payload">${JSON.stringify(req.payload, null, 2)}</pre>
       ${display ? html`<button class="raw-toggle" @click=${() => (this.showRawPayload = false)}>Show formatted view</button>` : nothing}`;
   }
 

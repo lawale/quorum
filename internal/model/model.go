@@ -110,6 +110,67 @@ type ApprovalStage struct {
 	Scope               []ScopeRule       `json:"scope,omitempty"`
 }
 
+// BypassCondition is a comparison against a value in the request payload.
+// Op is one of eq, ne, lt, lte, gt, gte, in. Ordering operators compare
+// numbers only; eq, ne and in compare numbers, strings and booleans.
+type BypassCondition struct {
+	Path  string          `json:"path"`
+	Op    string          `json:"op"`
+	Value json.RawMessage `json:"value"`
+}
+
+// BypassSum caps the total of a numeric payload field across the window.
+type BypassSum struct {
+	Path  string  `json:"path"`
+	Value float64 `json:"value"`
+}
+
+// BypassLimit is a velocity ceiling on a bypass rule. It counts requests of
+// the same type created within Window and, by default, by the same maker.
+// GroupBy widens the key: "maker" (default) and "payload:<path>" entries must
+// all match for a prior request to count. When MaxCount or MaxSum would be
+// exceeded by the new request, the rule does not match and the request goes
+// through normal review. Window accepts Go durations plus a "d" suffix.
+type BypassLimit struct {
+	Window   string     `json:"window"`
+	MaxCount *int       `json:"max_count,omitempty"`
+	MaxSum   *BypassSum `json:"max_sum,omitempty"`
+	GroupBy  []string   `json:"group_by,omitempty"`
+}
+
+// BypassRule describes requests that need no review. A rule matches when every
+// condition it specifies holds for the maker and the payload: the maker holds
+// any listed role, holds any listed permission, has each listed attribute set
+// to one of the allowed values, and every payload condition is true. A policy's
+// rules are tried in order and the first match auto-approves the request.
+type BypassRule struct {
+	Name             string              `json:"name,omitempty"`
+	MakerRoles       []string            `json:"maker_roles,omitempty"`
+	MakerPermissions []string            `json:"maker_permissions,omitempty"`
+	MakerAttributes  map[string][]string `json:"maker_attributes,omitempty"`
+	Payload          []BypassCondition   `json:"payload,omitempty"`
+	Limits           []BypassLimit       `json:"limits,omitempty"`
+}
+
+// BypassLimitExceeded is written to request metadata when a bypass rule
+// matched but one of its limits stopped it, so reviewers see why a request
+// that would normally skip review is in front of them.
+type BypassLimitExceeded struct {
+	Rule     string   `json:"rule"`
+	Window   string   `json:"window"`
+	Measure  string   `json:"measure"` // "count" or "sum"
+	Path     string   `json:"path,omitempty"`
+	Observed float64  `json:"observed"` // including this request
+	Limit    float64  `json:"limit"`
+	GroupBy  []string `json:"group_by,omitempty"`
+}
+
+// HasCondition reports whether the rule constrains anything at all. A rule
+// with no conditions would bypass every request and is rejected.
+func (r BypassRule) HasCondition() bool {
+	return len(r.MakerRoles) > 0 || len(r.MakerPermissions) > 0 || len(r.MakerAttributes) > 0 || len(r.Payload) > 0
+}
+
 type Policy struct {
 	ID                         uuid.UUID       `json:"id"`
 	TenantID                   string          `json:"tenant_id"`
@@ -121,6 +182,7 @@ type Policy struct {
 	DynamicAuthorizationSecret *string         `json:"-"`
 	AutoExpireDuration         *time.Duration  `json:"auto_expire_duration,omitempty"`
 	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
+	BypassRules                []BypassRule    `json:"bypass_rules,omitempty"`
 	CreatedAt                  time.Time       `json:"created_at"`
 	UpdatedAt                  time.Time       `json:"updated_at"`
 	// Warnings are advisory notes produced when a policy is saved, such as a
