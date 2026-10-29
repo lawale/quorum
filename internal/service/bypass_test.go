@@ -222,7 +222,7 @@ func TestCreate_Bypass_UsesTransactionAndEnqueuesWebhooks(t *testing.T) {
 			txRuns++
 			return fn(&store.Stores{Requests: f.requests, Outbox: &testutil.MockOutboxStore{}, Webhooks: &testutil.MockWebhookStore{}})
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			enqueued++
 			if req.Status != model.StatusApproved {
 				t.Errorf("webhook payload status = %v, want approved", req.Status)

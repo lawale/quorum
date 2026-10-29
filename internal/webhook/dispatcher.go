@@ -92,16 +92,11 @@ func NewDispatcher(outbox store.OutboxStore, audits store.AuditStore, cfg Config
 	}
 }
 
-// Enqueue builds outbox entries for a resolved request and writes them using
-// the provided stores. The caller should pass tx-bound stores so that the
+// Enqueue builds outbox entries for an event on a request and writes them
+// using the provided stores. Status events pass the status as the event name;
+// review_requested events also carry a ReviewRequest. The caller should pass tx-bound stores so that the
 // outbox writes are atomic with the status update.
-func (d *Dispatcher) Enqueue(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error {
-	return d.EnqueueEvent(ctx, outbox, webhooks, string(req.Status), req, approvals, nil)
-}
-
-// EnqueueEvent is Enqueue for an explicit event name, with an optional
-// ReviewRequest for review_requested events.
-func (d *Dispatcher) EnqueueEvent(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
+func (d *Dispatcher) Enqueue(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 	payload := model.WebhookPayload{
 		Event:     event,
 		Request:   *req,

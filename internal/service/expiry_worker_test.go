@@ -107,7 +107,7 @@ func TestExpiryWorker_ProcessExpired_CallsWebhookDispatch(t *testing.T) {
 			}
 			return fn(txStores)
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			enqueueCalled = true
 			expiredStatus = r.Status
 			return nil
@@ -188,7 +188,7 @@ func TestExpiryWorker_ProcessExpired_UpdateStatusError(t *testing.T) {
 			}
 			return fn(txStores)
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			enqueueIDs[r.ID] = true
 			return nil
 		},

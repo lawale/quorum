@@ -36,7 +36,7 @@ func TestDispatcher_Enqueue_WritesMatchingWebhooks(t *testing.T) {
 
 	req := testutil.NewRequest(func(r *model.Request) { r.Status = model.StatusApproved })
 
-	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
+	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, string(req.Status), req, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestDispatcher_Enqueue_NoMatchingWebhooks(t *testing.T) {
 		r.Status = model.StatusApproved
 	})
 
-	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, req, nil)
+	err := dispatcher.Enqueue(context.Background(), outbox, webhooks, string(req.Status), req, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

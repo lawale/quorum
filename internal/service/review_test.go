@@ -19,24 +19,21 @@ type capturedEvent struct {
 	review *model.ReviewRequest
 }
 
-// installEventCapture wires a transaction runner and event enqueuer that
-// record every emitted event.
+// installEventCapture wires a transaction runner and an outbox enqueuer that
+// record every emitted event, status and review alike.
 func installEventCapture(svc *RequestService, requests *testutil.MockRequestStore, approvals *testutil.MockApprovalStore) *[]capturedEvent {
 	var events []capturedEvent
 	svc.SetWebhookDispatch(
 		func(ctx context.Context, fn func(tx *store.Stores) error) error {
 			return fn(&store.Stores{Requests: requests, Approvals: approvals, Outbox: &testutil.MockOutboxStore{}, Webhooks: &testutil.MockWebhookStore{}})
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
+			copied := *req
+			events = append(events, capturedEvent{event: event, req: &copied, review: review})
 			return nil
 		},
 		func() {},
 	)
-	svc.SetEventEnqueue(func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
-		copied := *req
-		events = append(events, capturedEvent{event: event, req: &copied, review: review})
-		return nil
-	})
 	return &events
 }
 
@@ -227,12 +224,12 @@ func TestApprove_Terminal_DoesNotEmitReviewRequested(t *testing.T) {
 	if _, err := svc.Approve(context.Background(), req.ID, "checker-1", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if len(*events) != 0 {
-		t.Errorf("terminal approval must not ask for review: %+v", *events)
+	if len(*events) != 1 || (*events)[0].event != "approved" || (*events)[0].review != nil {
+		t.Errorf("terminal approval should emit exactly one approved event and no review request: %+v", *events)
 	}
 }
 
-func TestCreate_NoEventEnqueuer_StillCreates(t *testing.T) {
+func TestCreate_NoDispatch_StillCreates(t *testing.T) {
 	policy := testutil.NewPolicy()
 	created := false
 	requests := &testutil.MockRequestStore{CreateFunc: func(ctx context.Context, r *model.Request) error { created = true; return nil }}

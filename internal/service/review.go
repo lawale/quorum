@@ -8,15 +8,11 @@ import (
 	"github.com/lawale/quorum/internal/store"
 )
 
-// EventEnqueuer writes outbox entries for an arbitrary event. It mirrors the
-// status-event enqueuer but lets the service name the event and attach a
-// ReviewRequest.
-type EventEnqueuer func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error
-
-// SetEventEnqueue installs the enqueuer used for review_requested events.
-func (s *RequestService) SetEventEnqueue(fn EventEnqueuer) {
-	s.enqueueEvent = fn
-}
+// OutboxEnqueuer writes outbox entries for an event on a request. Status
+// changes pass the status as the event; review_requested also carries a
+// ReviewRequest. It is injected from main so the service never imports the
+// webhook package.
+type OutboxEnqueuer func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, req *model.Request, approvals []model.Approval, review *model.ReviewRequest) error
 
 // buildReviewRequest describes the reviewers a stage is waiting on, resolving
 // everything Quorum knows: the per-request allowlist, the stage's role and
@@ -81,12 +77,12 @@ func buildReviewRequest(policy *model.Policy, req *model.Request, stageIndex int
 // current stage using the given (possibly transactional) stores. It is a
 // no-op when no event enqueuer is installed.
 func (s *RequestService) enqueueReviewRequested(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, policy *model.Policy, req *model.Request, approvals []model.Approval, reason string) error {
-	if s.enqueueEvent == nil {
+	if s.enqueue == nil {
 		return nil
 	}
 	review := buildReviewRequest(policy, req, req.CurrentStage, approvals, reason)
 	if review == nil {
 		return nil
 	}
-	return s.enqueueEvent(ctx, outbox, webhooks, model.EventReviewRequested, req, approvals, review)
+	return s.enqueue(ctx, outbox, webhooks, model.EventReviewRequested, req, approvals, review)
 }

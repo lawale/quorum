@@ -15,14 +15,14 @@ import (
 )
 
 type ExpiryWorker struct {
-	requests        store.RequestStore
-	audits          store.AuditStore
-	checkInterval   time.Duration
-	enqueueWebhooks func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
-	signalWebhooks  func()
-	runInTx         func(ctx context.Context, fn func(tx *store.Stores) error) error
-	signalSSE       func(requestID uuid.UUID)
-	metrics         *metrics.Metrics
+	requests       store.RequestStore
+	audits         store.AuditStore
+	checkInterval  time.Duration
+	enqueue        OutboxEnqueuer
+	signalWebhooks func()
+	runInTx        func(ctx context.Context, fn func(tx *store.Stores) error) error
+	signalSSE      func(requestID uuid.UUID)
+	metrics        *metrics.Metrics
 }
 
 // SetSSESignal configures the callback invoked after a request expires
@@ -47,11 +47,11 @@ func NewExpiryWorker(requests store.RequestStore, audits store.AuditStore, check
 // SetWebhookDispatch configures transactional webhook dispatch for expired requests.
 func (w *ExpiryWorker) SetWebhookDispatch(
 	runInTx func(ctx context.Context, fn func(tx *store.Stores) error) error,
-	enqueue func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error,
+	enqueue OutboxEnqueuer,
 	signal func(),
 ) {
 	w.runInTx = runInTx
-	w.enqueueWebhooks = enqueue
+	w.enqueue = enqueue
 	w.signalWebhooks = signal
 }
 
@@ -87,7 +87,7 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 		// Inject the request's tenant into context so webhook lookup is scoped correctly
 		tenantCtx := auth.WithTenantID(ctx, req.TenantID)
 
-		if w.runInTx != nil && w.enqueueWebhooks != nil {
+		if w.runInTx != nil && w.enqueue != nil {
 			err := w.runInTx(tenantCtx, func(txStores *store.Stores) error {
 				if err := txStores.Requests.UpdateStatus(tenantCtx, req.ID, model.StatusExpired); err != nil {
 					return err
@@ -96,7 +96,7 @@ func (w *ExpiryWorker) processExpired(ctx context.Context) {
 				if err != nil {
 					return fmt.Errorf("loading approvals for expiry webhook: %w", err)
 				}
-				return w.enqueueWebhooks(tenantCtx, txStores.Outbox, txStores.Webhooks, &req, approvals)
+				return w.enqueue(tenantCtx, txStores.Outbox, txStores.Webhooks, string(req.Status), &req, approvals, nil)
 			})
 			if err != nil {
 				if errors.Is(err, store.ErrStatusConflict) {

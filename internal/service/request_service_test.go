@@ -733,7 +733,7 @@ func TestApprove_WebhookDispatch_CalledOnTerminal(t *testing.T) {
 			}
 			return fn(txStores)
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			enqueueCalled = true
 			return nil
 		},
@@ -781,7 +781,7 @@ func TestApprove_WebhookDispatch_NotCalledWhenPending(t *testing.T) {
 				Approvals: txApprovals,
 			})
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			enqueueCalled = true
 			return nil
 		},
@@ -1003,7 +1003,7 @@ func TestCancel_WebhookDispatch_Called(t *testing.T) {
 			}
 			return fn(txStores)
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			enqueueCalled = true
 			return nil
 		},
@@ -1187,7 +1187,7 @@ func TestApprove_ConcurrentTerminal_ReturnsNotPending(t *testing.T) {
 				Webhooks:  &testutil.MockWebhookStore{},
 			})
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			return nil
 		},
 		func() {},
@@ -1245,7 +1245,7 @@ func TestApprove_StageAdvance_Atomic(t *testing.T) {
 			}
 			return fn(txStores)
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			return nil
 		},
 		func() {},
@@ -1695,7 +1695,7 @@ func TestApprove_ConcurrentGoroutines_OnlyOneWins(t *testing.T) {
 			}
 			return fn(txStores)
 		},
-		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, r *model.Request, approvals []model.Approval) error {
+		func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, event string, r *model.Request, approvals []model.Approval, review *model.ReviewRequest) error {
 			return nil
 		},
 		func() {},

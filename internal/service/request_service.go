@@ -40,8 +40,7 @@ type RequestService struct {
 	policies          store.PolicyStore
 	audits            store.AuditStore
 	authorizationHook *auth.AuthorizationHook
-	enqueueWebhooks   func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error
-	enqueueEvent      EventEnqueuer
+	enqueue           OutboxEnqueuer
 	signalWebhooks    func()
 	runInTx           func(ctx context.Context, fn func(tx *store.Stores) error) error
 	signalSSE         func(requestID uuid.UUID)
@@ -81,11 +80,11 @@ func NewRequestService(
 // executes a function within a database transaction.
 func (s *RequestService) SetWebhookDispatch(
 	runInTx func(ctx context.Context, fn func(tx *store.Stores) error) error,
-	enqueue func(ctx context.Context, outbox store.OutboxStore, webhooks store.WebhookStore, req *model.Request, approvals []model.Approval) error,
+	enqueue OutboxEnqueuer,
 	signal func(),
 ) {
 	s.runInTx = runInTx
-	s.enqueueWebhooks = enqueue
+	s.enqueue = enqueue
 	s.signalWebhooks = signal
 }
 
@@ -166,7 +165,7 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 
 	// Persist and, in the same transaction when one is available, tell
 	// subscribers that stage 0 is waiting on reviewers.
-	if s.runInTx != nil && s.enqueueEvent != nil {
+	if s.runInTx != nil && s.enqueue != nil {
 		err = s.runInTx(ctx, func(tx *store.Stores) error {
 			if err := tx.Requests.Create(ctx, req); err != nil {
 				return err
@@ -182,7 +181,7 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 		}
 		return nil, err
 	}
-	if s.enqueueEvent != nil && s.signalWebhooks != nil {
+	if s.enqueue != nil && s.signalWebhooks != nil {
 		s.signalWebhooks()
 	}
 
@@ -215,8 +214,8 @@ func (s *RequestService) createBypassed(ctx context.Context, req *model.Request,
 			return err
 		}
 		req.Status = model.StatusApproved
-		if s.enqueueWebhooks != nil && outbox != nil && webhooks != nil {
-			return s.enqueueWebhooks(ctx, outbox, webhooks, req, nil)
+		if s.enqueue != nil && outbox != nil && webhooks != nil {
+			return s.enqueue(ctx, outbox, webhooks, string(req.Status), req, nil, nil)
 		}
 		return nil
 	}
@@ -337,12 +336,12 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 		return nil, fmt.Errorf("loading approvals for cancel callback: %w", err)
 	}
 
-	if s.runInTx != nil && s.enqueueWebhooks != nil {
+	if s.runInTx != nil && s.enqueue != nil {
 		err := s.runInTx(ctx, func(txStores *store.Stores) error {
 			if err := txStores.Requests.UpdateStatus(ctx, requestID, model.StatusCancelled); err != nil {
 				return err
 			}
-			return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, approvals)
+			return s.enqueue(ctx, txStores.Outbox, txStores.Webhooks, string(req.Status), req, approvals, nil)
 		})
 		if err != nil {
 			if errors.Is(err, store.ErrStatusConflict) {
@@ -505,21 +504,21 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 				if err := txStores.Requests.UpdateStatus(ctx, requestID, *newStatus); err != nil {
 					return err
 				}
-				if s.enqueueWebhooks != nil {
+				if s.enqueue != nil {
 					resolveApprovals, err := txStores.Approvals.ListByRequestID(ctx, requestID)
 					if err != nil {
 						return fmt.Errorf("loading approvals for callback: %w", err)
 					}
 					req.Status = *newStatus
 					req.Approvals = resolveApprovals
-					return s.enqueueWebhooks(ctx, txStores.Outbox, txStores.Webhooks, req, resolveApprovals)
+					return s.enqueue(ctx, txStores.Outbox, txStores.Webhooks, string(req.Status), req, resolveApprovals, nil)
 				}
 			} else if newStage != nil {
 				// Stage advance — still pending but move to next stage
 				if err := txStores.Requests.UpdateStageAndStatus(ctx, requestID, *newStage, model.StatusPending); err != nil {
 					return err
 				}
-				if s.enqueueEvent != nil {
+				if s.enqueue != nil {
 					advanced := *req
 					advanced.CurrentStage = *newStage
 					return s.enqueueReviewRequested(ctx, txStores.Outbox, txStores.Webhooks, policy, &advanced, nil, "stage_advanced")
@@ -560,7 +559,7 @@ func (s *RequestService) processDecision(ctx context.Context, requestID uuid.UUI
 				slog.WarnContext(ctx, "failed to marshal stage details for audit", "error", err)
 			}
 			s.audit(ctx, requestID, "stage_advanced", "system", stageDetails)
-			if s.enqueueEvent != nil && s.signalWebhooks != nil {
+			if s.enqueue != nil && s.signalWebhooks != nil {
 				s.signalWebhooks()
 			}
 			if s.signalSSE != nil {
