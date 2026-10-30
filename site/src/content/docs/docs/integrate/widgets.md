@@ -2,7 +2,7 @@
 title: Embeddable widgets
 description: Three Lit Web Components, an approval panel, a request list and a stage progress bar, that give any front end approval UI with live updates over SSE.
 sidebar:
-  order: 3
+  order: 4
 ---
 
 Quorum provides three Web Components that you can embed directly in your application's UI. They connect to the Quorum API and render approval workflows, with no custom UI code needed. They are built with Lit, use Shadow DOM for style isolation, work with any front-end framework, and are themeable via CSS custom properties and `::part()`.

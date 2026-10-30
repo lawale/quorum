@@ -1,0 +1,54 @@
+{
+  "name": "@oluwavader/quorum-client",
+  "version": "0.0.0",
+  "description": "TypeScript client for the Quorum approval engine",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../../api/openapi.yaml -o src/generated/schema.ts && node scripts/version.mjs",
+    "check:generated": "npm run generate && git diff --exit-code -- src/generated/schema.ts",
+    "prebuild": "node scripts/version.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "pretest": "node scripts/version.mjs",
+    "test": "vitest run",
+    "typecheck": "node scripts/version.mjs && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json"
+  },
+  "keywords": [
+    "quorum",
+    "approval",
+    "maker-checker",
+    "four-eyes",
+    "client",
+    "sdk"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lawale/quorum",
+    "directory": "clients/typescript"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

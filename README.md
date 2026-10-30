@@ -54,6 +54,7 @@ The [quick start guide](https://quorum.olawalelawal.dev/docs/getting-started/qui
 
 - [REST API](https://quorum.olawalelawal.dev/docs/integrate/api/), with the contract in [`api/openapi.yaml`](api/openapi.yaml) and validated against the real server in tests.
 - [Go client](https://quorum.olawalelawal.dev/docs/integrate/go-client/): `github.com/lawale/quorum/clients/go`.
+- [TypeScript client](https://quorum.olawalelawal.dev/docs/integrate/typescript-client/): `npm install @oluwavader/quorum-client`, for Node and the browser.
 - [Widgets](https://quorum.olawalelawal.dev/docs/integrate/widgets/): `npm install @oluwavader/quorum-embed`, or a script tag from your Quorum server.
 - [Webhooks](https://quorum.olawalelawal.dev/docs/integrate/webhooks/).
 

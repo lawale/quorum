@@ -84,15 +84,20 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
 
   npm:
-    name: Publish @oluwavader/quorum-embed
+    name: npm Packages
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     environment: npm
+    strategy:
+      matrix:
+        package:
+          - widgets/frontend
+          - clients/typescript
     defaults:
       run:
-        working-directory: widgets/frontend
+        working-directory: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v7
 
@@ -101,16 +106,18 @@ jobs:
           node-version: 22.x
           registry-url: https://registry.npmjs.org
           cache: npm
-          cache-dependency-path: widgets/frontend/package-lock.json
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
 
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
 
       - run: npm ci
-      - run: npm run build
 
+      # Before the build: the client bakes the version into what it ships.
       - name: Set version from tag
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+
+      - run: npm run build
 
       - run: npm publish --access public --provenance
 
@@ -156,7 +163,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           cat > notes.md <<EOF
-          **npm:** \`npm install @oluwavader/quorum-embed@${VERSION}\`
+          **npm:** \`npm install @oluwavader/quorum-client@${VERSION}\` (client) and \`@oluwavader/quorum-embed@${VERSION}\` (widgets)
           **Docker:** \`ghcr.io/lawale/quorum:${VERSION}\` (also \`-console\`, \`-all\`, \`-site\`, and the \`-demo-*\` sample apps)
 
           EOF
