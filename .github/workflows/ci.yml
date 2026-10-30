@@ -71,6 +71,8 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go build ./cmd/server
+      - name: Build banking example against the Go client
+        run: cd examples/banking && go build ./...
 
   build-console:
     name: Build (Console)

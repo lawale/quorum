@@ -6,10 +6,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"github.com/lawale/quorum/api"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/config"
 	"github.com/lawale/quorum/internal/health"
 	"github.com/lawale/quorum/internal/metrics"
+	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/service"
 	"github.com/lawale/quorum/internal/sse"
 	"github.com/lawale/quorum/internal/store"
@@ -33,6 +35,7 @@ type Server struct {
 	authProvider    auth.Provider
 	consoleEnabled  bool
 	healthCheckers  []health.HealthChecker
+	version         string
 	metrics         *metrics.Metrics
 	metricsPath     string
 	registry        *prometheus.Registry
@@ -54,6 +57,7 @@ type Config struct {
 	ConsoleSPA      http.Handler // SPA handler from console package (nil when built without tag)
 	EmbedHandler    http.Handler // Widget JS handler from widgets package (nil when built without tag)
 	HealthCheckers  []health.HealthChecker
+	Version         string // reported by /health; empty reads as "dev"
 	Metrics         *metrics.Metrics
 	EventHub        *sse.Hub
 	MetricsPath     string
@@ -76,6 +80,7 @@ func New(cfg Config) *Server {
 		embedHandler:    cfg.EmbedHandler,
 		operatorService: cfg.OperatorService,
 		healthCheckers:  cfg.HealthCheckers,
+		version:         cfg.Version,
 		metrics:         cfg.Metrics,
 		metricsPath:     cfg.MetricsPath,
 		registry:        cfg.Registry,
@@ -109,7 +114,17 @@ func (s *Server) setupRoutes() {
 			status = http.StatusServiceUnavailable
 			statusStr = "unhealthy"
 		}
-		writeJSON(w, status, map[string]any{"status": statusStr, "components": components})
+		version := s.version
+		if version == "" {
+			version = "dev"
+		}
+		writeJSON(w, status, map[string]any{"status": statusStr, "version": version, "components": components})
+	})
+
+	// OpenAPI document — no auth
+	r.Get("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(api.Spec)
 	})
 
 	// Metrics endpoint — no auth
@@ -243,7 +258,7 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"data": logs})
+	writeJSON(w, http.StatusOK, model.NewList(logs))
 }
 
 func (s *Server) Handler() http.Handler {

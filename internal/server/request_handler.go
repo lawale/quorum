@@ -25,15 +25,8 @@ func NewRequestHandler(rs *service.RequestService) *RequestHandler {
 	return &RequestHandler{requestService: rs}
 }
 
-type createRequestBody struct {
-	Type              string          `json:"type"`
-	Payload           json.RawMessage `json:"payload"`
-	EligibleReviewers []string        `json:"eligible_reviewers,omitempty"`
-	Metadata          json.RawMessage `json:"metadata,omitempty"`
-}
-
 func (h *RequestHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var body createRequestBody
+	var body model.CreateRequestInput
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -152,15 +145,7 @@ func (h *RequestHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data":  requests,
-		"total": total,
-		"page":  filter.Page,
-	})
-}
-
-type decisionBody struct {
-	Comment *string `json:"comment,omitempty"`
+	writeJSON(w, http.StatusOK, model.NewPage(requests, total, filter.Page))
 }
 
 func (h *RequestHandler) Approve(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +163,7 @@ func (h *RequestHandler) handleDecision(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	var body decisionBody
+	var body model.DecisionInput
 	if r.Body != nil && r.Body != http.NoBody {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			writeError(w, http.StatusBadRequest, "invalid request body")
@@ -244,6 +229,8 @@ func (h *RequestHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, err.Error())
 		case errors.Is(err, service.ErrRequestNotPending):
 			writeError(w, http.StatusConflict, err.Error())
+		case errors.Is(err, service.ErrNotMaker):
+			writeError(w, http.StatusForbidden, err.Error())
 		default:
 			writeServerError(w, r, err, "failed to cancel request")
 		}

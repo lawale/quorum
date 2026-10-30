@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
+	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
 )
 
@@ -55,11 +56,7 @@ func (h *DeliveryHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data":  entries,
-		"total": total,
-		"page":  filter.Page,
-	})
+	writeJSON(w, http.StatusOK, model.NewPage(entries, total, filter.Page))
 }
 
 func (h *DeliveryHandler) Stats(w http.ResponseWriter, r *http.Request) {

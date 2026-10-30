@@ -20,26 +20,14 @@ func NewWebhookHandler(ws *service.WebhookService) *WebhookHandler {
 	return &WebhookHandler{webhookService: ws}
 }
 
-type createWebhookBody struct {
-	URL         string   `json:"url"`
-	Events      []string `json:"events"`
-	Secret      string   `json:"secret"`
-	RequestType *string  `json:"request_type,omitempty"`
-}
-
 func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var body createWebhookBody
+	var body model.WebhookInput
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	webhook := &model.Webhook{
-		URL:         body.URL,
-		Events:      body.Events,
-		Secret:      body.Secret,
-		RequestType: body.RequestType,
-	}
+	webhook := body.Webhook()
 
 	if err := h.webhookService.Create(r.Context(), webhook); err != nil {
 		if errors.Is(err, service.ErrWebhookValidation) {
@@ -67,7 +55,7 @@ func (h *WebhookHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeServerError(w, r, err, "failed to list webhooks")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": webhooks, "total": total, "page": filter.Page})
+	writeJSON(w, http.StatusOK, model.NewPage(webhooks, total, filter.Page))
 }
 
 func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {

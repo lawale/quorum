@@ -32,6 +32,7 @@ var (
 	ErrInvalidStage             = errors.New("request is at an invalid stage for this policy")
 	ErrMissingIdentityFields    = errors.New("missing identity field in payload")
 	ErrOutOfScope               = errors.New("checker is outside the scope of this request")
+	ErrNotMaker                 = errors.New("only the maker can cancel their own request")
 )
 
 type RequestService struct {
@@ -135,7 +136,7 @@ func (s *RequestService) Create(ctx context.Context, req *model.Request) (*model
 
 	// Set expiry from policy
 	if policy.AutoExpireDuration != nil {
-		expiresAt := time.Now().UTC().Add(*policy.AutoExpireDuration)
+		expiresAt := time.Now().UTC().Add(policy.AutoExpireDuration.Std())
 		req.ExpiresAt = &expiresAt
 	}
 
@@ -300,7 +301,7 @@ func (s *RequestService) Cancel(ctx context.Context, requestID uuid.UUID, makerI
 		return nil, ErrRequestNotPending
 	}
 	if req.MakerID != makerID {
-		return nil, errors.New("only the maker can cancel their own request")
+		return nil, ErrNotMaker
 	}
 
 	err = s.transact(ctx, func(tx *store.Stores, emit emitFunc) error {
@@ -610,16 +611,7 @@ func computeFingerprint(payload json.RawMessage, identityFields []string) (strin
 }
 
 func validateCheckerRoles(stage *model.ApprovalStage, checkerRoles []string) error {
-	if stage.AllowedCheckerRoles == nil {
-		return nil
-	}
-
-	var allowedRoles []string
-	if err := json.Unmarshal(stage.AllowedCheckerRoles, &allowedRoles); err != nil {
-		slog.Error("failed to parse allowed_checker_roles", "error", err, "stage_index", stage.Index)
-		return fmt.Errorf("invalid allowed_checker_roles configuration: %w", err)
-	}
-
+	allowedRoles := stage.AllowedCheckerRoles
 	if len(allowedRoles) == 0 {
 		return nil
 	}
@@ -639,16 +631,7 @@ func validateCheckerRoles(stage *model.ApprovalStage, checkerRoles []string) err
 }
 
 func validateCheckerPermissions(stage *model.ApprovalStage, checkerPermissions []string) error {
-	if stage.AllowedPermissions == nil {
-		return nil
-	}
-
-	var allowedPermissions []string
-	if err := json.Unmarshal(stage.AllowedPermissions, &allowedPermissions); err != nil {
-		slog.Error("failed to parse allowed_permissions", "error", err, "stage_index", stage.Index)
-		return fmt.Errorf("invalid allowed_permissions configuration: %w", err)
-	}
-
+	allowedPermissions := stage.AllowedPermissions
 	if len(allowedPermissions) == 0 {
 		return nil
 	}
@@ -671,8 +654,8 @@ func validateCheckerPermissions(stage *model.ApprovalStage, checkerPermissions [
 // stage's authorization_mode. When only one of roles/permissions is configured,
 // the mode is implicit. When both are configured, the mode must be set.
 func validateAuthorization(stage *model.ApprovalStage, checkerRoles, checkerPermissions []string) error {
-	hasRoles := stage.AllowedCheckerRoles != nil
-	hasPermissions := stage.AllowedPermissions != nil
+	hasRoles := len(stage.AllowedCheckerRoles) > 0
+	hasPermissions := len(stage.AllowedPermissions) > 0
 
 	if !hasRoles && !hasPermissions {
 		return nil

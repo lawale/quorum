@@ -2,6 +2,8 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,6 +36,55 @@ const (
 	RejectionPolicyAny       RejectionPolicy = "any"
 	RejectionPolicyThreshold RejectionPolicy = "threshold"
 )
+
+// Duration is a time.Duration that travels through JSON as a Go duration
+// string such as "24h" or "1h30m". It also accepts a plain number of
+// nanoseconds on input, which is how it used to be serialised.
+type Duration time.Duration
+
+// NewDuration wraps a time.Duration for assignment to an optional field.
+func NewDuration(d time.Duration) *Duration {
+	v := Duration(d)
+	return &v
+}
+
+// Std returns the underlying time.Duration.
+func (d Duration) Std() time.Duration { return time.Duration(d) }
+
+// String formats the duration the way a person would write it: "24h" rather
+// than "24h0m0s", "1h30m" rather than "1h30m0s".
+func (d Duration) String() string {
+	s := time.Duration(d).String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
+}
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		parsed, err := time.ParseDuration(s)
+		if err != nil {
+			return fmt.Errorf("invalid duration %q: %w", s, err)
+		}
+		*d = Duration(parsed)
+		return nil
+	}
+	var ns int64
+	if err := json.Unmarshal(b, &ns); err != nil {
+		return fmt.Errorf("duration must be a string such as \"24h\" or a number of nanoseconds")
+	}
+	*d = Duration(ns)
+	return nil
+}
 
 type Request struct {
 	ID             uuid.UUID       `json:"id"`
@@ -102,8 +153,8 @@ type ApprovalStage struct {
 	Index               int               `json:"index"`
 	Name                string            `json:"name,omitempty"`
 	RequiredApprovals   int               `json:"required_approvals"`
-	AllowedCheckerRoles json.RawMessage   `json:"allowed_checker_roles,omitempty"`
-	AllowedPermissions  json.RawMessage   `json:"allowed_permissions,omitempty"`
+	AllowedCheckerRoles []string          `json:"allowed_checker_roles,omitempty"`
+	AllowedPermissions  []string          `json:"allowed_permissions,omitempty"`
 	AuthorizationMode   AuthorizationMode `json:"authorization_mode,omitempty"`
 	RejectionPolicy     RejectionPolicy   `json:"rejection_policy"`
 	MaxCheckers         *int              `json:"max_checkers,omitempty"`
@@ -180,7 +231,7 @@ type Policy struct {
 	IdentityFields             []string        `json:"identity_fields,omitempty"`
 	DynamicAuthorizationURL    *string         `json:"dynamic_authorization_url,omitempty"`
 	DynamicAuthorizationSecret *string         `json:"-"`
-	AutoExpireDuration         *time.Duration  `json:"auto_expire_duration,omitempty"`
+	AutoExpireDuration         *Duration       `json:"auto_expire_duration,omitempty"`
 	DisplayTemplate            json.RawMessage `json:"display_template,omitempty"`
 	BypassRules                []BypassRule    `json:"bypass_rules,omitempty"`
 	CreatedAt                  time.Time       `json:"created_at"`

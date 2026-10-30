@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -21,34 +20,10 @@ func NewPolicyHandler(ps *service.PolicyService) *PolicyHandler {
 	return &PolicyHandler{policyService: ps}
 }
 
-type stageBody struct {
-	Index               int               `json:"index"`
-	Name                string            `json:"name,omitempty"`
-	RequiredApprovals   int               `json:"required_approvals"`
-	AllowedCheckerRoles json.RawMessage   `json:"allowed_checker_roles,omitempty"`
-	AllowedPermissions  json.RawMessage   `json:"allowed_permissions,omitempty"`
-	AuthorizationMode   string            `json:"authorization_mode,omitempty"`
-	RejectionPolicy     string            `json:"rejection_policy,omitempty"`
-	MaxCheckers         *int              `json:"max_checkers,omitempty"`
-	Scope               []model.ScopeRule `json:"scope,omitempty"`
-}
-
-type createPolicyBody struct {
-	Name                       string             `json:"name"`
-	RequestType                string             `json:"request_type"`
-	Stages                     []stageBody        `json:"stages"`
-	IdentityFields             []string           `json:"identity_fields,omitempty"`
-	DynamicAuthorizationURL    *string            `json:"dynamic_authorization_url,omitempty"`
-	DynamicAuthorizationSecret *string            `json:"dynamic_authorization_secret,omitempty"`
-	AutoExpireDuration         string             `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate            json.RawMessage    `json:"display_template,omitempty"`
-	BypassRules                []model.BypassRule `json:"bypass_rules,omitempty"`
-}
-
 func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var body createPolicyBody
+	var body model.PolicyInput
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
 
@@ -65,40 +40,7 @@ func (h *PolicyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stages := make([]model.ApprovalStage, len(body.Stages))
-	for i, sb := range body.Stages {
-		stages[i] = model.ApprovalStage{
-			Index:               sb.Index,
-			Name:                sb.Name,
-			RequiredApprovals:   sb.RequiredApprovals,
-			AllowedCheckerRoles: sb.AllowedCheckerRoles,
-			AllowedPermissions:  sb.AllowedPermissions,
-			AuthorizationMode:   model.AuthorizationMode(sb.AuthorizationMode),
-			RejectionPolicy:     model.RejectionPolicy(sb.RejectionPolicy),
-			MaxCheckers:         sb.MaxCheckers,
-			Scope:               sb.Scope,
-		}
-	}
-
-	policy := &model.Policy{
-		Name:                       body.Name,
-		RequestType:                body.RequestType,
-		Stages:                     stages,
-		IdentityFields:             body.IdentityFields,
-		DynamicAuthorizationURL:    body.DynamicAuthorizationURL,
-		DynamicAuthorizationSecret: body.DynamicAuthorizationSecret,
-		DisplayTemplate:            body.DisplayTemplate,
-		BypassRules:                body.BypassRules,
-	}
-
-	if body.AutoExpireDuration != "" {
-		d, err := time.ParseDuration(body.AutoExpireDuration)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid auto_expire_duration format, use Go duration syntax (e.g. 24h, 30m)")
-			return
-		}
-		policy.AutoExpireDuration = &d
-	}
+	policy := body.Policy()
 
 	if err := h.policyService.Create(r.Context(), policy); err != nil {
 		if errors.Is(err, service.ErrPolicyTypeConflict) {
@@ -150,18 +92,7 @@ func (h *PolicyHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeServerError(w, r, err, "failed to list policies")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": policies, "total": total, "page": filter.Page})
-}
-
-type updatePolicyBody struct {
-	Name                       string             `json:"name"`
-	Stages                     []stageBody        `json:"stages,omitempty"`
-	IdentityFields             []string           `json:"identity_fields,omitempty"`
-	DynamicAuthorizationURL    *string            `json:"dynamic_authorization_url,omitempty"`
-	DynamicAuthorizationSecret *string            `json:"dynamic_authorization_secret,omitempty"`
-	AutoExpireDuration         string             `json:"auto_expire_duration,omitempty"`
-	DisplayTemplate            json.RawMessage    `json:"display_template,omitempty"`
-	BypassRules                []model.BypassRule `json:"bypass_rules,omitempty"` // send [] to clear
+	writeJSON(w, http.StatusOK, model.NewPage(policies, total, filter.Page))
 }
 
 func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -181,55 +112,12 @@ func (h *PolicyHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body updatePolicyBody
+	var body model.PolicyUpdate
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
-
-	if body.Name != "" {
-		existing.Name = body.Name
-	}
-	if body.Stages != nil {
-		stages := make([]model.ApprovalStage, len(body.Stages))
-		for i, sb := range body.Stages {
-			stages[i] = model.ApprovalStage{
-				Index:               sb.Index,
-				Name:                sb.Name,
-				RequiredApprovals:   sb.RequiredApprovals,
-				AllowedCheckerRoles: sb.AllowedCheckerRoles,
-				AllowedPermissions:  sb.AllowedPermissions,
-				AuthorizationMode:   model.AuthorizationMode(sb.AuthorizationMode),
-				RejectionPolicy:     model.RejectionPolicy(sb.RejectionPolicy),
-				MaxCheckers:         sb.MaxCheckers,
-				Scope:               sb.Scope,
-			}
-		}
-		existing.Stages = stages
-	}
-	if body.IdentityFields != nil {
-		existing.IdentityFields = body.IdentityFields
-	}
-	if body.DynamicAuthorizationURL != nil {
-		existing.DynamicAuthorizationURL = body.DynamicAuthorizationURL
-	}
-	if body.DynamicAuthorizationSecret != nil {
-		existing.DynamicAuthorizationSecret = body.DynamicAuthorizationSecret
-	}
-	if body.AutoExpireDuration != "" {
-		d, err := time.ParseDuration(body.AutoExpireDuration)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid auto_expire_duration format")
-			return
-		}
-		existing.AutoExpireDuration = &d
-	}
-	if body.DisplayTemplate != nil {
-		existing.DisplayTemplate = body.DisplayTemplate
-	}
-	if body.BypassRules != nil {
-		existing.BypassRules = body.BypassRules
-	}
+	body.ApplyTo(existing)
 
 	if err := h.policyService.Update(r.Context(), existing); err != nil {
 		if errors.Is(err, service.ErrNoStages) || errors.Is(err, service.ErrInvalidStageIndex) || errors.Is(err, service.ErrInvalidDisplayTemplate) || errors.Is(err, service.ErrThresholdNoMaxCheckers) || errors.Is(err, service.ErrInvalidAuthorizationMode) || errors.Is(err, service.ErrInvalidScopeRule) || errors.Is(err, service.ErrInvalidBypassRule) {
@@ -249,7 +137,7 @@ func (h *PolicyHandler) RequestTypes(w http.ResponseWriter, r *http.Request) {
 		writeServerError(w, r, err, "failed to list request types")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": types})
+	writeJSON(w, http.StatusOK, model.NewList(types))
 }
 
 func (h *PolicyHandler) Delete(w http.ResponseWriter, r *http.Request) {

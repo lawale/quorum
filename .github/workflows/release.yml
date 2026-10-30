@@ -34,7 +34,7 @@ jobs:
           - variant: demo-banking
             dockerfile: examples/banking/Dockerfile
             suffix: "-demo-banking"
-            context: examples/banking
+            context: .
           - variant: demo-expenses
             dockerfile: examples/expenses/Dockerfile
             suffix: "-demo-expenses"
@@ -75,6 +75,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ github.ref_name }}
           cache-from: type=gha,scope=${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
 

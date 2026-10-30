@@ -392,8 +392,8 @@ func TestPolicyCreate_AuthorizationMode_BothSetWithoutMode_Error(t *testing.T) {
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: []byte(`["manager"]`),
-				AllowedPermissions:  []byte(`["approve_transfer"]`),
+				AllowedCheckerRoles: []string{"manager"},
+				AllowedPermissions:  []string{"approve_transfer"},
 				RejectionPolicy:     model.RejectionPolicyAny,
 				// AuthorizationMode intentionally missing
 			},
@@ -421,8 +421,8 @@ func TestPolicyCreate_AuthorizationMode_BothSetWithAny_Success(t *testing.T) {
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: []byte(`["manager"]`),
-				AllowedPermissions:  []byte(`["approve_transfer"]`),
+				AllowedCheckerRoles: []string{"manager"},
+				AllowedPermissions:  []string{"approve_transfer"},
 				AuthorizationMode:   model.AuthModeAny,
 				RejectionPolicy:     model.RejectionPolicyAny,
 			},
@@ -450,8 +450,8 @@ func TestPolicyCreate_AuthorizationMode_BothSetWithAll_Success(t *testing.T) {
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: []byte(`["manager"]`),
-				AllowedPermissions:  []byte(`["approve_transfer"]`),
+				AllowedCheckerRoles: []string{"manager"},
+				AllowedPermissions:  []string{"approve_transfer"},
 				AuthorizationMode:   model.AuthModeAll,
 				RejectionPolicy:     model.RejectionPolicyAny,
 			},
@@ -476,7 +476,7 @@ func TestPolicyCreate_AuthorizationMode_PermissionModeWithoutPermissions_Error(t
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: []byte(`["manager"]`),
+				AllowedCheckerRoles: []string{"manager"},
 				AuthorizationMode:   model.AuthModePermission,
 				RejectionPolicy:     model.RejectionPolicyAny,
 			},
@@ -501,7 +501,7 @@ func TestPolicyCreate_AuthorizationMode_RoleModeWithoutRoles_Error(t *testing.T)
 			{
 				Index:              0,
 				RequiredApprovals:  1,
-				AllowedPermissions: []byte(`["approve_transfer"]`),
+				AllowedPermissions: []string{"approve_transfer"},
 				AuthorizationMode:  model.AuthModeRole,
 				RejectionPolicy:    model.RejectionPolicyAny,
 			},
@@ -529,7 +529,7 @@ func TestPolicyCreate_AuthorizationMode_OnlyRolesSet_NoModeRequired(t *testing.T
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: []byte(`["manager"]`),
+				AllowedCheckerRoles: []string{"manager"},
 				RejectionPolicy:     model.RejectionPolicyAny,
 			},
 		}
@@ -556,7 +556,7 @@ func TestPolicyCreate_AuthorizationMode_OnlyPermissionsSet_NoModeRequired(t *tes
 			{
 				Index:              0,
 				RequiredApprovals:  1,
-				AllowedPermissions: []byte(`["approve_transfer"]`),
+				AllowedPermissions: []string{"approve_transfer"},
 				RejectionPolicy:    model.RejectionPolicyAny,
 			},
 		}

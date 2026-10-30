@@ -219,7 +219,7 @@ func TestCreate_WithIdentityFields_MissingField(t *testing.T) {
 func TestCreate_SetsExpiryFromPolicy(t *testing.T) {
 	dur := 2 * time.Hour
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.AutoExpireDuration = &dur
+		p.AutoExpireDuration = model.NewDuration(dur)
 	})
 	var createdReq *model.Request
 	requests := &testutil.MockRequestStore{
@@ -573,7 +573,7 @@ func TestApprove_AlreadyActioned(t *testing.T) {
 func TestApprove_InvalidCheckerRole(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.Stages[0].AllowedCheckerRoles = json.RawMessage(`["admin","manager"]`)
+		p.Stages[0].AllowedCheckerRoles = []string{"admin", "manager"}
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
@@ -588,7 +588,7 @@ func TestApprove_InvalidCheckerRole(t *testing.T) {
 func TestApprove_ValidCheckerRole(t *testing.T) {
 	req := testutil.NewRequest()
 	policy := testutil.NewPolicy(func(p *model.Policy) {
-		p.Stages[0].AllowedCheckerRoles = json.RawMessage(`["admin","manager"]`)
+		p.Stages[0].AllowedCheckerRoles = []string{"admin", "manager"}
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
 
@@ -975,7 +975,7 @@ func TestValidateCheckerRoles_NilRoles(t *testing.T) {
 func TestValidateCheckerRoles_EmptyArray(t *testing.T) {
 	stage := &model.ApprovalStage{
 		Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny,
-		AllowedCheckerRoles: json.RawMessage(`[]`),
+		AllowedCheckerRoles: []string{},
 	}
 	err := validateCheckerRoles(stage, []string{"anything"})
 	if err != nil {
@@ -986,7 +986,7 @@ func TestValidateCheckerRoles_EmptyArray(t *testing.T) {
 func TestValidateCheckerRoles_Match(t *testing.T) {
 	stage := &model.ApprovalStage{
 		Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny,
-		AllowedCheckerRoles: json.RawMessage(`["admin","manager"]`),
+		AllowedCheckerRoles: []string{"admin", "manager"},
 	}
 	err := validateCheckerRoles(stage, []string{"manager"})
 	if err != nil {
@@ -997,7 +997,7 @@ func TestValidateCheckerRoles_Match(t *testing.T) {
 func TestValidateCheckerRoles_NoMatch(t *testing.T) {
 	stage := &model.ApprovalStage{
 		Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny,
-		AllowedCheckerRoles: json.RawMessage(`["admin","manager"]`),
+		AllowedCheckerRoles: []string{"admin", "manager"},
 	}
 	err := validateCheckerRoles(stage, []string{"viewer"})
 	if !errors.Is(err, ErrInvalidCheckerRole) {
@@ -1183,8 +1183,8 @@ func TestApprove_MultiStage_PerStageRoleValidation(t *testing.T) {
 	})
 	policy := testutil.NewPolicy(func(p *model.Policy) {
 		p.Stages = []model.ApprovalStage{
-			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny, AllowedCheckerRoles: json.RawMessage(`["finance"]`)},
-			{Index: 1, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny, AllowedCheckerRoles: json.RawMessage(`["manager"]`)},
+			{Index: 0, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny, AllowedCheckerRoles: []string{"finance"}},
+			{Index: 1, RequiredApprovals: 1, RejectionPolicy: model.RejectionPolicyAny, AllowedCheckerRoles: []string{"manager"}},
 		}
 	})
 	requestStore, approvalStore, policyStore, auditStore := setupApproveTest(req, policy)
@@ -1310,7 +1310,7 @@ func TestCanViewerAct_WrongRole(t *testing.T) {
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: json.RawMessage(`["manager"]`),
+				AllowedCheckerRoles: []string{"manager"},
 				RejectionPolicy:     model.RejectionPolicyAny,
 			},
 		}
@@ -1335,7 +1335,7 @@ func TestCanViewerAct_CorrectRole(t *testing.T) {
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: json.RawMessage(`["manager"]`),
+				AllowedCheckerRoles: []string{"manager"},
 				RejectionPolicy:     model.RejectionPolicyAny,
 			},
 		}
@@ -1414,7 +1414,7 @@ func TestCanViewerAct_CorrectPermission(t *testing.T) {
 			{
 				Index:              0,
 				RequiredApprovals:  1,
-				AllowedPermissions: json.RawMessage(`["approve_transfer"]`),
+				AllowedPermissions: []string{"approve_transfer"},
 				RejectionPolicy:    model.RejectionPolicyAny,
 			},
 		}
@@ -1439,7 +1439,7 @@ func TestCanViewerAct_WrongPermission(t *testing.T) {
 			{
 				Index:              0,
 				RequiredApprovals:  1,
-				AllowedPermissions: json.RawMessage(`["approve_transfer"]`),
+				AllowedPermissions: []string{"approve_transfer"},
 				RejectionPolicy:    model.RejectionPolicyAny,
 			},
 		}
@@ -1464,8 +1464,8 @@ func TestCanViewerAct_AuthorizationModeAny(t *testing.T) {
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: json.RawMessage(`["manager"]`),
-				AllowedPermissions:  json.RawMessage(`["approve_transfer"]`),
+				AllowedCheckerRoles: []string{"manager"},
+				AllowedPermissions:  []string{"approve_transfer"},
 				AuthorizationMode:   model.AuthModeAny,
 				RejectionPolicy:     model.RejectionPolicyAny,
 			},
@@ -1500,8 +1500,8 @@ func TestCanViewerAct_AuthorizationModeAll(t *testing.T) {
 			{
 				Index:               0,
 				RequiredApprovals:   1,
-				AllowedCheckerRoles: json.RawMessage(`["manager"]`),
-				AllowedPermissions:  json.RawMessage(`["approve_transfer"]`),
+				AllowedCheckerRoles: []string{"manager"},
+				AllowedPermissions:  []string{"approve_transfer"},
 				AuthorizationMode:   model.AuthModeAll,
 				RejectionPolicy:     model.RejectionPolicyAny,
 			},

@@ -53,7 +53,7 @@ func (s *PolicyStore) Create(ctx context.Context, policy *model.Policy) error {
 
 	_, err = s.db.Pool.Exec(ctx, query,
 		policy.ID, policy.TenantID, policy.Name, policy.RequestType, stagesJSON,
-		identityFieldsJSON, policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, policy.AutoExpireDuration, policy.DisplayTemplate, policy.CreatedAt, policy.UpdatedAt, bypassJSON,
+		identityFieldsJSON, policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, stdDuration(policy.AutoExpireDuration), policy.DisplayTemplate, policy.CreatedAt, policy.UpdatedAt, bypassJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting policy: %w", err)
@@ -157,7 +157,7 @@ func (s *PolicyStore) Update(ctx context.Context, policy *model.Policy) error {
 
 	args := []any{
 		policy.Name, stagesJSON, identityFieldsJSON,
-		policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, policy.AutoExpireDuration, policy.DisplayTemplate, policy.UpdatedAt, policy.ID, bypassJSON,
+		policy.DynamicAuthorizationURL, policy.DynamicAuthorizationSecret, stdDuration(policy.AutoExpireDuration), policy.DisplayTemplate, policy.UpdatedAt, policy.ID, bypassJSON,
 	}
 
 	tenant := auth.TenantIDFromContext(ctx)
@@ -263,7 +263,9 @@ func (s *PolicyStore) scanSingleRow(row pgx.Row) (*model.Policy, error) {
 		}
 	}
 
-	p.AutoExpireDuration = autoExpire
+	if autoExpire != nil {
+		p.AutoExpireDuration = model.NewDuration(*autoExpire)
+	}
 
 	return p, nil
 }
@@ -298,7 +300,9 @@ func (s *PolicyStore) scanPolicyRow(rows pgx.Rows) (*model.Policy, error) {
 		}
 	}
 
-	p.AutoExpireDuration = autoExpire
+	if autoExpire != nil {
+		p.AutoExpireDuration = model.NewDuration(*autoExpire)
+	}
 
 	return p, nil
 }
@@ -313,4 +317,14 @@ func marshalBypassRules(rules []model.BypassRule) ([]byte, error) {
 		return nil, fmt.Errorf("marshaling bypass rules: %w", err)
 	}
 	return b, nil
+}
+
+// stdDuration converts the model's optional duration into the pointer pgx
+// encodes as an interval.
+func stdDuration(d *model.Duration) *time.Duration {
+	if d == nil {
+		return nil
+	}
+	v := d.Std()
+	return &v
 }

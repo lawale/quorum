@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"reflect"
-
 	"github.com/google/uuid"
 	"github.com/lawale/quorum/internal/auth"
 	"github.com/lawale/quorum/internal/model"
 	"github.com/lawale/quorum/internal/store"
+	"reflect"
+	"slices"
 )
 
 // jsonEqual compares two JSON byte slices semantically, ignoring whitespace
@@ -583,11 +583,11 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 					Name:                "Finance Review",
 					RequiredApprovals:   2,
 					RejectionPolicy:     model.RejectionPolicyThreshold,
-					AllowedCheckerRoles: json.RawMessage(`["admin","manager"]`),
+					AllowedCheckerRoles: []string{"admin", "manager"},
 				},
 			},
 			IdentityFields:     []string{"account_id"},
-			AutoExpireDuration: &dur,
+			AutoExpireDuration: model.NewDuration(dur),
 		}
 		if err := s.Create(ctx, policy); err != nil {
 			t.Fatalf("Create: %v", err)
@@ -612,8 +612,8 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 		if got.Stages[0].RejectionPolicy != model.RejectionPolicyThreshold {
 			t.Errorf("Stages[0].RejectionPolicy = %q, want %q", got.Stages[0].RejectionPolicy, model.RejectionPolicyThreshold)
 		}
-		if !jsonEqual(got.Stages[0].AllowedCheckerRoles, []byte(`["admin","manager"]`)) {
-			t.Errorf("Stages[0].AllowedCheckerRoles = %s", got.Stages[0].AllowedCheckerRoles)
+		if !slices.Equal(got.Stages[0].AllowedCheckerRoles, []string{"admin", "manager"}) {
+			t.Errorf("Stages[0].AllowedCheckerRoles = %v", got.Stages[0].AllowedCheckerRoles)
 		}
 		if got.Stages[0].Name != "Finance Review" {
 			t.Errorf("Stages[0].Name = %q, want %q", got.Stages[0].Name, "Finance Review")
@@ -621,7 +621,7 @@ func TestPolicyStore(t *testing.T, s store.PolicyStore) {
 		if len(got.IdentityFields) != 1 || got.IdentityFields[0] != "account_id" {
 			t.Errorf("IdentityFields = %v", got.IdentityFields)
 		}
-		if got.AutoExpireDuration == nil || *got.AutoExpireDuration != 2*time.Hour {
+		if got.AutoExpireDuration == nil || got.AutoExpireDuration.Std() != 2*time.Hour {
 			t.Errorf("AutoExpireDuration = %v, want 2h", got.AutoExpireDuration)
 		}
 	})
