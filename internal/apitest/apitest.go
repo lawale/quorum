@@ -53,11 +53,24 @@ type Server struct {
 
 // New starts a server for the duration of the test. Identity comes from the
 // trust headers above, with branch_id read from X-User-Branch so scope rules
-// can be exercised.
+// can be exercised. Any traffic that disagrees with the OpenAPI document
+// fails t.
 func New(t testing.TB) *Server {
 	t.Helper()
+	if !testing.Verbose() {
+		quietLogs()
+	}
+	srv, err := Start(t.Errorf)
+	if err != nil {
+		t.Fatalf("loading OpenAPI document: %v", err)
+	}
+	t.Cleanup(srv.Close)
+	return srv
+}
 
-	quietLogs()
+// Start boots a server whose spec violations are passed to report, for
+// callers that are not Go tests (see cmd/apiserver). Close it when done.
+func Start(report func(format string, args ...any)) (*Server, error) {
 	stores := testutil.NewMemoryStores()
 	hub := sse.NewHub()
 
@@ -79,9 +92,11 @@ func New(t testing.TB) *Server {
 		EventHub:       hub,
 	})
 
-	handler := Validating(t, srv.Handler())
+	handler, err := Validating(report, srv.Handler())
+	if err != nil {
+		return nil, err
+	}
 	hs := httptest.NewServer(handler)
-	t.Cleanup(hs.Close)
 
 	return &Server{
 		URL:        hs.URL,
@@ -90,17 +105,18 @@ func New(t testing.TB) *Server {
 		Requests:   requestSvc,
 		Policies:   policySvc,
 		httpServer: hs,
-	}
+	}, nil
 }
+
+// Close stops the server.
+func (s *Server) Close() { s.httpServer.Close() }
 
 var quietOnce sync.Once
 
-// quietLogs silences the server's request log unless -v is set.
+// quietLogs silences the server's request log.
 func quietLogs() {
 	quietOnce.Do(func() {
-		if !testing.Verbose() {
-			slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
-		}
+		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	})
 }
 
@@ -138,13 +154,13 @@ func loadSpec() (routers.Router, error) {
 }
 
 // Validating wraps next so that every request it serves, and the response it
-// produces, is checked against the OpenAPI document. A mismatch fails t.
-// Event streams are passed through unchecked because they never end.
-func Validating(t testing.TB, next http.Handler) http.Handler {
-	t.Helper()
+// produces, is checked against the OpenAPI document. A mismatch is passed to
+// report (t.Errorf in a test). Event streams are passed through unchecked
+// because they never end.
+func Validating(report func(format string, args ...any), next http.Handler) (http.Handler, error) {
 	router, err := loadSpec()
 	if err != nil {
-		t.Fatalf("loading OpenAPI document: %v", err)
+		return nil, err
 	}
 	opts := &openapi3filter.Options{
 		AuthenticationFunc:    openapi3filter.NoopAuthenticationFunc,
@@ -154,7 +170,7 @@ func Validating(t testing.TB, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		route, pathParams, err := router.FindRoute(r)
 		if err != nil {
-			t.Errorf("%s %s is not in the OpenAPI document: %v", r.Method, r.URL.Path, err)
+			report("%s %s is not in the OpenAPI document: %v", r.Method, r.URL.Path, err)
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -182,7 +198,7 @@ func Validating(t testing.TB, next http.Handler) http.Handler {
 		// Only hold the request to the document when the server accepted it;
 		// a client is allowed to send junk and get a 4xx back.
 		if requestErr != nil && rec.Code < 400 {
-			t.Errorf("%s %s: request accepted by server but rejected by OpenAPI document: %v", r.Method, r.URL.Path, requestErr)
+			report("%s %s: request accepted by server but rejected by OpenAPI document: %v", r.Method, r.URL.Path, requestErr)
 		}
 
 		respInput := &openapi3filter.ResponseValidationInput{
@@ -193,7 +209,7 @@ func Validating(t testing.TB, next http.Handler) http.Handler {
 		}
 		respInput.SetBodyBytes(rec.Body.Bytes())
 		if err := openapi3filter.ValidateResponse(context.Background(), respInput); err != nil {
-			t.Errorf("%s %s -> %d: response does not match OpenAPI document: %v\nbody: %s", r.Method, r.URL.Path, rec.Code, err, rec.Body.String())
+			report("%s %s -> %d: response does not match OpenAPI document: %v\nbody: %s", r.Method, r.URL.Path, rec.Code, err, rec.Body.String())
 		}
 
 		for k, v := range rec.Header() {
@@ -201,7 +217,7 @@ func Validating(t testing.TB, next http.Handler) http.Handler {
 		}
 		w.WriteHeader(rec.Code)
 		_, _ = w.Write(rec.Body.Bytes())
-	})
+	}), nil
 }
 
 func markCovered(route *routers.Route) {
