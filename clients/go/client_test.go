@@ -483,8 +483,8 @@ func TestIdentityIsRequired(t *testing.T) {
 	}
 
 	h, err := c.Health(ctx)
-	if err != nil || h.Status != "healthy" {
-		t.Errorf("health needs no identity: %+v %v", h, err)
+	if err != nil || h.Status != "healthy" || h.Version != apitest.Version {
+		t.Errorf("health needs no identity and reports the build version: %+v %v", h, err)
 	}
 }
 

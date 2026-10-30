@@ -36,6 +36,9 @@ const (
 	BranchHeader      = "X-User-Branch"
 )
 
+// Version is what the harness server reports from /health.
+const Version = "test"
+
 // Server is a running in-process Quorum.
 type Server struct {
 	URL    string
@@ -67,6 +70,7 @@ func New(t testing.TB) *Server {
 		WithAttributeHeaders(map[string]string{"branch_id": BranchHeader})
 
 	srv := server.New(server.Config{
+		Version:        Version,
 		RequestService: requestSvc,
 		PolicyService:  policySvc,
 		WebhookService: webhookSvc,

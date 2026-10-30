@@ -24,6 +24,7 @@ import (
 	"github.com/lawale/quorum/internal/store"
 	"github.com/lawale/quorum/internal/store/mssql"
 	"github.com/lawale/quorum/internal/store/postgres"
+	"github.com/lawale/quorum/internal/version"
 	"github.com/lawale/quorum/internal/webhook"
 	"github.com/lawale/quorum/widgets"
 	"github.com/prometheus/client_golang/prometheus"
@@ -193,6 +194,7 @@ func main() {
 		TenantService:   tenantService,
 		OperatorService: operatorService,
 		AuditStore:      stores.Audits,
+		Version:         version.Version,
 		OutboxStore:     stores.Outbox,
 		SignalWorker:    dispatcher.Signal,
 		AuthProvider:    authProvider,
@@ -222,7 +224,7 @@ func main() {
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		slog.Info("starting server", "addr", cfg.Server.Addr()) //nolint:gosec // G706: addr is from validated config, not user input
+		slog.Info("starting server", "addr", cfg.Server.Addr(), "version", version.Version) //nolint:gosec // G706: addr is from validated config, not user input
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server error", "error", err)
 			os.Exit(1)

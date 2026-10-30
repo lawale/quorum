@@ -885,7 +885,7 @@ The consumer's job is a directory query: users holding one of `allowed_roles` (o
 
 ### Health Endpoint
 
-The `/health` endpoint returns component-level health status (HTTP 200 when healthy, 503 when unhealthy) and does not require authentication. Use it for load balancer health checks and container orchestration readiness probes.
+The `/health` endpoint returns component-level health status (HTTP 200 when healthy, 503 when unhealthy) and does not require authentication. Use it for load balancer health checks and container orchestration readiness probes. The response also carries `version`: the release tag the binary was built from (`"dev"` for local builds), so you can confirm which Quorum a deployment is running.
 
 ### Docker
 
@@ -928,6 +928,9 @@ docker build -f Dockerfile.console -t quorum-console .
 
 # With admin console and embeddable widgets
 docker build -f Dockerfile.all -t quorum-all .
+
+# Stamp the version reported by /health (release builds pass the git tag)
+docker build --build-arg VERSION=v0.4.0 -t quorum .
 
 # Run
 docker run -p 8080:8080 -v /path/to/config.yaml:/etc/quorum/config.yaml quorum-all

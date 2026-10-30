@@ -584,11 +584,14 @@ components:
     Health:
       type: object
       additionalProperties: false
-      required: [status, components]
+      required: [status, version, components]
       properties:
         status:
           type: string
           enum: [healthy, unhealthy]
+        version:
+          type: string
+          description: Release the server was built from, or "dev".
         components:
           type: object
           additionalProperties:

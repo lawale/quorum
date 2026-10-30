@@ -1,5 +1,6 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 ARG TARGETOS TARGETARCH
+ARG VERSION=dev
 
 WORKDIR /app
 
@@ -9,7 +10,7 @@ RUN go mod download
 RUN addgroup -S quorum && adduser -S quorum -G quorum
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /bin/quorum ./cmd/server
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X github.com/lawale/quorum/internal/version.Version=${VERSION}" -o /bin/quorum ./cmd/server
 
 FROM scratch
 

@@ -15,8 +15,6 @@ import (
 	"github.com/lawale/quorum/internal/model"
 )
 
-const defaultUserAgent = "quorum-go-client/1.0"
-
 // Client calls one Quorum server. It is safe for concurrent use. Create one
 // with New and derive per-identity clients with As.
 type Client struct {
@@ -54,7 +52,7 @@ func WithTrustHeaderNames(names HeaderNames) Option {
 	return func(c *Client) { c.headers = c.headers.merge(names) }
 }
 
-// WithUserAgent sets the User-Agent header.
+// WithUserAgent replaces the default User-Agent of "quorum-go-client/<Version>".
 func WithUserAgent(ua string) Option {
 	return func(c *Client) { c.userAgent = ua }
 }
@@ -73,7 +71,7 @@ func New(baseURL string, opts ...Option) (*Client, error) {
 		baseURL:   strings.TrimRight(baseURL, "/"),
 		http:      &http.Client{Timeout: 30 * time.Second},
 		headers:   DefaultHeaderNames(),
-		userAgent: defaultUserAgent,
+		userAgent: "quorum-go-client/" + Version(),
 	}
 	for _, o := range opts {
 		o(c)

@@ -67,5 +67,6 @@ var NewDuration = model.NewDuration
 // Health is the server's health report.
 type Health struct {
 	Status     string                     `json:"status"`
+	Version    string                     `json:"version"`
 	Components map[string]ComponentStatus `json:"components"`
 }
