@@ -18,6 +18,7 @@ export default defineConfig({
 			social: [{ icon: 'github', label: 'GitHub', href: repo }],
 			editLink: { baseUrl: `${repo}/edit/master/site/` },
 			customCss: ['./src/styles/custom.css'],
+			components: { Hero: './src/components/Hero.astro' },
 			head: [
 				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://quorum.olawalelawal.dev/og.png' } },
 				{ tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
