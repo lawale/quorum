@@ -74,6 +74,12 @@ curl -sf -X POST "${CONSOLE_API}/tenants" \
   -H "Authorization: Bearer ${JWT}" \
   -d '{"slug":"access-portal","name":"Access Request Portal"}' > /dev/null 2>&1 || log "  (already exists or error)"
 
+log "Creating tenant: landing"
+curl -sf -X POST "${CONSOLE_API}/tenants" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${JWT}" \
+  -d '{"slug":"landing","name":"Landing Page"}' > /dev/null 2>&1 || log "  (already exists or error)"
+
 # ---- Policies ----
 section "Creating Policies"
 
@@ -198,6 +204,44 @@ curl -sf -X POST "${API}/policies" \
         {"label": "Account ID", "path": "account_id"},
         {"label": "Customer", "path": "customer_name"},
         {"label": "Reason", "path": "reason"}
+      ]
+    }
+  }' > /dev/null 2>&1 || log "  (already exists)"
+
+# The landing page's hero signs this request type live against the public
+# demo. Every visitor opens their own request, so they expire quickly.
+log "Creating policy: Wire Transfer (tenant: landing)"
+curl -sf -X POST "${API}/policies" \
+  -H "Content-Type: application/json" \
+  -H "X-User-ID: seed-admin" \
+  -H "X-Tenant-ID: landing" \
+  -d '{
+    "name": "Wire transfer",
+    "request_type": "wire_transfer",
+    "stages": [
+      {
+        "index": 0,
+        "name": "Manager approval",
+        "required_approvals": 1,
+        "allowed_checker_roles": ["manager"],
+        "rejection_policy": "any"
+      },
+      {
+        "index": 1,
+        "name": "Compliance review",
+        "required_approvals": 2,
+        "allowed_checker_roles": ["compliance_officer"],
+        "rejection_policy": "any"
+      }
+    ],
+    "identity_fields": ["source_account_id"],
+    "auto_expire_duration": "1h",
+    "display_template": {
+      "title": "Wire transfer - {{amount | currency}}",
+      "fields": [
+        {"label": "From account", "path": "source_account_id"},
+        {"label": "Amount", "path": "amount", "format": "currency"},
+        {"label": "Destination", "path": "destination"}
       ]
     }
   }' > /dev/null 2>&1 || log "  (already exists)"

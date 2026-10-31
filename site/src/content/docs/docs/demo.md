@@ -13,7 +13,7 @@ Three sample applications share one hosted Quorum instance. Each has a profile s
 | [Expense tracker](https://quorum.olawalelawal.dev/demo/expenses) | Node.js + Express | Single-stage expense approval with status polling |
 | [Access portal](https://quorum.olawalelawal.dev/demo/access) | Python + Flask | Threshold-based security review (2-of-3 voting) |
 
-The demo is reset from time to time, and anything you create there is public.
+The form on the [landing page](/) runs against the same instance, in its own `landing` tenant: each visitor opens a wire transfer and signs it as four different people, and the server's guards answer every click. The demo is reset from time to time, and anything you create there is public.
 
 ## Run the demo locally
 
@@ -25,7 +25,7 @@ This starts everything: PostgreSQL, Quorum with the admin console, the policies 
 
 ## What each app demonstrates
 
-- **Banking**: a webhook-driven flow on the [Go client](/docs/integrate/go-client/). Transfers execute automatically when Quorum sends an approved webhook, verified with `client.ParseWebhook`.
+- **Banking**: a webhook-driven flow on the [Go client](/docs/clients/go/). Transfers execute automatically when Quorum sends an approved webhook, verified with `client.ParseWebhook`.
 - **Expense tracker**: a polling-based flow. The detail page fetches the latest status from Quorum on each page load.
 - **Access portal**: threshold voting. Two of three security reviewers must approve, and not every rejection is fatal.
 

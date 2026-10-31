@@ -44,10 +44,6 @@ export const policy = `{
   "auto_expire_duration": "24h"
 }`;
 
-export const start = `git clone https://github.com/lawale/quorum.git && cd quorum
-docker compose up
-# PostgreSQL, migrations, Quorum with console and widgets at localhost:8080`;
-
 <div class="q-landing not-content">
 
 <section class="not-content">
@@ -103,14 +99,15 @@ docker compose up
   <div><dt>Webhooks that cannot be lost</dt><dd>Deliveries are written to an outbox in the same transaction as the state change, signed with HMAC-SHA256 and retried with backoff. A review_requested event tells your application exactly who is allowed to act next, so you can notify them.</dd></div>
   <div><dt>Approval screens for any front end</dt><dd>Three Lit Web Components: an approval panel, a request list and a stage progress bar. Shadow DOM isolation, theming through CSS custom properties, live updates over Server-Sent Events. Load them from a script tag or npm.</dd></div>
   <div><dt>Your identity provider stays in charge</dt><dd>Validate JWTs against any OIDC provider's JWKS endpoint with claim mapping and automatic key rotation, or trust headers from your gateway. Quorum never becomes a user directory.</dd></div>
-  <div><dt>Built to be operated</dt><dd>PostgreSQL or SQL Server, with everything in its own schema so Quorum can share your database. Prometheus metrics, a health endpoint that reports its version, multi-arch Docker images, an OpenAPI contract validated against the real server in tests, and official Go, TypeScript and .NET clients built on it.</dd></div>
+  <div><dt>Clients that cannot drift</dt><dd>Official <a href="/docs/clients/go/">Go</a>, <a href="/docs/clients/typescript/">TypeScript</a> and <a href="/docs/clients/dotnet/">.NET</a> clients, each tested against the real server under the OpenAPI contract. Per-call identity, idempotent creation, webhook verification and waiting on a decision, in each language's idiom.</dd></div>
+  <div><dt>Built to be operated</dt><dd>PostgreSQL or SQL Server, with everything in its own schema so Quorum can share your database. Prometheus metrics, a health endpoint that reports its version, multi-arch Docker images, and an OpenAPI contract validated against the real server in tests.</dd></div>
 </dl>
 </section>
 
 <section class="not-content">
-## The console
+## See it running
 
-<p class="q-lead">Manage policies, browse requests, read every audit entry and watch webhook deliveries. It ships inside the server binary when you opt in at build time.</p>
+<p class="q-lead">The admin console manages policies, browses requests, reads every audit entry and watches webhook deliveries. Three sample applications on three stacks share one hosted Quorum; switch personas in their navigation bar to walk a request from maker to checker.</p>
 
 <div class="q-console">
   <figure><Image src={dashboard} alt="Quorum console dashboard listing pending and decided approval requests" /><figcaption>The requests dashboard</figcaption></figure>
@@ -120,12 +117,6 @@ docker compose up
     <figure><Image src={auditLog} alt="Audit log" /><figcaption>Audit log</figcaption></figure>
   </div>
 </div>
-</section>
-
-<section class="not-content">
-## Three apps, one engine
-
-<p class="q-lead">Three sample applications on three stacks share one hosted Quorum. Switch personas in the navigation bar to walk a request from maker to checker.</p>
 
 <ul class="q-demos">
   <li><a href="https://quorum.olawalelawal.dev/demo/banking">Banking</a><span class="q-stack">Go, html/template, built on the Go client</span><p>Multi-stage wire transfers that execute when the approved webhook arrives.</p></li>
@@ -135,22 +126,28 @@ docker compose up
 </section>
 
 <section class="not-content">
-## Start in a few minutes
+## Where to go next
 
-<div class="q-split">
+<div class="q-split q-next">
   <div>
-    <p class="q-lead">One command brings up the database, the migrations and a server with the console and widgets. Then create a policy and your first request.</p>
+    <p class="q-lead">The command under the headline brings up the database, the migrations and a server with the console and widgets. From there, create a policy and your first request.</p>
     <ul class="q-start-links">
       <li><a href="/docs/getting-started/quickstart/">Quick start</a> <span>build from source and point it at a database</span></li>
       <li><a href="/docs/getting-started/walkthrough/">Walkthrough</a> <span>a two-stage wire transfer from policy to webhook</span></li>
-      <li><a href="/docs/integrate/go-client/">Go client</a> <span>typed, with webhook verification and wait-for-decision</span></li>
-      <li><a href="/docs/integrate/typescript-client/">TypeScript client</a> <span>the same surface for Node and the browser, generated from the OpenAPI contract</span></li>
-      <li><a href="/docs/integrate/dotnet-client/">.NET client</a> <span>records, <code>As(identity)</code> per call, <code>AddQuorumClient</code> for ASP.NET Core, and <code>[RequiresApproval]</code> on MediatR commands</span></li>
+      <li><a href="/docs/concepts/how-it-works/">How Quorum works</a> <span>the model, the guards and the decision path</span></li>
       <li><a href="https://github.com/lawale/quorum">Source on GitHub</a> <span>MIT licensed</span></li>
       <li><a href="https://olawalelawal.dev/building-quorum-multi-tenant-approval-engine/">Why Quorum exists</a> <span>the design story, on the author's blog</span></li>
     </ul>
   </div>
-  <Code code={start} lang="bash" title="Terminal" />
+  <div>
+    <p class="q-lead">Call it from your language.</p>
+    <ul class="q-start-links">
+      <li><a href="/docs/clients/go/">Go</a> <span><code>go get github.com/lawale/quorum/clients/go</code>. Shares the server's own types.</span></li>
+      <li><a href="/docs/clients/typescript/">TypeScript</a> <span><code>npm install @oluwavader/quorum-client</code>. Node and the browser, generated from the OpenAPI contract.</span></li>
+      <li><a href="/docs/clients/dotnet/">.NET</a> <span><code>dotnet add package Quorum.Client</code>. <code>AddQuorumClient</code> for ASP.NET Core, and <code>[RequiresApproval]</code> on MediatR commands.</span></li>
+      <li><a href="/docs/integrate/api/">REST API</a> <span>for everything else, with the OpenAPI document served by every instance</span></li>
+    </ul>
+  </div>
 </div>
 </section>
 
