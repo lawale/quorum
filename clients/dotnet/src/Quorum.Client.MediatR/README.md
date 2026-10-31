@@ -1,6 +1,6 @@
 # Quorum.Client.MediatR
 
-Routes MediatR commands through [Quorum](https://quorum.olawalelawal.dev) for approval. Mark a command, and sending it opens an approval request instead of running its handler. When a checker approves, the same command object is dispatched to the same handler. The handler never learns that approval exists, and the checker approves exactly what will execute.
+Routes MediatR commands through [Quorum](https://quorum.olawalelawal.dev) for approval. Mark a command and submit it; Quorum holds it until it is approved, then the same command object is dispatched to the same handler from the webhook. The handler never learns that approval exists, and the checker approves exactly what will execute.
 
 ```bash
 dotnet add package Quorum.Client.MediatR
@@ -30,30 +30,27 @@ app.MapPost("/quorum/webhook", async (HttpRequest http, ApprovalDispatcher dispa
 });
 ```
 
-Sending the command now has three outcomes:
+Submit the command instead of sending it:
 
 ```csharp
-try
+app.MapPost("/transfers", async (SubmitWireTransfer command, Approvals approvals) =>
 {
-    var result = await sender.Send(new SubmitWireTransfer(account, 5000m, iban));
-    // A bypass rule matched: Quorum approved it on creation and the handler ran.
-}
-catch (ApprovalPendingException e)
-{
-    return Results.Accepted($"/transfers/pending/{e.Request.Id}");
-}
+    var request = await approvals.SubmitAsync(command);
+    return Results.Accepted($"/transfers/{request.Id}", request);
+});
 ```
 
-The third outcome happens later. Quorum delivers an `approved` webhook, the dispatcher decodes the command from the request payload, and sends it through MediatR in a fresh scope. `ApprovalBehavior` recognises the replay and lets it through to the handler. A `rejected`, `cancelled` or `expired` delivery does not run anything.
+`SubmitAsync` returns the Quorum request. It is pending when checkers must act, or already approved when a bypass rule matched. Either way the handler has not run yet. It runs when Quorum delivers the `approved` webhook: the dispatcher decodes the command from the request payload and sends it through MediatR in a fresh scope. A `rejected`, `cancelled` or `expired` delivery runs nothing.
 
-Every terminal delivery publishes a `RequestDecided` notification carrying the request, the decoded command, and the handler's result for approved requests. Handle it to notify the maker or to record the outcome.
+Execution has one path, so whatever follows a decision lives in one place: handle the `RequestDecided` notification, which carries the request, the decoded command and, for approvals, the handler's result. Sending a marked command directly with `ISender.Send` throws `ApprovalRequiredException`, so approval cannot be skipped by accident.
 
 ## Pieces
 
 - **`[RequiresApproval]`** marks a command. The Quorum request type defaults to the class name in snake_case, so `SubmitWireTransfer` selects the `submit_wire_transfer` policy; pass a name to override it.
 - **`IQuorumIdentityProvider`** supplies the maker's credentials, typically from the current HTTP user. Register it as scoped. Without one, the client's default credentials are used.
 - **`IIdempotentCommand`** lets a command carry an idempotency key, so a retried submission returns the request opened the first time.
-- **`IApprovalContext`** is injectable into handlers. During a replay its `Request` is the approved request, with the maker, the approvals and the request ID. For a bypassed command it is the auto-approved request. For commands that need no approval it is null.
+- **`Approvals`** submits a marked command and returns the Quorum request.
+- **`IApprovalContext`** is injectable into handlers. Its `Request` is the approved request the handler is executing, with the maker, the approvals and the request ID. For commands that need no approval it is null.
 - **`ApprovalDispatcher`** is the webhook side. `DispatchAsync(Stream, signature)` verifies and dispatches; `DispatchAsync(WebhookPayload)` takes a delivery you verified yourself.
 
 ## Setting it up in Quorum
@@ -62,7 +59,13 @@ Create a policy whose request type matches each marked command, and a webhook su
 
 ## Delivery semantics
 
-Quorum retries a delivery until your endpoint answers 2xx, so a handler that throws will be retried. Deliveries are at least once, so handlers should be idempotent against the request ID. A command that a bypass rule approved runs inline at submission; Quorum still sends an `approved` delivery for it, which the dispatcher recognises by the absence of approvals and ignores.
+Quorum retries a delivery until your endpoint answers 2xx, so a handler that throws will be retried. Deliveries are at least once, so handlers should be idempotent against the request ID.
+
+The delivery is queued in the same transaction that creates the request, so for a bypassed command the handler can run before `SubmitAsync` has returned, and on a different instance of your application. Write your code to that ordering:
+
+- The command carries everything the handler needs. Nothing the submitter writes after `SubmitAsync` is guaranteed to be visible to the handler.
+- If the submitter must record the attempt itself, it generates an idempotency key first, writes its record under that key, then submits the command as an `IIdempotentCommand`. The handler finds the record through `IApprovalContext.Request.IdempotencyKey`.
+- After `SubmitAsync`, the submitter's only job is to hand the request ID back. What follows a decision belongs in the handler or in a `RequestDecided` handler.
 
 ## MediatR licensing
 

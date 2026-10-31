@@ -85,9 +85,14 @@ app.MapPost("/quorum/webhook", async (HttpRequest http, ApprovalDispatcher dispa
 });
 ```
 
-`Send` now does one of three things. If a bypass rule matches, Quorum approves the request on creation and the handler runs at once. Otherwise `Send` throws `ApprovalPendingException` carrying the request Quorum opened, and the caller answers 202 with its ID. Later, the `approved` webhook arrives, the dispatcher decodes the command from the request payload and sends it through MediatR again, and the pipeline lets it through to the handler. The checker approved exactly the object that executes.
+```csharp
+var request = await approvals.SubmitAsync(new SubmitWireTransfer(account, 5000m, iban));
+return Results.Accepted($"/transfers/{request.Id}", request);
+```
 
-A rejected, cancelled or expired delivery runs nothing. Every decision publishes a `RequestDecided` notification with the request, the command and, for approvals, the handler's result. Handlers that want the maker or the approvals inject `IApprovalContext`. Policies, stages, scoping and bypass rules are configured in Quorum against the command's request type, which defaults to the class name in snake_case.
+`SubmitAsync` returns the Quorum request, pending or already approved by a bypass rule. The handler runs later, when the `approved` webhook arrives: the dispatcher decodes the command from the request payload and sends it through MediatR, and the pipeline lets it through to the handler. The checker approved exactly the object that executes, and there is one execution path, so what follows a decision is written once, in a `RequestDecided` handler. Sending a marked command directly throws, so approval cannot be skipped by accident.
+
+A rejected, cancelled or expired delivery runs nothing. Handlers that want the maker or the approvals inject `IApprovalContext`. Policies, stages, scoping and bypass rules are configured in Quorum against the command's request type, which defaults to the class name in snake_case.
 
 ## Authentication
 

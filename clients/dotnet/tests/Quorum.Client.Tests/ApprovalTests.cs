@@ -84,6 +84,13 @@ public sealed class ApprovalTests(ApiServerFixture server)
         return services.BuildServiceProvider();
     }
 
+    private static async Task<Request> SubmitAs<TResponse>(ServiceProvider sp, Credentials who, IRequest<TResponse> command)
+    {
+        using var scope = sp.CreateScope();
+        scope.ServiceProvider.GetRequiredService<CurrentUser>().Credentials = who;
+        return await scope.ServiceProvider.GetRequiredService<Approvals>().SubmitAsync(command);
+    }
+
     private static async Task<TResponse> SendAs<TResponse>(ServiceProvider sp, Credentials who, IRequest<TResponse> command)
     {
         using var scope = sp.CreateScope();
@@ -116,17 +123,21 @@ public sealed class ApprovalTests(ApiServerFixture server)
         await PolicyAsync(quorum, "submit_wire_transfer");
 
         var command = new SubmitWireTransfer("T-100", 5000);
-        var pending = await Assert.ThrowsAsync<ApprovalPendingException>(() => SendAs(sp, Alice, command));
-        Assert.Equal("submit_wire_transfer", pending.Request.Type);
-        Assert.Equal(RequestStatus.Pending, pending.Request.Status);
-        Assert.Equal("alice", pending.Request.MakerId);
-        Assert.Equal(command, pending.Request.PayloadAs<SubmitWireTransfer>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }));
+        var pending = await SubmitAs(sp, Alice, command);
+        Assert.Equal("submit_wire_transfer", pending.Type);
+        Assert.Equal(RequestStatus.Pending, pending.Status);
+        Assert.Equal("alice", pending.MakerId);
+        Assert.Equal(command, pending.PayloadAs<SubmitWireTransfer>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }));
         Assert.Empty(ledger.Executed);
 
-        var again = await Assert.ThrowsAsync<ApprovalPendingException>(() => SendAs(sp, Alice, command));
-        Assert.Equal(pending.Request.Id, again.Request.Id);
+        var again = await SubmitAs(sp, Alice, command);
+        Assert.Equal(pending.Id, again.Id);
 
-        var approved = await quorum.As(Bob).ApproveAsync(pending.Request.Id, "ok");
+        var direct = await Assert.ThrowsAsync<ApprovalRequiredException>(() => SendAs(sp, Alice, command));
+        Assert.Equal("submit_wire_transfer", direct.RequestType);
+        Assert.Empty(ledger.Executed);
+
+        var approved = await quorum.As(Bob).ApproveAsync(pending.Id, "ok");
         Assert.Equal(RequestStatus.Approved, approved.Status);
 
         var dispatcher = sp.GetRequiredService<ApprovalDispatcher>();
@@ -155,8 +166,8 @@ public sealed class ApprovalTests(ApiServerFixture server)
         var ledger = sp.GetRequiredService<Ledger>();
         await PolicyAsync(quorum, "close_account");
 
-        var pending = await Assert.ThrowsAsync<ApprovalPendingException>(() => SendAs(sp, Alice, new CloseAccount("A-9")));
-        var rejected = await quorum.As(Bob).RejectAsync(pending.Request.Id, "no");
+        var pending = await SubmitAs(sp, Alice, new CloseAccount("A-9"));
+        var rejected = await quorum.As(Bob).RejectAsync(pending.Id, "no");
 
         var (body, signature) = Delivery(WebhookEvent.Rejected, rejected);
         var result = await sp.GetRequiredService<ApprovalDispatcher>().DispatchAsync(new MemoryStream(body), signature);
@@ -169,7 +180,7 @@ public sealed class ApprovalTests(ApiServerFixture server)
     }
 
     [Fact]
-    public async Task BypassedCommandRunsAtOnce()
+    public async Task BypassedCommandStillRunsFromTheWebhook()
     {
         await using var sp = Build();
         var quorum = sp.GetRequiredService<QuorumClient>();
@@ -177,19 +188,20 @@ public sealed class ApprovalTests(ApiServerFixture server)
         await PolicyAsync(quorum, "petty_expense",
             [new BypassRule { Name = "petty cash", Payload = [new BypassCondition { Path = "amount", Op = BypassOp.Lt, Value = 50 }] }]);
 
-        var result = await SendAs(sp, Alice, new FileExpense("E-1", 20));
-        Assert.Equal("executed E-1", result);
+        var bypassed = await SubmitAs(sp, Alice, new FileExpense("E-1", 20));
+        Assert.Equal(RequestStatus.Approved, bypassed.Status);
+        Assert.Equal("petty_expense", bypassed.Type);
+        Assert.Empty(ledger.Executed);
+
+        var (body, signature) = Delivery(WebhookEvent.Approved, await quorum.As(Alice).GetRequestAsync(bypassed.Id));
+        var result = await sp.GetRequiredService<ApprovalDispatcher>().DispatchAsync(new MemoryStream(body), signature);
+        Assert.Equal(DispatchOutcome.Executed, result.Outcome);
+        Assert.Equal("executed E-1", result.Result);
         var (_, context) = Assert.Single(ledger.Executed);
-        Assert.Equal(RequestStatus.Approved, context!.Status);
-        Assert.Equal("petty_expense", context.Type);
+        Assert.Equal(bypassed.Id, context!.Id);
 
-        var (body, signature) = Delivery(WebhookEvent.Approved, await quorum.As(Alice).GetRequestAsync(context.Id));
-        var replay = await sp.GetRequiredService<ApprovalDispatcher>().DispatchAsync(new MemoryStream(body), signature);
-        Assert.Equal(DispatchOutcome.Ignored, replay.Outcome);
-        Assert.Single(ledger.Executed);
-
-        var pending = await Assert.ThrowsAsync<ApprovalPendingException>(() => SendAs(sp, Alice, new FileExpense("E-2", 500)));
-        Assert.Equal(RequestStatus.Pending, pending.Request.Status);
+        var pending = await SubmitAs(sp, Alice, new FileExpense("E-2", 500));
+        Assert.Equal(RequestStatus.Pending, pending.Status);
         Assert.Single(ledger.Executed);
     }
 
@@ -198,6 +210,7 @@ public sealed class ApprovalTests(ApiServerFixture server)
     {
         await using var sp = Build();
         Assert.Equal("pong hi", await SendAs(sp, Alice, new Ping("hi")));
+        await Assert.ThrowsAsync<ArgumentException>(() => SubmitAs(sp, Alice, new Ping("hi")));
 
         var quorum = sp.GetRequiredService<QuorumClient>();
         await PolicyAsync(quorum, "not_a_command");

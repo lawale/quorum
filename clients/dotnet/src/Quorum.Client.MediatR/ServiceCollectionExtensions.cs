@@ -16,9 +16,9 @@ public sealed class QuorumApprovalOptions
 public static class QuorumApprovalServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds <see cref="ApprovalBehavior{TRequest,TResponse}"/> to the MediatR pipeline and
-    /// <see cref="ApprovalDispatcher"/> for the webhook endpoint. Call it after <c>AddMediatR</c>
-    /// and <c>AddQuorumClient</c>. <paramref name="assemblies"/> are scanned for commands marked
+    /// Adds <see cref="Approvals"/> for submitting commands, <see cref="ApprovalDispatcher"/> for
+    /// the webhook endpoint, and the pipeline guard that keeps marked commands out of their
+    /// handlers until approved. Call it after <c>AddMediatR</c> and <c>AddQuorumClient</c>. <paramref name="assemblies"/> are scanned for commands marked
     /// <see cref="RequiresApprovalAttribute"/>; the calling assembly is used when none are given.
     /// </summary>
     public static IServiceCollection AddQuorumApprovals(this IServiceCollection services, Action<QuorumApprovalOptions>? configure = null, params Assembly[] assemblies)
@@ -29,6 +29,7 @@ public static class QuorumApprovalServiceCollectionExtensions
         services.AddOptions<QuorumApprovalOptions>().Configure(configure ?? (_ => { }));
         services.TryAddSingleton(new ApprovalRegistry(assemblies));
         services.TryAddSingleton<ApprovalDispatcher>();
+        services.TryAddScoped<Approvals>();
         services.TryAddScoped<ApprovalContext>();
         services.TryAddScoped<IApprovalContext>(sp => sp.GetRequiredService<ApprovalContext>());
         services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IPipelineBehavior<,>), typeof(ApprovalBehavior<,>)));

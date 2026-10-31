@@ -8,8 +8,9 @@ namespace Quorum.Client.MediatR;
 /// <summary>
 /// Turns Quorum webhook deliveries into command executions. Point your webhook endpoint at
 /// <see cref="DispatchAsync(Stream, string?, CancellationToken)"/>: an <c>approved</c> delivery
-/// decodes the command from the request payload and sends it through MediatR in a fresh scope;
-/// every terminal delivery publishes <see cref="RequestDecided"/>.
+/// decodes the command from the request payload and sends it through MediatR in a fresh scope,
+/// which is the only way a marked command reaches its handler; every terminal delivery
+/// publishes <see cref="RequestDecided"/>.
 /// </summary>
 public sealed class ApprovalDispatcher(
     IServiceScopeFactory scopes,
@@ -31,7 +32,7 @@ public sealed class ApprovalDispatcher(
     {
         ArgumentNullException.ThrowIfNull(delivery);
         var request = delivery.Request;
-        if (!registry.TryGetCommand(request.Type, out var commandType) || !request.IsTerminal || WasBypassed(delivery))
+        if (!registry.TryGetCommand(request.Type, out var commandType) || !request.IsTerminal)
         {
             return new DispatchResult(DispatchOutcome.Ignored, request, null);
         }
@@ -52,9 +53,4 @@ public sealed class ApprovalDispatcher(
         await sp.GetRequiredService<IPublisher>().Publish(new RequestDecided(request, command, result), cancellationToken).ConfigureAwait(false);
         return new DispatchResult(outcome, request, result);
     }
-
-    // A bypassed request is approved with no approvals and already ran inline
-    // when it was submitted; its delivery must not run it again.
-    private static bool WasBypassed(WebhookPayload delivery) =>
-        delivery.Event == WebhookEvent.Approved && delivery.Approvals is not { Count: > 0 } && delivery.Request.Approvals is not { Count: > 0 };
 }

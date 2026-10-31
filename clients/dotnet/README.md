@@ -59,7 +59,7 @@ Inject `QuorumClient` and call `As(...)` with the current user's identity per re
 
 ### MediatR
 
-[`Quorum.Client.MediatR`](src/Quorum.Client.MediatR) removes the integration code entirely for applications built on MediatR. Mark a command with `[RequiresApproval]`, and `Send` opens an approval request instead of running the handler; when a checker approves, the same command is dispatched to the same handler from the webhook. Bypass rules run the handler inline. See its [README](src/Quorum.Client.MediatR/README.md).
+[`Quorum.Client.MediatR`](src/Quorum.Client.MediatR) removes the integration code entirely for applications built on MediatR. Mark a command with `[RequiresApproval]` and submit it; when Quorum approves, the same command is dispatched to the same handler from the webhook. See its [README](src/Quorum.Client.MediatR/README.md).
 
 ### Identity
 

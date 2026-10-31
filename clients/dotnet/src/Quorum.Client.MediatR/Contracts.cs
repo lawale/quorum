@@ -32,12 +32,16 @@ public interface IApprovalContext
     Request? Request { get; }
 }
 
-/// <summary>Thrown by <c>ISender.Send</c> when a command was submitted for approval instead of being executed. The handler has not run.</summary>
-public sealed class ApprovalPendingException(Request request)
-    : Exception($"{request.Type} {request.Id} is awaiting approval")
+/// <summary>
+/// Thrown when a command marked <see cref="RequiresApprovalAttribute"/> is sent straight to its
+/// handler. Submit it with <see cref="Approvals.SubmitAsync{TResponse}"/> instead; the handler runs
+/// from the approved webhook.
+/// </summary>
+public sealed class ApprovalRequiredException(Type command, string requestType)
+    : InvalidOperationException($"{command.Name} requires approval as '{requestType}'. Submit it through Approvals.SubmitAsync; its handler runs when Quorum approves it.")
 {
-    /// <summary>The request Quorum opened. Hand its <see cref="Request.Id"/> back to the caller.</summary>
-    public Request Request { get; } = request;
+    public Type Command { get; } = command;
+    public string RequestType { get; } = requestType;
 }
 
 /// <summary>
