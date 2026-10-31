@@ -56,4 +56,4 @@ A decision that fails a [permission guard](/docs/concepts/permission-guards/) re
 
 ## Clients
 
-Rather than calling the API by hand, use the [Go client](/docs/integrate/go-client/), which shares the server's own types, or the [`@oluwavader/quorum-embed`](/docs/integrate/widgets/#javascript-api) package, which exposes a small browser client alongside the widgets.
+Rather than calling the API by hand, use the [Go client](/docs/integrate/go-client/), which shares the server's own types, the [TypeScript client](/docs/integrate/typescript-client/), whose types are generated from this contract, or the [`@oluwavader/quorum-embed`](/docs/integrate/widgets/#javascript-api) package, which exposes a small browser client alongside the widgets.

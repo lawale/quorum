@@ -2,12 +2,12 @@
 title: Webhooks
 description: Guaranteed webhook delivery from a transactional outbox, signed with HMAC-SHA256, including the review_requested event that tells your app who may act next.
 sidebar:
-  order: 4
+  order: 5
 ---
 
 Quorum uses a **transactional outbox** to guarantee webhook delivery. Outbox entries are written in the same database transaction as the status update, so no event is ever lost. A signal-driven delivery worker dispatches entries via HTTP POST with HMAC-SHA256 signatures in the `X-Signature-256` header, retrying failures with exponential backoff. A configurable heartbeat (default 30s) acts as a safety net for missed signals.
 
-Subscribe with `POST /api/v1/webhooks`, giving a URL, a secret and the events you want. The [Go client](/docs/integrate/go-client/) verifies and decodes deliveries with `client.ParseWebhook`.
+Subscribe with `POST /api/v1/webhooks`, giving a URL, a secret and the events you want. The [Go client](/docs/integrate/go-client/) verifies and decodes deliveries with `client.ParseWebhook`, and the [TypeScript client](/docs/integrate/typescript-client/) with `parseWebhook`.
 
 ## Events
 

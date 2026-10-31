@@ -117,3 +117,26 @@ jobs:
           cache-dependency-path: widgets/frontend/package-lock.json
       - run: cd widgets/frontend && npm ci && npm run build
       - run: go build -tags embed ./cmd/server
+
+  client-typescript:
+    name: TypeScript Client
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/typescript
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: clients/typescript/package-lock.json
+      - run: npm ci
+      - name: Generated types match api/openapi.yaml
+        run: npm run check:generated
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test

@@ -36,9 +36,11 @@ cmd/server/          — Entry point
 api/
   openapi.yaml       — The public API contract; validated against the real server in tests
 clients/
-  go/                — Go client for the API (shares internal/model's types); TypeScript and .NET clients will sit beside it
+  go/                — Go client for the API (shares internal/model's types)
+  typescript/        — TypeScript client (@oluwavader/quorum-client); types generated from api/openapi.yaml
 internal/
   apitest/           — In-process server over in-memory stores, validating traffic against api/openapi.yaml
+    cmd/apiserver/   — The same server as a process, for client test suites in other languages
   auth/              — Authentication providers and authorization hook
   config/            — Configuration loading (YAML + env var overrides)
   display/           — Display template resolution
@@ -126,13 +128,14 @@ make test-all
 
 ### Changing the API
 
-`api/openapi.yaml` is the contract the TypeScript and .NET clients are generated from, so it has to match the server exactly. It is enforced rather than reviewed: the Go client tests in `clients/go` run against the real handlers through `internal/apitest`, which validates every request and response against the document and fails if any documented operation goes unexercised.
+`api/openapi.yaml` is the contract the TypeScript and .NET clients are generated from, so it has to match the server exactly. It is enforced rather than reviewed: the client test suites run against the real handlers through `internal/apitest` (in-process for Go, as the `apiserver` process for TypeScript), which validates every request and response against the document and fails if any documented operation goes unexercised.
 
 When you add or change an endpoint or a field:
 
 1. Change the input or model type in `internal/model` (handlers decode straight into these; the Go client encodes them).
 2. Update `api/openapi.yaml`. Response schemas use `additionalProperties: false`, so a new field fails the suite until it is documented.
-3. Add or extend a client test so the operation is covered. The suite tells you which operations it never reached.
+3. Regenerate the TypeScript types: `cd clients/typescript && npm run generate`. CI fails if the committed `src/generated/schema.ts` is stale.
+4. Add or extend a test in each client so the operation is covered. The suites tell you which operations they never reached.
 
 ## Linting
 
