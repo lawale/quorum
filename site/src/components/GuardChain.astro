@@ -1,0 +1,94 @@
+---
+// The checks that run, in order, before a vote is recorded.
+const guards = [
+	['Self-approval check', 'the maker cannot approve their own request', 'always'],
+	['Eligible reviewers', 'the checker is not in the request’s allowlist', 'if configured'],
+	['Allowed checker roles', 'the checker lacks a required role', 'if set on the stage'],
+	['Allowed permissions', 'the checker lacks a required permission', 'if set on the stage'],
+	['Reviewer scope', 'the checker is outside the stage’s scope', 'if set on the stage'],
+	['Dynamic authorization URL', 'your endpoint returned allowed: false', 'if configured'],
+	['One vote per stage', 'the checker already voted on this stage', 'always', '409'],
+];
+---
+<div class="chain not-content">
+	<p class="start">Approve or reject arrives</p>
+	<ol>
+		{guards.map(([name, reason, when, code = '403']) => (
+			<li>
+				<div class="check">
+					<strong>{name}</strong>
+					<small>{when}</small>
+				</div>
+				<div class="fail">{code} when {reason}</div>
+			</li>
+		))}
+	</ol>
+	<p class="end">Vote recorded</p>
+</div>
+
+<style>
+	.chain {
+		margin: 2.5rem 0 1.5rem;
+		font-size: var(--sl-text-sm);
+		line-height: 1.4;
+	}
+	.start,
+	.end {
+		margin: 0;
+		font-weight: 650;
+		color: var(--sl-color-white);
+		padding-left: 1.6rem;
+		position: relative;
+	}
+	.start::before,
+	.end::before {
+		content: '';
+		position: absolute;
+		left: 0.25rem;
+		top: 0.35rem;
+		width: 0.75rem;
+		height: 0.75rem;
+		border-radius: 50%;
+		background: var(--sl-color-white);
+	}
+	ol {
+		list-style: none;
+		margin: 0;
+		padding: 0.5rem 0 0.5rem 0.6rem;
+		border-left: 2px solid var(--sl-color-gray-5);
+		margin-left: 0.55rem;
+	}
+	li {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+		gap: 0.25rem 1.5rem;
+		align-items: baseline;
+		margin: 0;
+		padding: 0.6rem 0 0.6rem 1rem;
+		position: relative;
+	}
+	li::before {
+		content: '';
+		position: absolute;
+		left: -0.6rem;
+		top: 1.15rem;
+		width: 1rem;
+		border-top: 2px solid var(--sl-color-gray-5);
+	}
+	.check strong {
+		display: block;
+		color: var(--sl-color-white);
+		font-weight: 650;
+	}
+	.check small {
+		color: var(--sl-color-gray-3);
+	}
+	.fail {
+		color: var(--sl-color-gray-2);
+		padding-left: 0.75rem;
+		border-left: 2px solid var(--sl-color-red, #e0432b);
+	}
+	@media (max-width: 40rem) {
+		li { grid-template-columns: 1fr; }
+	}
+</style>

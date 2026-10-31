@@ -5,26 +5,11 @@ sidebar:
   order: 1
 ---
 
+import Flow from '../../../../components/Flow.astro';
+
 Quorum pulls approval logic out of your applications into one self-hosted service. Your app creates a request; Quorum matches it to a policy, walks it through the stages you defined, enforces who may act at each one, records everything, and tells you when it is decided.
 
-```
-┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐
-│   Your   │      │          │      │  Policy  │      │  Stage   │
-│   App    │─────▶│  Quorum  │─────▶│  Match   │─────▶│  Check   │
-│          │      │          │      │          │      │          │
-└──────────┘      └──────────┘      └──────────┘      └─────┬────┘
-  Creates            Receives         Finds policy          │
-  Request            Request          for type              │
-                                                            ▼
-┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐
-│ Webhook, │      │ Request  │      │ Layered  │      │  Checker │
-│ SSE, or  │◀─────│ Resolved │◀─────│ Guards   │◀─────│ Approves │
-│  Poll    │      │          │      │          │      │          │
-└──────────┘      └──────────┘      └──────────┘      └──────────┘
-  Your app           Approved         Self-approval,        User
-  acts on            Rejected         roles, permissions    submits
-  result             Expired          are all verified      decision
-```
+<Flow />
 
 ## The pieces
 

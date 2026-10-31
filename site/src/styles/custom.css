@@ -644,3 +644,46 @@ h1 {
 .q-start-links span {
 	color: var(--sl-color-gray-3);
 }
+
+/* ------------------------------------------------------------------ */
+/* Docs footer: previous/next as a plain two-column line on a rule.     */
+/* ------------------------------------------------------------------ */
+.pagination-links {
+	grid-template-columns: 1fr 1fr !important;
+	gap: 2rem !important;
+	border-top: 1px solid var(--q-rule);
+	padding-top: 1.25rem;
+}
+.pagination-links a {
+	border: 0 !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	padding: 0 !important;
+	align-items: flex-start !important;
+	color: var(--sl-color-gray-3) !important;
+	font-size: var(--sl-text-sm);
+}
+.pagination-links a[rel='next'] {
+	grid-column: 2;
+}
+.pagination-links a svg {
+	display: none;
+}
+.pagination-links .link-title {
+	display: inline-block;
+	margin-top: 0.2rem;
+	font-size: var(--sl-text-lg) !important;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	color: var(--sl-color-white) !important;
+	text-decoration: underline transparent;
+	text-underline-offset: 0.2em;
+	transition: text-decoration-color 0.15s;
+}
+.pagination-links a:hover .link-title {
+	text-decoration-color: var(--sl-color-accent);
+	color: var(--sl-color-accent) !important;
+}
+footer.sl-flex .meta {
+	margin-bottom: 0.5rem;
+}
