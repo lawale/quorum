@@ -18,7 +18,7 @@ export default defineConfig({
 			social: [{ icon: 'github', label: 'GitHub', href: repo }],
 			editLink: { baseUrl: `${repo}/edit/master/site/` },
 			customCss: ['./src/styles/custom.css'],
-			components: { Hero: './src/components/Hero.astro' },
+			components: { Hero: './src/components/Hero.astro', Footer: './src/components/Footer.astro' },
 			head: [
 				{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' } },
 				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://quorum.olawalelawal.dev/og.png' } },

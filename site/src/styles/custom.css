@@ -687,3 +687,20 @@ h1 {
 footer.sl-flex .meta {
 	margin-bottom: 0.5rem;
 }
+
+/* Author credit under the footer. */
+.q-credit {
+	margin-top: 2.5rem;
+	font-size: var(--sl-text-xs);
+	color: var(--sl-color-gray-3);
+}
+.q-credit a {
+	color: inherit;
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+	text-decoration-color: var(--q-rule);
+}
+.q-credit a:hover {
+	color: var(--sl-color-accent);
+	text-decoration-color: currentColor;
+}

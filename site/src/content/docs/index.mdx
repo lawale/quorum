@@ -7,6 +7,14 @@ hero:
 head:
   - tag: title
     content: Quorum · Open-source approval engine for maker-checker and multi-stage workflows
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: >-
+      {"@context":"https://schema.org","@graph":[
+      {"@type":"SoftwareApplication","name":"Quorum","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows, Docker","url":"https://quorum.olawalelawal.dev/","description":"Open-source, self-hosted approval engine. Maker-checker, four-eyes and multi-stage approvals as one service, with policies as data, layered permission guards, an audit trail, guaranteed webhooks and embeddable widgets.","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/lawale/quorum","programmingLanguage":"Go","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Olawale Lawal","url":"https://olawalelawal.dev/"}},
+      {"@type":"WebSite","name":"Quorum","url":"https://quorum.olawalelawal.dev/"}
+      ]}
 ---
 
 import { Code } from '@astrojs/starlight/components';
@@ -137,6 +145,7 @@ docker compose up
       <li><a href="/docs/getting-started/walkthrough/">Walkthrough</a> <span>a two-stage wire transfer from policy to webhook</span></li>
       <li><a href="/docs/integrate/go-client/">Go client</a> <span>typed, with webhook verification and wait-for-decision</span></li>
       <li><a href="https://github.com/lawale/quorum">Source on GitHub</a> <span>MIT licensed</span></li>
+      <li><a href="https://olawalelawal.dev/building-quorum-multi-tenant-approval-engine/">Why Quorum exists</a> <span>the design story, on the author's blog</span></li>
     </ul>
   </div>
   <Code code={start} lang="bash" title="Terminal" />
