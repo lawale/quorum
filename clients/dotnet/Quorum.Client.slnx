@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Quorum.Client/Quorum.Client.csproj" />
+    <Project Path="src/Quorum.Client.MediatR/Quorum.Client.MediatR.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Quorum.Client.Tests/Quorum.Client.Tests.csproj" />
