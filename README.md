@@ -19,6 +19,8 @@ Quorum pulls that logic out of your applications into one self-hosted service. Y
 [![Svelte](https://img.shields.io/badge/Svelte-FF3E00?style=flat&logo=svelte&logoColor=white)](https://svelte.dev/)
 [![Lit](https://img.shields.io/badge/Lit-324FFF?style=flat&logo=lit&logoColor=white)](https://lit.dev/)
 
+**Website and docs:** [quorum.olawalelawal.dev](https://quorum.olawalelawal.dev) • **Live demo:** [banking](https://quorum-bank-demo.olawalelawal.dev), [expenses](https://quorum-expense-demo.olawalelawal.dev), [access portal](https://quorum-access-portal-demo.olawalelawal.dev)
+
 [Quick Start](#quick-start) • [Full Stack Local Setup](#running-the-full-stack-locally) • [Demo & Sample Apps](#demo--sample-apps) • [Key Features](#key-features) • [Why Quorum?](#why-quorum) • [Documentation](#documentation) • [Community & Support](#-community--support)
 
 ---

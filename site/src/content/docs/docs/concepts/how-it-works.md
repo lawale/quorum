@@ -1,0 +1,53 @@
+---
+title: How Quorum works
+description: The request lifecycle in Quorum, from creation through policy matching, stage checks and layered guards, to a decision your application acts on.
+sidebar:
+  order: 1
+---
+
+Quorum pulls approval logic out of your applications into one self-hosted service. Your app creates a request; Quorum matches it to a policy, walks it through the stages you defined, enforces who may act at each one, records everything, and tells you when it is decided.
+
+```
+┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐
+│   Your   │      │          │      │  Policy  │      │  Stage   │
+│   App    │─────▶│  Quorum  │─────▶│  Match   │─────▶│  Check   │
+│          │      │          │      │          │      │          │
+└──────────┘      └──────────┘      └──────────┘      └─────┬────┘
+  Creates            Receives         Finds policy          │
+  Request            Request          for type              │
+                                                            ▼
+┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐
+│ Webhook, │      │ Request  │      │ Layered  │      │  Checker │
+│ SSE, or  │◀─────│ Resolved │◀─────│ Guards   │◀─────│ Approves │
+│  Poll    │      │          │      │          │      │          │
+└──────────┘      └──────────┘      └──────────┘      └──────────┘
+  Your app           Approved         Self-approval,        User
+  acts on            Rejected         roles, permissions    submits
+  result             Expired          are all verified      decision
+```
+
+## The pieces
+
+**Requests.** A request has a `type`, a JSON `payload` and a maker, the authenticated caller who created it. It is `pending` until it becomes `approved`, `rejected`, `cancelled` or `expired`. Transitions are enforced by the engine, not by whoever wrote the handler.
+
+**Policies.** A policy matches requests by `request_type` within a tenant and defines the stages a request must pass. Policies are data: create and edit them through the API or the admin console, and the change applies to the next request without a deploy.
+
+**Stages.** Each stage has a `required_approvals` threshold, a `rejection_policy` (`any` rejection ends the request, or a threshold), and the guards that say who may act: `allowed_checker_roles`, `allowed_permissions`, an `authorization_mode` that combines them, and [scope rules](/docs/concepts/reviewer-scoping/). Stages run in order.
+
+**Guards.** On every approve or reject, Quorum runs the [layered permission guards](/docs/concepts/permission-guards/): the maker cannot approve their own request, a checker votes once per stage, roles and permissions must match, scope must match, and an optional external endpoint can veto.
+
+**Bypass rules.** Not everything needs review. [Bypass rules](/docs/concepts/bypass-rules/) describe requests that are approved on creation, with velocity limits so a threshold cannot be gamed.
+
+**Outcomes.** Your application learns the result by [webhook](/docs/integrate/webhooks/), by the Server-Sent Events stream the [widgets](/docs/integrate/widgets/) use, or by polling. Quorum decides; your application performs the write.
+
+**Audit.** Every action, including bypasses and expiries, is logged with actor, timestamp and details, through a transactional outbox so a crash between the state change and the log entry cannot lose it.
+
+## What Quorum is not
+
+Quorum complements your authorization layer rather than replacing it. Your identity provider still says who a user is and what role they hold; Quorum decides whether this particular action has been reviewed by the right people. It has no user directory and sends no email. Instead, the `review_requested` webhook tells your application exactly who may act next, and your application, which does know how to reach people, notifies them.
+
+## Who it is for
+
+- **Developers** integrate a complete approval flow with a few API calls and a script tag, and keep their code focused on the domain.
+- **Security and compliance teams** enforce a consistent maker-checker principle across the organisation and get one place to see every pending and decided critical action.
+- **Platform engineers** offer approvals as a self-service capability on the internal platform, so other teams add governance to their tools without bespoke development.

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /console/
+Disallow: /api/
+
+Sitemap: https://quorum.olawalelawal.dev/sitemap-index.xml

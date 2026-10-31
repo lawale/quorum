@@ -31,6 +31,10 @@ jobs:
             dockerfile: Dockerfile.all
             suffix: "-all"
             context: .
+          - variant: site
+            dockerfile: site/Dockerfile
+            suffix: "-site"
+            context: .
           - variant: demo-banking
             dockerfile: examples/banking/Dockerfile
             suffix: "-demo-banking"
@@ -153,7 +157,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           cat > notes.md <<EOF
           **npm:** \`npm install @oluwavader/quorum-embed@${VERSION}\`
-          **Docker:** \`ghcr.io/lawale/quorum:${VERSION}\` (also \`-console\`, \`-all\`, and the \`-demo-*\` sample apps)
+          **Docker:** \`ghcr.io/lawale/quorum:${VERSION}\` (also \`-console\`, \`-all\`, \`-site\`, and the \`-demo-*\` sample apps)
 
           EOF
           gh release create "$GITHUB_REF_NAME" \

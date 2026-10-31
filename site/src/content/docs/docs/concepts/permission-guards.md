@@ -1,0 +1,71 @@
+---
+title: Permission guards
+description: The layered checks Quorum runs before any approval or rejection is recorded, including self-approval prevention, roles, permissions, scope, dynamic authorization and duplicate votes.
+sidebar:
+  order: 2
+---
+
+Quorum enforces a layered permission model on every approval action. When a user attempts to approve or reject a request, each of these checks is evaluated in order:
+
+| Guard | Scope | Description |
+|-------|-------|-------------|
+| **Self-approval prevention** | Built-in | The maker of a request cannot approve their own request. Always enforced. |
+| **Eligible reviewers** | Per-request | An optional allowlist of user IDs set when creating the request. If provided, only those users can act. |
+| **Allowed checker roles** | Per-stage | Each approval stage can restrict which roles are permitted. The checker must hold at least one matching role. |
+| **Allowed permissions** | Per-stage | Each approval stage can restrict which permissions are required. The checker must hold at least one matching permission. |
+| **Authorization mode** | Per-stage | When both `allowed_checker_roles` and `allowed_permissions` are set, controls whether either suffices (`"any"`) or both are required (`"all"`). |
+| **Reviewer scope** | Per-stage | `scope` rules require the checker's identity attribute to equal the maker's attribute of the same name, or a value at a `payload_path`. See [Reviewer scoping](/docs/concepts/reviewer-scoping/). |
+| **Dynamic authorization URL** | Per-policy | An external HTTP endpoint called before each approval. The endpoint receives the full request context and returns `{"allowed": true/false}`. Use this for custom business logic your domain requires. |
+| **Duplicate vote prevention** | Per-stage | A checker can only vote once per stage. They may vote on different stages of the same request. |
+| **Request fingerprinting** | Per-policy | Configurable `identity_fields` extracted from the payload and hashed. Prevents duplicate pending requests for the same resource. |
+| **Bypass rules** | Per-policy | `bypass_rules` describe requests that need no review. A matching request is approved on creation and audited as `bypassed`. See [Bypass rules](/docs/concepts/bypass-rules/). |
+
+```
+Approve/Reject Request
+        │
+        ▼
+┌───────────────────────┐
+│  Self-approval check  │──▶ REJECT (maker cannot approve own request)
+└───────┬───────────────┘
+        │ pass
+        ▼
+┌───────────────────────┐
+│  Eligible reviewers   │──▶ REJECT (checker not in allowlist)
+│  (if configured)      │
+└───────┬───────────────┘
+        │ pass
+        ▼
+┌───────────────────────┐
+│  Allowed checker      │──▶ REJECT (checker lacks required role)
+│  roles (if set)       │
+└───────┬───────────────┘
+        │ pass
+        ▼
+┌───────────────────────┐
+│  Allowed permissions  │──▶ REJECT (checker lacks required permission)
+│  (if set)             │
+└───────┬───────────────┘
+        │ pass
+        ▼
+┌───────────────────────┐
+│  Reviewer scope       │──▶ REJECT (checker outside the stage's scope)
+│  (if set)             │
+└───────┬───────────────┘
+        │ pass
+        ▼
+┌───────────────────────┐
+│  Dynamic authorization│──▶ REJECT (endpoint returned allowed: false)
+│  URL (if configured)  │
+└───────┬───────────────┘
+        │ pass
+        ▼
+   Vote recorded
+```
+
+A rejected guard returns `403`. The `viewer_can_act` field on a request reflects the same checks for the current caller, which is how the [widgets](/docs/integrate/widgets/) know whether to render the approve and reject buttons.
+
+## Dynamic authorization check
+
+When a policy has a `dynamic_authorization_url`, Quorum POSTs the full request context to your endpoint before allowing the approval: request ID, type, checker and maker IDs, their identity attributes (`maker_attributes` and `checker_attributes`), and the payload. Your endpoint responds with `{"allowed": true}` or `{"allowed": false, "reason": "..."}`.
+
+This lets you implement arbitrary business rules without modifying Quorum: department separation, conflict-of-interest checks, rate limiting, or a lookup in a system Quorum knows nothing about.
