@@ -57,6 +57,10 @@ builder.Services.AddQuorumClient(o =>
 
 Inject `QuorumClient` and call `As(...)` with the current user's identity per request. The registration goes through `IHttpClientFactory` with an unbounded `HttpClient` timeout so event streams are not cut off; the per-call `QuorumClientOptions.Timeout` (30 seconds by default) still applies.
 
+### MediatR
+
+[`Quorum.Client.MediatR`](src/Quorum.Client.MediatR) removes the integration code entirely for applications built on MediatR. Mark a command with `[RequiresApproval]`, and `Send` opens an approval request instead of running the handler; when a checker approves, the same command is dispatched to the same handler from the webhook. Bypass rules run the handler inline. See its [README](src/Quorum.Client.MediatR/README.md).
+
 ### Identity
 
 `As()` returns a new client acting as the given credentials; the original is unchanged, so one `QuorumClient` serves every maker and checker in a process.
@@ -81,7 +85,7 @@ The API expresses durations as Go strings such as `24h`. `Duration.Format(TimeSp
 ```bash
 dotnet build
 dotnet test        # builds and runs the Go test server, then the suite against it
-dotnet pack src/Quorum.Client -p:Version=1.2.3
+dotnet pack -p:Version=1.2.3
 ```
 
 The tests need Go on the path. They run against the real Quorum server over in-memory stores, with every request and response validated against the OpenAPI document; the run fails if any traffic disagrees with the document, if the server sends a field the models do not declare, or if any documented operation is never called.

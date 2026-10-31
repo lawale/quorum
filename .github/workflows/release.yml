@@ -122,7 +122,7 @@ jobs:
       - run: npm publish --access public --provenance
 
   nuget:
-    name: NuGet Package
+    name: NuGet Packages
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -138,7 +138,7 @@ jobs:
           global-json-file: clients/dotnet/global.json
 
       - name: Pack with the version from the tag
-        run: dotnet pack src/Quorum.Client -c Release -p:Version="${GITHUB_REF_NAME#v}" -o out
+        run: dotnet pack -c Release -p:Version="${GITHUB_REF_NAME#v}" -o out
 
       - name: Log in to nuget.org
         id: login
@@ -192,7 +192,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           cat > notes.md <<EOF
           **npm:** \`npm install @oluwavader/quorum-client@${VERSION}\` (client) and \`@oluwavader/quorum-embed@${VERSION}\` (widgets)
-          **NuGet:** \`dotnet add package Quorum.Client --version ${VERSION}\`
+          **NuGet:** \`dotnet add package Quorum.Client --version ${VERSION}\` (also \`Quorum.Client.MediatR\`)
           **Docker:** \`ghcr.io/lawale/quorum:${VERSION}\` (also \`-console\`, \`-all\`, \`-site\`, and the \`-demo-*\` sample apps)
 
           EOF

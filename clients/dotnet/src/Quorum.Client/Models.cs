@@ -55,6 +55,7 @@ public sealed record Request
     public int? TotalStages { get; init; }
 
     /// <summary>Whether the request can still change.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public bool IsTerminal => Status != RequestStatus.Pending;
 
     /// <summary>Decodes the payload with the client's payload serializer settings (web defaults unless configured).</summary>

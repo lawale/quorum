@@ -157,4 +157,4 @@ jobs:
           global-json-file: clients/dotnet/global.json
       - run: dotnet build -c Release -warnaserror
       - run: dotnet test -c Release --no-build
-      - run: dotnet pack src/Quorum.Client -c Release --no-build -o out
+      - run: dotnet pack -c Release --no-build -o out

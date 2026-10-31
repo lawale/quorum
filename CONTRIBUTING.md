@@ -39,6 +39,7 @@ clients/
   go/                — Go client for the API (shares internal/model's types)
   typescript/        — TypeScript client (@oluwavader/quorum-client); types generated from api/openapi.yaml
   dotnet/            — .NET client (Quorum.Client on NuGet); records mirroring api/openapi.yaml, strict in tests
+                       and Quorum.Client.MediatR, which routes MediatR commands through approval
 internal/
   apitest/           — In-process server over in-memory stores, validating traffic against api/openapi.yaml
     cmd/apiserver/   — The same server as a process, for client test suites in other languages
