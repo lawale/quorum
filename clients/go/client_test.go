@@ -89,7 +89,6 @@ func TestWireTransferGoesThroughBothStages(t *testing.T) {
 		t.Fatalf("idempotent replay: id=%v err=%v, want %v", replay, err, created.ID)
 	}
 
-	// Same identity fields, no idempotency key: a duplicate pending request.
 	_, err = c.As(alice).CreateRequest(ctx, client.CreateRequest{Type: "wire_transfer", Payload: transfer{TransferID: "T-1", Amount: 1}})
 	if !client.IsConflict(err) {
 		t.Fatalf("duplicate pending request: got %v, want conflict", err)
@@ -267,7 +266,6 @@ func TestWaitForDecisionFollowsTheStream(t *testing.T) {
 		done <- r
 	}()
 
-	// Let the waiter subscribe, then decide.
 	time.Sleep(100 * time.Millisecond)
 	if _, err := c.As(bob).Approve(ctx, req.ID, ""); err != nil {
 		t.Fatal(err)
@@ -284,13 +282,11 @@ func TestWaitForDecisionFollowsTheStream(t *testing.T) {
 		t.Fatal("WaitForDecision did not return after approval")
 	}
 
-	// Already decided: returns at once without opening a stream.
 	r, err := c.As(alice).WaitForDecision(ctx, req.ID)
 	if err != nil || r.Status != client.StatusApproved {
 		t.Fatalf("wait on decided request: %v %v", r, err)
 	}
 
-	// Still pending and nobody decides: the caller's deadline wins.
 	pending, err := c.As(alice).CreateRequest(ctx, client.CreateRequest{Type: "wire_transfer", Payload: transfer{TransferID: "T-6", Amount: 10}})
 	if err != nil {
 		t.Fatal(err)
@@ -301,7 +297,6 @@ func TestWaitForDecisionFollowsTheStream(t *testing.T) {
 		t.Errorf("wait past deadline: got %v, want deadline exceeded", err)
 	}
 
-	// The raw stream closes itself for a terminal request after one status event.
 	var events []client.Event
 	for ev, err := range c.As(alice).Events(ctx, req.ID) {
 		if err != nil {
@@ -346,7 +341,6 @@ func TestPolicyLifecycle(t *testing.T) {
 		t.Errorf("invalid policy: got %v, want 400 mentioning max_checkers", err)
 	}
 
-	// Bypass rule in effect: small expense skips review.
 	small, err := c.As(alice).CreateRequest(ctx, client.CreateRequest{Type: "expense", Payload: map[string]any{"amount": 20}})
 	if err != nil {
 		t.Fatal(err)
@@ -373,7 +367,6 @@ func TestPolicyLifecycle(t *testing.T) {
 		t.Errorf("updated = %+v", updated)
 	}
 
-	// Bypass cleared: the same expense now waits for review.
 	again, err := c.As(alice).CreateRequest(ctx, client.CreateRequest{Type: "expense", Payload: map[string]any{"amount": 20}})
 	if err != nil {
 		t.Fatal(err)

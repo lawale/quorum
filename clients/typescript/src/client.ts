@@ -144,8 +144,6 @@ export class QuorumClient {
     return signals.length === 1 ? signals[0]! : AbortSignal.any(signals);
   }
 
-  // --- system ---------------------------------------------------------------
-
   /** Reports the server's health and version. Needs no identity. */
   async health(opts?: CallOptions): Promise<Health> {
     const { data, error, response } = await this.api.GET("/health", { signal: this.signal(opts) });
@@ -153,8 +151,6 @@ export class QuorumClient {
     if (response.status === 503 && error) return error as Health;
     throw this.error(response, error, "GET", "/health");
   }
-
-  // --- requests -------------------------------------------------------------
 
   /** Submits a request on behalf of the client's identity, who becomes its maker. */
   async createRequest(input: CreateRequest, opts?: CallOptions): Promise<QuorumRequest> {
@@ -314,12 +310,9 @@ export class QuorumClient {
         if (isTerminal(current.status)) return current;
       } catch (err) {
         if (signal?.aborted) throw err;
-        // transient; keep polling
       }
     }
   }
-
-  // --- policies -------------------------------------------------------------
 
   async createPolicy(input: PolicyInput, opts?: CallOptions): Promise<Policy> {
     const { data, error, response } = await this.api.POST("/api/v1/policies", {
@@ -367,8 +360,6 @@ export class QuorumClient {
     if (!response.ok) throw this.error(response, error, "DELETE", `/api/v1/policies/${id}`);
   }
 
-  // --- webhooks -------------------------------------------------------------
-
   async createWebhook(input: WebhookInput, opts?: CallOptions): Promise<Webhook> {
     const { data, error, response } = await this.api.POST("/api/v1/webhooks", {
       body: input,
@@ -394,8 +385,6 @@ export class QuorumClient {
     });
     if (!response.ok) throw this.error(response, error, "DELETE", `/api/v1/webhooks/${id}`);
   }
-
-  // --- internals ------------------------------------------------------------
 
   private error(response: Response, body: unknown, method: string, path: string): QuorumError {
     const message =

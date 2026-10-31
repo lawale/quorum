@@ -120,8 +120,6 @@ func quietLogs() {
 	})
 }
 
-// --- spec validation ---------------------------------------------------------
-
 var (
 	specOnce   sync.Once
 	specRouter routers.Router

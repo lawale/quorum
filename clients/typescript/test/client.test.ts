@@ -1,6 +1,3 @@
-// Functional tests against the real Quorum server (see server.ts). Every
-// request and response is validated against api/openapi.yaml on the way
-// through, and the run fails if any documented operation is never called.
 import { describe, expect, inject, test } from "vitest";
 import {
   InvalidSignatureError,
@@ -78,7 +75,6 @@ describe("wire transfer", () => {
     });
     expect(replay.id).toBe(created.id);
 
-    // Same identity fields, no idempotency key: a duplicate pending request.
     await rejects(
       c.as(alice).createRequest({ type: "wire_transfer", payload: { transfer_id: "T-1", amount: 1 } }),
       isConflict,
@@ -163,23 +159,19 @@ describe("waitForDecision", () => {
     const req = await c.as(alice).createRequest({ type: "stream_transfer", payload: { transfer_id: "S-1", amount: 10 } });
 
     const waiting = c.as(alice).waitForDecision(req.id, { signal: AbortSignal.timeout(10_000), pollIntervalMs: 50 });
-    // Let the waiter subscribe, then decide.
     await new Promise((r) => setTimeout(r, 100));
     await c.as(bob).approve(req.id);
     const decided = await waiting;
     expect(decided.status).toBe("approved");
 
-    // Already decided: returns at once without opening a stream.
     const again = await c.as(alice).waitForDecision(req.id);
     expect(again.status).toBe("approved");
 
-    // Still pending and nobody decides: the caller's deadline wins.
     const pending = await c.as(alice).createRequest({ type: "stream_transfer", payload: { transfer_id: "S-2", amount: 10 } });
     await expect(c.as(alice).waitForDecision(pending.id, { signal: AbortSignal.timeout(300) })).rejects.toMatchObject({
       name: "TimeoutError",
     });
 
-    // The raw stream closes itself for a terminal request after one status event.
     const events: StreamEvent[] = [];
     for await (const ev of c.as(alice).events(req.id)) events.push(ev);
     expect(events).toHaveLength(1);
@@ -219,7 +211,6 @@ describe("policies", () => {
       "invalid policy",
     );
 
-    // Bypass rule in effect: small expense skips review.
     const small = await c.as(alice).createRequest({ type: "expense", payload: { amount: 20 } });
     expect(small.status).toBe("approved");
 
@@ -235,7 +226,6 @@ describe("policies", () => {
     expect(updated.bypass_rules ?? []).toHaveLength(0);
     expect(updated.stages).toHaveLength(1);
 
-    // Bypass cleared: the same expense now waits for review.
     const again = await c.as(alice).createRequest({ type: "expense", payload: { amount: 20 } });
     expect(again.status).toBe("pending");
 
@@ -307,7 +297,6 @@ describe("webhooks", () => {
     expect(got.request.id).toBe(payload.request.id);
     expect(got.review?.scope[0]?.values[0]).toBe("LAG-01");
 
-    // Bytes verify the same as text, as a framework handing over a Buffer would.
     await expect(parseWebhook(new TextEncoder().encode(body), await sign(body, secret), secret)).resolves.toBeTruthy();
 
     const tampered = body.replace('"alice"', '"mallory"');

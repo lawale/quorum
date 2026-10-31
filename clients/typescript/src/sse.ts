@@ -38,8 +38,6 @@ export async function* readEvents(body: ReadableStream<Uint8Array>): AsyncGenera
             name = "";
             data = "";
           }
-        } else if (line.startsWith(":")) {
-          // keepalive comment
         } else if (line.startsWith("event:")) {
           name = line.slice("event:".length).trim();
         } else if (line.startsWith("data:")) {

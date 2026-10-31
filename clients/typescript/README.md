@@ -15,15 +15,12 @@ import { QuorumClient, parseWebhook, isForbidden, InvalidSignatureError } from "
 
 const quorum = new QuorumClient("https://quorum.example.com", { tenant: "banking" });
 
-// The transfer's creator is the maker. A repeated idempotency key returns
-// the same request instead of opening a second approval.
 const req = await quorum.as({ userId: "alice" }).createRequest({
   type: "wire_transfer",
   payload: transfer,
   idempotencyKey: `transfer-${transfer.id}`,
 });
 
-// A checker decides.
 try {
   await quorum.as({ userId: "bob", roles: ["manager"] }).approve(req.id, "looks right");
 } catch (err) {
@@ -32,13 +29,11 @@ try {
   }
 }
 
-// Resolve once the request is decided: follows the event stream, polls if
-// streaming is unavailable, gives up when the signal does.
 const final = await quorum.as({ userId: "alice" }).waitForDecision(req.id, {
   signal: AbortSignal.timeout(60_000),
 });
 
-// Verify and decode a webhook delivery in your handler. Pass the raw body.
+// Pass the raw body: re-serialised JSON will not verify.
 try {
   const payload = await parseWebhook(rawBody, request.headers.get("X-Signature-256"), webhookSecret);
 } catch (err) {

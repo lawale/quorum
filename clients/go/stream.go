@@ -73,8 +73,6 @@ func (c *Client) Events(ctx context.Context, id uuid.UUID) iter.Seq2[Event, erro
 						return
 					}
 				}
-			case strings.HasPrefix(line, ":"):
-				// keepalive comment
 			case strings.HasPrefix(line, "event:"):
 				name = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 			case strings.HasPrefix(line, "data:"):
@@ -133,11 +131,9 @@ func (c *Client) WaitForDecision(ctx context.Context, id uuid.UUID, opts ...Wait
 			return nil, ctx.Err()
 		}
 		if streamErr == nil {
-			// The stream closed cleanly after an update; loop to re-read.
 			continue
 		}
 
-		// Streaming is unavailable: poll instead.
 		req, err = c.poll(ctx, id, o.PollInterval)
 		if err != nil {
 			return nil, err
@@ -157,7 +153,6 @@ func (c *Client) followStream(ctx context.Context, id uuid.UUID) error {
 		if ev.Terminal() {
 			return nil
 		}
-		// An "updated" event: see whether it was the deciding one.
 		req, err := c.GetRequest(ctx, id)
 		if err != nil {
 			return err
