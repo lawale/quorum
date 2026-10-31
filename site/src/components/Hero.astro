@@ -1,0 +1,64 @@
+---
+// Replaces Starlight's hero on the landing page. The request form on the
+// right collects its signatures and the stamp on page load; it is the one
+// moment of motion on the page.
+---
+<section class="q-landing q-hero not-content">
+	<div>
+		<h1>Someone else has to sign off on this.</h1>
+		<p class="q-lead">
+			Wire transfers, production access, price changes, content going live. Every serious
+			application ends up needing a second pair of eyes, and every team builds the sign-off
+			flow again. Quorum is that second pair of eyes, as one self-hosted service.
+		</p>
+		<div class="q-actions">
+			<a class="q-btn q-btn-primary" href="/docs/getting-started/quickstart/">Read the quick start</a>
+			<a class="q-btn q-btn-secondary" href="https://quorum-bank-demo.olawalelawal.dev">Open the live demo</a>
+		</div>
+		<p class="q-facts">Open source under MIT. Written in Go. Runs on PostgreSQL or SQL Server.</p>
+	</div>
+
+	<div class="q-form" aria-label="Example approval request: a wire transfer collecting two stages of signatures and an approved stamp" role="img">
+		<div class="q-form-head">
+			<div>
+				<strong>Wire transfer</strong>
+				<div class="q-id">req_01JBH3 from alice</div>
+			</div>
+			<div class="q-status">
+				<span class="q-status-before">Pending</span>
+				<span class="q-status-after">Approved</span>
+			</div>
+		</div>
+		<dl class="q-fields">
+			<dt>From account</dt><dd>ACC-001</dd>
+			<dt>Amount</dt><dd>$50,000.00</dd>
+			<dt>Destination</dt><dd>IBAN-12345</dd>
+		</dl>
+		<div class="q-stage q-stage-1">
+			<div class="q-stage-name">Manager approval</div>
+			<div class="q-stage-rule">1 of 1 required. Role: manager</div>
+			<div class="q-sigs">
+				<div class="q-sig">
+					<svg viewBox="0 0 104 32" aria-hidden="true"><path d="M4 24c6-14 10-18 12-16s-4 14-2 16 8-10 12-10 2 12 6 10 8-14 14-12 2 10 8 8 10-12 16-8 6 10 14 6 8-8 16-8"/></svg>
+					<small>bob</small>
+				</div>
+			</div>
+		</div>
+		<div class="q-stage q-stage-2">
+			<div class="q-stage-name">Compliance review</div>
+			<div class="q-stage-rule">2 of 2 required. Role: compliance_officer. Same branch as maker</div>
+			<div class="q-sigs">
+				<div class="q-sig">
+					<svg viewBox="0 0 104 32" aria-hidden="true"><path d="M6 22c4-10 8-16 10-14s0 12 4 12 6-14 10-12-2 14 4 14 10-16 16-14 0 12 6 12 10-12 18-10 10 8 20 4"/></svg>
+					<small>charlie</small>
+				</div>
+				<div class="q-sig">
+					<svg viewBox="0 0 104 32" aria-hidden="true"><path d="M4 20c8-16 14-18 16-14s-6 16-2 18 10-14 16-14 0 14 6 12 12-14 18-10-2 12 6 10 12-10 18-6 8 6 16 2"/></svg>
+					<small>dave</small>
+				</div>
+			</div>
+		</div>
+		<div class="q-form-foot">alice cannot sign: the maker never approves their own request.</div>
+		<div class="q-stamp" aria-hidden="true">APPROVED<small>2 stages, 3 signatures, audited</small></div>
+	</div>
+</section>

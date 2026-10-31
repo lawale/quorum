@@ -2,27 +2,14 @@
 title: Quorum, the open-source approval engine
 description: Maker-checker, four-eyes and multi-stage approvals as one self-hosted service. Policies as data, layered permission guards, a complete audit trail, guaranteed webhooks and embeddable widgets. MIT licensed, written in Go.
 template: splash
+hero:
+  title: Quorum
 head:
   - tag: title
     content: Quorum · Open-source approval engine for maker-checker and multi-stage workflows
-hero:
-  title: Someone else has to sign off on this.
-  tagline: Every serious application eventually needs a second pair of eyes on a critical action. Quorum is that someone else, as a service. Self-hosted, MIT licensed, written in Go.
-  actions:
-    - text: Get started
-      link: /docs/getting-started/quickstart/
-      icon: right-arrow
-    - text: Try the live demo
-      link: https://quorum-bank-demo.olawalelawal.dev
-      icon: external
-      variant: secondary
-    - text: GitHub
-      link: https://github.com/lawale/quorum
-      icon: github
-      variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard, Code } from '@astrojs/starlight/components';
+import { Code } from '@astrojs/starlight/components';
 import { Image } from 'astro:assets';
 import dashboard from '../../assets/screenshots/console-dashboard.png';
 import policyEditor from '../../assets/screenshots/console-policy-editor.png';
@@ -30,12 +17,14 @@ import approvalDetail from '../../assets/screenshots/console-approval-detail.png
 import auditLog from '../../assets/screenshots/console-audit-log.png';
 
 export const policy = `{
-  "name": "High-Value Wire Transfer",
+  "name": "High-value wire transfer",
   "request_type": "wire_transfer",
   "stages": [
-    { "name": "Manager Approval",  "required_approvals": 1,
+    { "name": "Manager approval",
+      "required_approvals": 1,
       "allowed_checker_roles": ["manager"] },
-    { "name": "Compliance Review", "required_approvals": 2,
+    { "name": "Compliance review",
+      "required_approvals": 2,
       "allowed_checker_roles": ["compliance_officer"],
       "scope": [{ "attribute": "branch_id" }] }
   ],
@@ -47,119 +36,111 @@ export const policy = `{
   "auto_expire_duration": "24h"
 }`;
 
-<div class="q-section">
-## The approval flow every team rebuilds
+export const start = `git clone https://github.com/lawale/quorum.git && cd quorum
+docker compose up
+# PostgreSQL, migrations, Quorum with console and widgets at localhost:8080`;
 
-<p class="lead">
-Wire transfers, production access, price changes, content going live. The four-eyes principle shows up everywhere, and every team writes it again: a status column, a couple of endpoints, an audit table that is never quite complete, a UI only one app can use. Then the next app needs the same thing.
-</p>
+<div class="q-landing not-content">
 
-<div class="q-compare">
-  <div>
-    <h3>Rolling your own</h3>
-    <ul>
-      <li>Approval state lives in a column on your own table, with transitions scattered across handlers.</li>
-      <li>Guards like "not the maker", "one vote per stage", "only managers" are re-implemented, and re-forgotten, per app.</li>
-      <li>Changing who approves what means a code change and a deploy.</li>
-      <li>The audit trail is whatever logging you remembered to add.</li>
-      <li>Each app builds its own approval screens.</li>
-    </ul>
-  </div>
-  <div class="q-with">
-    <h3>With Quorum</h3>
-    <ul>
-      <li>Requests, stages, votes and expiry are a first-class model with enforced transitions.</li>
-      <li>Layered guards are enforced centrally and configured per policy.</li>
-      <li>Policies are data. Edit them at runtime in the console or the API.</li>
-      <li>Every action is recorded with actor, timestamp and details, through a transactional outbox so nothing is lost.</li>
-      <li>Drop in three themeable Web Components, or use the admin console.</li>
-    </ul>
-  </div>
-</div>
-</div>
+<section class="not-content">
+## You have written this before
 
-<div class="q-section">
-## How it works
+<p class="q-lead">A status column, a couple of endpoints, an audit table that is never quite complete, a UI only one app can use. Then the next application needs the same thing and it starts again.</p>
 
-<ol class="q-flow">
-  <li><strong>Your app creates a request</strong><p>One API call with a type and a JSON payload. The caller is the maker.</p></li>
-  <li><strong>Quorum matches a policy</strong><p>Rules live in data: stages, required approvals, who may act, when to expire.</p></li>
-  <li><strong>Checkers decide</strong><p>Self-approval, roles, permissions, scope and duplicate votes are all enforced before a vote lands.</p></li>
-  <li><strong>Your app acts on the result</strong><p>Approved, rejected or expired arrives by webhook, event stream or poll. Quorum decides, your app performs the write.</p></li>
+<table class="q-ledger">
+  <thead>
+    <tr><th></th><th>Rolling your own</th><th>With Quorum</th></tr>
+  </thead>
+  <tbody>
+    <tr><th>State</th><td>Approval state lives in a column on your own table, with transitions scattered across handlers.</td><td>Requests, stages, votes and expiry are a first-class model with enforced transitions.</td></tr>
+    <tr><th>Guards</th><td>"Not the maker", "one vote per stage", "only managers" are re-implemented, and re-forgotten, per app.</td><td>Layered guards are enforced centrally and configured per policy.</td></tr>
+    <tr><th>Changes</th><td>Changing who approves what means a code change and a deploy.</td><td>Policies are data. Edit them at runtime in the console or the API.</td></tr>
+    <tr><th>Audit</th><td>The trail is whatever logging you remembered to add.</td><td>Every action is recorded with actor, timestamp and details, in the same transaction as the change.</td></tr>
+    <tr><th>Screens</th><td>Each app builds its own approval pages.</td><td>Three themeable Web Components, or the admin console.</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section class="not-content">
+## How a request moves
+
+<ol class="q-track">
+  <li><strong>Your app creates a request</strong><p>One call with a type and a JSON payload. The caller is the maker.</p></li>
+  <li><strong>Quorum finds the policy</strong><p>Stages, thresholds, who may act and when to expire, all read from data.</p></li>
+  <li><strong>Checkers sign</strong><p>Self-approval, roles, permissions, scope and duplicate votes are checked before a signature lands.</p></li>
+  <li><strong>Your app acts on the decision</strong><p>Approved, rejected or expired arrives by webhook, event stream or poll. Your app performs the write.</p></li>
 </ol>
+</section>
+
+<section class="not-content">
+## The rules are a document, not a deploy
+
+<div class="q-split">
+  <dl class="q-notes">
+    <div><dt>Stages in order</dt><dd>Each with its own threshold, allowed roles or permissions, and rejection rule.</dd></div>
+    <div><dt>Scope</dt><dd>Only the compliance officers in the maker's branch may sign the second stage. Attributes come from your identity provider's claims or your gateway's headers.</dd></div>
+    <div><dt>Bypass with a velocity limit</dt><dd>Amounts under 1,000 skip review, but the fourth one in a day comes back for a human to look at. Limits stop a threshold from being gamed.</dd></div>
+    <div><dt>Expiry</dt><dd>A request nobody decides on does not stay open forever.</dd></div>
+  </dl>
+  <Code code={policy} lang="json" title="POST /api/v1/policies" />
 </div>
+</section>
 
-<div class="q-section">
-## A policy is a document, not a deploy
+<section class="not-content">
+## What is included
 
-<p class="lead">
-Sequential stages with their own thresholds and roles, reviewer scoping so the right branch manager sees the request, bypass rules with velocity limits so small items skip review without inviting structuring. All of it changes at runtime.
-</p>
+<dl class="q-rows">
+  <div><dt>Layered permission guards</dt><dd>The maker cannot approve their own request. Per-request eligible reviewers, per-stage roles and permissions, reviewer scoping by attributes such as branch, an optional authorization endpoint you control, and one vote per checker per stage. Evaluated in order on every decision.</dd></div>
+  <div><dt>An audit trail you can hand to an auditor</dt><dd>Every create, approve, reject, cancel, bypass and expiry is permanently logged with actor, timestamp and details. One place to answer who approved this, and when.</dd></div>
+  <div><dt>Webhooks that cannot be lost</dt><dd>Deliveries are written to an outbox in the same transaction as the state change, signed with HMAC-SHA256 and retried with backoff. A review_requested event tells your application exactly who is allowed to act next, so you can notify them.</dd></div>
+  <div><dt>Approval screens for any front end</dt><dd>Three Lit Web Components: an approval panel, a request list and a stage progress bar. Shadow DOM isolation, theming through CSS custom properties, live updates over Server-Sent Events. Load them from a script tag or npm.</dd></div>
+  <div><dt>Your identity provider stays in charge</dt><dd>Validate JWTs against any OIDC provider's JWKS endpoint with claim mapping and automatic key rotation, or trust headers from your gateway. Quorum never becomes a user directory.</dd></div>
+  <div><dt>Built to be operated</dt><dd>PostgreSQL or SQL Server, with everything in its own schema so Quorum can share your database. Prometheus metrics, a health endpoint that reports its version, multi-arch Docker images, an OpenAPI contract validated against the real server in tests.</dd></div>
+</dl>
+</section>
 
-<Code code={policy} lang="json" title="POST /api/v1/policies" />
+<section class="not-content">
+## The console
+
+<p class="q-lead">Manage policies, browse requests, read every audit entry and watch webhook deliveries. It ships inside the server binary when you opt in at build time.</p>
+
+<div class="q-console">
+  <figure><Image src={dashboard} alt="Quorum console dashboard listing pending and decided approval requests" /><figcaption>The requests dashboard</figcaption></figure>
+  <div class="q-console-row">
+    <figure><Image src={policyEditor} alt="Policy editor with multi-stage configuration" /><figcaption>Policy editor</figcaption></figure>
+    <figure><Image src={approvalDetail} alt="Approval detail with payload and audit trail" /><figcaption>Approval detail</figcaption></figure>
+    <figure><Image src={auditLog} alt="Audit log" /><figcaption>Audit log</figcaption></figure>
+  </div>
 </div>
+</section>
 
-<div class="q-section">
-## Built for production from day one
+<section class="not-content">
+## Three apps, one engine
 
-<CardGrid>
-  <Card title="Layered permission guards" icon="seti:lock">
-    Self-approval prevention, per-request eligible reviewers, per-stage roles and permissions, reviewer scoping, an optional dynamic authorization URL, and duplicate-vote prevention. Evaluated in order on every decision.
-  </Card>
-  <Card title="Audit-ready by default" icon="document">
-    Every create, approve, reject, cancel, bypass and expiry is permanently logged with actor, timestamp and details. One place to answer "who approved this, and when" for SOC 2 or ISO 27001.
-  </Card>
-  <Card title="Webhooks that cannot be lost" icon="rocket">
-    Deliveries are written to a transactional outbox in the same transaction as the state change, signed with HMAC-SHA256 and retried with backoff. A review_requested event tells your app exactly who may act next.
-  </Card>
-  <Card title="Embeddable widgets" icon="puzzle">
-    Three Lit Web Components, an approval panel, a request list and a stage progress bar, with Shadow DOM isolation, CSS custom property theming and live updates over Server-Sent Events. Script tag or npm.
-  </Card>
-  <Card title="Your identity provider stays in charge" icon="approve-check">
-    Validate JWTs against any OIDC provider's JWKS endpoint with claim mapping and automatic key rotation, or trust headers from your gateway. Quorum never becomes a user directory.
-  </Card>
-  <Card title="PostgreSQL or SQL Server" icon="seti:db">
-    Everything lives in its own schema, so Quorum can share a database with your application. Prometheus metrics, a health endpoint and multi-arch Docker images are included.
-  </Card>
-</CardGrid>
+<p class="q-lead">Three sample applications on three stacks share one hosted Quorum. Switch personas in the navigation bar to walk a request from maker to checker.</p>
+
+<ul class="q-demos">
+  <li><a href="https://quorum-bank-demo.olawalelawal.dev">Banking</a><span class="q-stack">Go, html/template, built on the Go client</span><p>Multi-stage wire transfers that execute when the approved webhook arrives.</p></li>
+  <li><a href="https://quorum-expense-demo.olawalelawal.dev">Expense tracker</a><span class="q-stack">Node.js and Express</span><p>Single-stage expense approval with status polling.</p></li>
+  <li><a href="https://quorum-access-portal-demo.olawalelawal.dev">Access portal</a><span class="q-stack">Python and Flask</span><p>Threshold voting: two of three security reviewers must approve.</p></li>
+</ul>
+</section>
+
+<section class="not-content">
+## Start in a few minutes
+
+<div class="q-split">
+  <div>
+    <p class="q-lead">One command brings up the database, the migrations and a server with the console and widgets. Then create a policy and your first request.</p>
+    <ul class="q-start-links">
+      <li><a href="/docs/getting-started/quickstart/">Quick start</a> <span>build from source and point it at a database</span></li>
+      <li><a href="/docs/getting-started/walkthrough/">Walkthrough</a> <span>a two-stage wire transfer from policy to webhook</span></li>
+      <li><a href="/docs/integrate/go-client/">Go client</a> <span>typed, with webhook verification and wait-for-decision</span></li>
+      <li><a href="https://github.com/lawale/quorum">Source on GitHub</a> <span>MIT licensed</span></li>
+    </ul>
+  </div>
+  <Code code={start} lang="bash" title="Terminal" />
 </div>
+</section>
 
-<div class="q-section">
-## An admin console is included
-
-<p class="lead">
-Manage policies, browse requests, inspect every audit entry and watch webhook deliveries. Opt in at build time, no separate deployment.
-</p>
-
-<div class="q-shots">
-  <figure><Image src={dashboard} alt="Quorum console dashboard showing pending and decided approval requests" /><figcaption>Requests dashboard</figcaption></figure>
-  <figure><Image src={policyEditor} alt="Quorum console policy editor with multi-stage configuration" /><figcaption>Policy editor</figcaption></figure>
-  <figure><Image src={approvalDetail} alt="Quorum console approval detail with payload and audit trail" /><figcaption>Approval detail</figcaption></figure>
-  <figure><Image src={auditLog} alt="Quorum console audit log" /><figcaption>Audit log</figcaption></figure>
-</div>
-</div>
-
-<div class="q-section">
-## See it running
-
-<p class="lead">
-Three sample applications, each on a different stack, share one Quorum instance. Switch personas in the navigation bar to walk a request from maker to checker.
-</p>
-
-<CardGrid>
-  <LinkCard title="Banking" description="Go. Multi-stage wire transfers executed from an approved webhook, built on the Go client." href="https://quorum-bank-demo.olawalelawal.dev" />
-  <LinkCard title="Expense tracker" description="Node.js and Express. Single-stage expense approval with status polling." href="https://quorum-expense-demo.olawalelawal.dev" />
-  <LinkCard title="Access portal" description="Python and Flask. Threshold voting where two of three security reviewers must approve." href="https://quorum-access-portal-demo.olawalelawal.dev" />
-</CardGrid>
-</div>
-
-<div class="q-section">
-## Start in minutes
-
-<CardGrid>
-  <LinkCard title="Quick start" description="Build the binary, point it at a database, make your first request." href="/docs/getting-started/quickstart/" />
-  <LinkCard title="Docker Compose" description="PostgreSQL, migrations, console and widgets in one command." href="/docs/getting-started/docker/" />
-  <LinkCard title="Walkthrough" description="Secure a wire transfer with a two-stage policy, end to end." href="/docs/getting-started/walkthrough/" />
-  <LinkCard title="Go client" description="Typed client that shares the server's own types, with webhook verification and wait-for-decision." href="/docs/integrate/go-client/" />
-</CardGrid>
 </div>

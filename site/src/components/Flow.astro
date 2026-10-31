@@ -1,0 +1,87 @@
+---
+// The request lifecycle: eight steps, read left to right then back.
+const steps = [
+	['Your app creates a request', 'One call with a type and a JSON payload. The caller is the maker.'],
+	['Quorum receives it', 'Identity is taken from the token or the gateway headers.'],
+	['Policy match', 'The policy for this request type decides the stages.'],
+	['Stage check', 'Who may act on the current stage, and how many signatures it needs.'],
+	['A checker decides', 'Approve or reject, with an optional comment.'],
+	['Layered guards', 'Self-approval, roles, permissions, scope and duplicate votes are all verified.'],
+	['Request resolved', 'Approved, rejected, or expired when nobody acts in time.'],
+	['Your app acts', 'The result arrives by webhook, event stream or poll.'],
+];
+---
+<ol class="flow not-content">
+	{steps.map(([title, body]) => (
+		<li>
+			<strong>{title}</strong>
+			<span>{body}</span>
+		</li>
+	))}
+</ol>
+
+<style>
+	.flow {
+		list-style: none;
+		margin: 1.5rem 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 2rem 1.75rem;
+		counter-reset: step;
+	}
+	li {
+		position: relative;
+		margin: 0;
+		padding-top: 0.9rem;
+		border-top: 2px solid var(--sl-color-gray-5);
+		font-size: var(--sl-text-sm);
+		line-height: 1.45;
+		color: var(--sl-color-gray-2);
+	}
+	li::before {
+		counter-increment: step;
+		content: counter(step);
+		position: absolute;
+		top: -0.75rem;
+		left: 0;
+		width: 1.4rem;
+		height: 1.4rem;
+		border-radius: 50%;
+		display: grid;
+		place-items: center;
+		background: var(--sl-color-bg);
+		border: 2px solid var(--sl-color-white);
+		color: var(--sl-color-white);
+		font-size: 0.7rem;
+		font-weight: 700;
+	}
+	li:last-child::before {
+		background: var(--sl-color-white);
+		color: var(--sl-color-bg);
+	}
+	/* Arrow into the next step on the same row */
+	li:not(:nth-child(4n))::after {
+		content: '';
+		position: absolute;
+		top: -1px;
+		right: -1.75rem;
+		width: 1.75rem;
+		border-top: 2px dashed var(--sl-color-gray-5);
+	}
+	strong {
+		display: block;
+		color: var(--sl-color-white);
+		font-weight: 650;
+		margin-bottom: 0.25rem;
+	}
+	@media (max-width: 50rem) {
+		.flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		li:not(:nth-child(4n))::after { display: none; }
+		li:nth-child(odd)::after { display: block; }
+	}
+	@media (max-width: 30rem) {
+		.flow { grid-template-columns: 1fr; }
+		li::after { display: none !important; }
+	}
+</style>
