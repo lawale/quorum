@@ -54,5 +54,5 @@ The API is now live at `http://localhost:8080`. The default [authentication mode
 ## Next steps
 
 - Follow the [wire transfer walkthrough](/docs/getting-started/walkthrough/) to create a policy, a request and an approval.
-- Read the [REST API](/docs/integrate/api/) overview, or use the [Go](/docs/integrate/go-client/), [TypeScript](/docs/integrate/typescript-client/) or [.NET](/docs/integrate/dotnet-client/) client.
+- Read the [REST API](/docs/integrate/api/) overview, or use the [Go](/docs/clients/go/), [TypeScript](/docs/clients/typescript/) or [.NET](/docs/clients/dotnet/) client.
 - Review the [configuration reference](/docs/operate/configuration/) before deploying.

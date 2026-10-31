@@ -1,7 +1,15 @@
 ---
 // Replaces Starlight's hero on the landing page. The request form on the
-// right collects its signatures and the stamp on page load; it is the one
-// moment of motion on the page.
+// right is live when the page is served next to a Quorum server (the public
+// demo): every click is a real call and the server's guards answer. Without
+// a server it replays a scripted signing instead.
+const people = [
+	{ id: 'alice', role: 'maker', label: 'the maker' },
+	{ id: 'bob', role: 'manager', label: 'manager' },
+	{ id: 'charlie', role: 'compliance_officer', label: 'compliance' },
+	{ id: 'dave', role: 'compliance_officer', label: 'compliance' },
+];
+const install = 'git clone https://github.com/lawale/quorum.git && cd quorum && docker compose up';
 ---
 <section class="q-landing q-hero not-content">
 	<div>
@@ -15,50 +23,212 @@
 			<a class="q-btn q-btn-primary" href="/docs/getting-started/quickstart/">Read the quick start</a>
 			<a class="q-btn q-btn-secondary" href="https://quorum.olawalelawal.dev/demo/banking">Open the live demo</a>
 		</div>
+		<div class="q-install">
+			<code>{install}</code>
+			<button type="button" class="q-copy" data-copy={install} aria-label="Copy the install command">Copy</button>
+		</div>
 		<p class="q-facts">Open source under MIT. Written in Go. Runs on PostgreSQL or SQL Server.</p>
 	</div>
 
-	<div class="q-form" aria-label="Example approval request: a wire transfer collecting two stages of signatures and an approved stamp" role="img">
+	<div class="q-form" data-mode="probing" aria-label="A wire transfer collecting two stages of signatures" aria-live="polite">
 		<div class="q-form-head">
 			<div>
 				<strong>Wire transfer</strong>
-				<div class="q-id">req_01JBH3 from alice</div>
+				<div class="q-id">from alice <span data-id>not yet submitted</span></div>
 			</div>
-			<div class="q-status">
+			<div class="q-status" data-status="pending">
 				<span class="q-status-before">Pending</span>
 				<span class="q-status-after">Approved</span>
 			</div>
 		</div>
 		<dl class="q-fields">
-			<dt>From account</dt><dd>ACC-001</dd>
+			<dt>From account</dt><dd data-account>ACC-001</dd>
 			<dt>Amount</dt><dd>$50,000.00</dd>
 			<dt>Destination</dt><dd>IBAN-12345</dd>
 		</dl>
-		<div class="q-stage q-stage-1">
+		<div class="q-stage q-stage-1" data-stage="0">
 			<div class="q-stage-name">Manager approval</div>
 			<div class="q-stage-rule">1 of 1 required. Role: manager</div>
 			<div class="q-sigs">
-				<div class="q-sig">
+				<div class="q-sig" data-signer="bob">
 					<svg viewBox="0 0 104 32" aria-hidden="true"><path d="M4 24c6-14 10-18 12-16s-4 14-2 16 8-10 12-10 2 12 6 10 8-14 14-12 2 10 8 8 10-12 16-8 6 10 14 6 8-8 16-8"/></svg>
 					<small>bob</small>
 				</div>
 			</div>
 		</div>
-		<div class="q-stage q-stage-2">
+		<div class="q-stage q-stage-2" data-stage="1">
 			<div class="q-stage-name">Compliance review</div>
-			<div class="q-stage-rule">2 of 2 required. Role: compliance_officer. Same branch as maker</div>
+			<div class="q-stage-rule">2 of 2 required. Role: compliance_officer</div>
 			<div class="q-sigs">
-				<div class="q-sig">
+				<div class="q-sig" data-signer="charlie">
 					<svg viewBox="0 0 104 32" aria-hidden="true"><path d="M6 22c4-10 8-16 10-14s0 12 4 12 6-14 10-12-2 14 4 14 10-16 16-14 0 12 6 12 10-12 18-10 10 8 20 4"/></svg>
 					<small>charlie</small>
 				</div>
-				<div class="q-sig">
+				<div class="q-sig" data-signer="dave">
 					<svg viewBox="0 0 104 32" aria-hidden="true"><path d="M4 20c8-16 14-18 16-14s-6 16-2 18 10-14 16-14 0 14 6 12 12-14 18-10-2 12 6 10 12-10 18-6 8 6 16 2"/></svg>
 					<small>dave</small>
 				</div>
 			</div>
 		</div>
-		<div class="q-form-foot">alice cannot sign: the maker never approves their own request.</div>
+		<div class="q-sign" role="group" aria-label="Sign as">
+			<span class="q-sign-label">Sign as</span>
+			{people.map((p) => (
+				<button type="button" class="q-person" data-user={p.id} data-role={p.role}>
+					{p.id}<small>{p.label}</small>
+				</button>
+			))}
+		</div>
+		<div class="q-form-foot" data-foot>
+			<span data-foot-replay>alice cannot sign: the maker never approves their own request.</span>
+			<span data-foot-live>Pick anyone. Each click is a real call to the demo server, and the server decides.</span>
+		</div>
+		<button type="button" class="q-again" data-again hidden>Start another request</button>
 		<div class="q-stamp" aria-hidden="true">APPROVED<small>2 stages, 3 signatures, audited</small></div>
 	</div>
 </section>
+
+<script>
+	const form = document.querySelector<HTMLElement>('.q-form')!;
+	const foot = form.querySelector<HTMLElement>('[data-foot-live]')!;
+	const status = form.querySelector<HTMLElement>('.q-status')!;
+	const idOut = form.querySelector<HTMLElement>('[data-id]')!;
+	const account = form.querySelector<HTMLElement>('[data-account]')!;
+	const again = form.querySelector<HTMLButtonElement>('[data-again]')!;
+	const people = Array.from(form.querySelectorAll<HTMLButtonElement>('.q-person'));
+	const tenant = 'landing';
+
+	let requestId: string | null = null;
+	let busy = false;
+
+	const copy = document.querySelector<HTMLButtonElement>('.q-copy');
+	copy?.addEventListener('click', async () => {
+		await navigator.clipboard.writeText(copy.dataset.copy ?? '');
+		copy.textContent = 'Copied';
+		setTimeout(() => (copy.textContent = 'Copy'), 1500);
+	});
+
+	async function serverIsUp(): Promise<boolean> {
+		try {
+			const res = await fetch('/health', { signal: AbortSignal.timeout(2500), headers: { Accept: 'application/json' } });
+			if (!res.ok) return false;
+			const body = await res.json();
+			return body && body.status === 'healthy';
+		} catch {
+			return false;
+		}
+	}
+
+	function newAccount() {
+		const n = 1000 + Math.floor(Math.random() * 9000);
+		account.textContent = `ACC-${n}`;
+		return `ACC-${n}`;
+	}
+
+	type Req = { id: string; status: string; current_stage: number; approvals?: { checker_id: string; stage_index: number }[] };
+
+	async function call(path: string, user: string, role: string | null, body: unknown): Promise<{ ok: boolean; status: number; data: any }> {
+		const headers: Record<string, string> = {
+			'Content-Type': 'application/json',
+			'X-Tenant-ID': tenant,
+			'X-User-ID': user,
+		};
+		if (role) headers['X-User-Roles'] = role;
+		const res = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
+		let data: any = null;
+		try {
+			data = await res.json();
+		} catch {
+			data = null;
+		}
+		return { ok: res.ok, status: res.status, data };
+	}
+
+	async function ensureRequest(): Promise<Req | null> {
+		if (requestId) return null;
+		const r = await call('/api/v1/requests', 'alice', null, {
+			type: 'wire_transfer',
+			payload: { source_account_id: account.textContent, amount: 50000, destination: 'IBAN-12345' },
+		});
+		if (!r.ok) {
+			say(`The demo server did not open the request (${r.status}: ${r.data?.error ?? 'no detail'}).`, true);
+			return null;
+		}
+		requestId = r.data.id;
+		idOut.textContent = `req ${r.data.id.slice(0, 8)}`;
+		return r.data;
+	}
+
+	function say(text: string, refused = false) {
+		foot.textContent = text;
+		form.classList.toggle('is-refused', refused);
+	}
+
+	function render(req: Req) {
+		for (const a of req.approvals ?? []) {
+			form.querySelector(`.q-sig[data-signer="${a.checker_id}"]`)?.classList.add('is-signed');
+		}
+		form.querySelectorAll<HTMLElement>('.q-stage').forEach((s) => {
+			s.classList.toggle('is-current', req.status === 'pending' && Number(s.dataset.stage) === req.current_stage);
+		});
+		if (req.status !== 'pending') {
+			status.dataset.status = req.status;
+			form.classList.add('is-decided');
+			people.forEach((b) => (b.disabled = true));
+			again.hidden = false;
+		}
+	}
+
+	async function signAs(user: string, role: string) {
+		if (busy) return;
+		busy = true;
+		people.forEach((b) => b.classList.toggle('is-acting', b.dataset.user === user));
+		try {
+			const created = await ensureRequest();
+			if (!requestId) return;
+			if (created) say(`alice submitted the request. Now ${user} is signing.`);
+			const r = await call(`/api/v1/requests/${requestId}/approve`, user, role, { comment: `Signed from the landing page as ${user}.` });
+			if (r.ok) {
+				render(r.data);
+				if (r.data.status === 'approved') {
+					say(`Approved. ${user}'s signature completed the last stage, and every step is in the audit trail.`);
+				} else {
+					say(`${user} signed. The request moved to stage ${r.data.current_stage + 1} of 2.`);
+				}
+			} else {
+				say(`Refused (${r.status}): ${r.data?.error ?? 'no detail from the server'}.`, true);
+			}
+		} catch {
+			say('The demo server did not answer. Try again in a moment.', true);
+		} finally {
+			busy = false;
+			people.forEach((b) => b.classList.remove('is-acting'));
+		}
+	}
+
+	function reset() {
+		requestId = null;
+		newAccount();
+		idOut.textContent = 'not yet submitted';
+		status.dataset.status = 'pending';
+		form.classList.remove('is-decided', 'is-refused');
+		form.querySelectorAll('.is-signed').forEach((el) => el.classList.remove('is-signed'));
+		form.querySelectorAll('.is-current').forEach((el) => el.classList.remove('is-current'));
+		form.querySelector('[data-stage="0"]')?.classList.add('is-current');
+		people.forEach((b) => (b.disabled = false));
+		again.hidden = true;
+		say('Pick anyone. Each click is a real call to the demo server, and the server decides.');
+	}
+
+	people.forEach((b) => b.addEventListener('click', () => signAs(b.dataset.user!, b.dataset.role!)));
+	again.addEventListener('click', reset);
+
+	serverIsUp().then((up) => {
+		if (up) {
+			newAccount();
+			form.querySelector('[data-stage="0"]')?.classList.add('is-current');
+			form.dataset.mode = 'live';
+		} else {
+			form.dataset.mode = 'replay';
+		}
+	});
+</script>

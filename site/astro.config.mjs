@@ -7,7 +7,12 @@ const repo = 'https://github.com/lawale/quorum';
 export default defineConfig({
 	site: 'https://quorum.olawalelawal.dev',
 	trailingSlash: 'always',
-	redirects: { '/docs/': '/docs/getting-started/quickstart/' },
+	redirects: {
+		'/docs/': '/docs/getting-started/quickstart/',
+		'/docs/integrate/go-client/': '/docs/clients/go/',
+		'/docs/integrate/typescript-client/': '/docs/clients/typescript/',
+		'/docs/integrate/dotnet-client/': '/docs/clients/dotnet/',
+	},
 	integrations: [
 		starlight({
 			title: 'Quorum',
@@ -48,11 +53,45 @@ export default defineConfig({
 					label: 'Integrate',
 					items: [
 						{ label: 'REST API', slug: 'docs/integrate/api' },
-						{ label: 'Go client', slug: 'docs/integrate/go-client' },
-						{ label: 'TypeScript client', slug: 'docs/integrate/typescript-client' },
-						{ label: '.NET client', slug: 'docs/integrate/dotnet-client' },
-						{ label: 'Embeddable widgets', slug: 'docs/integrate/widgets' },
 						{ label: 'Webhooks', slug: 'docs/integrate/webhooks' },
+						{ label: 'Embeddable widgets', slug: 'docs/integrate/widgets' },
+					],
+				},
+				{
+					label: 'Clients',
+					items: [
+						{
+							label: 'Go',
+							collapsed: true,
+							items: [
+								{ label: 'Overview', slug: 'docs/clients/go' },
+								{ label: 'Identity and authentication', slug: 'docs/clients/go/authentication' },
+								{ label: 'Decisions: streams, waiting and webhooks', slug: 'docs/clients/go/decisions' },
+								{ label: 'Policies and webhook subscriptions', slug: 'docs/clients/go/policies' },
+							],
+						},
+						{
+							label: 'TypeScript',
+							collapsed: true,
+							items: [
+								{ label: 'Overview', slug: 'docs/clients/typescript' },
+								{ label: 'Identity and authentication', slug: 'docs/clients/typescript/authentication' },
+								{ label: 'Decisions: streams, waiting and webhooks', slug: 'docs/clients/typescript/decisions' },
+								{ label: 'Policies and webhook subscriptions', slug: 'docs/clients/typescript/policies' },
+							],
+						},
+						{
+							label: '.NET',
+							collapsed: true,
+							items: [
+								{ label: 'Overview', slug: 'docs/clients/dotnet' },
+								{ label: 'ASP.NET Core', slug: 'docs/clients/dotnet/aspnet-core' },
+								{ label: 'MediatR', slug: 'docs/clients/dotnet/mediatr' },
+								{ label: 'Identity and authentication', slug: 'docs/clients/dotnet/authentication' },
+								{ label: 'Decisions: streams, waiting and webhooks', slug: 'docs/clients/dotnet/decisions' },
+								{ label: 'Policies and webhook subscriptions', slug: 'docs/clients/dotnet/policies' },
+							],
+						},
 					],
 				},
 				{

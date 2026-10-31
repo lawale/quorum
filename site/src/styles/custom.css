@@ -143,7 +143,7 @@ h1 {
 }
 @media (max-width: 56rem) {
 	.q-landing .q-split {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
@@ -159,7 +159,7 @@ h1 {
 }
 @media (max-width: 56rem) {
 	.q-hero {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 }
 .q-hero h1 {
@@ -199,8 +199,46 @@ h1 {
 .q-btn-secondary:hover {
 	color: var(--sl-color-accent) !important;
 }
+.q-install {
+	margin-top: 1.75rem;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	max-width: 36rem;
+	border: 1px solid var(--q-rule);
+	border-radius: 0.25rem;
+	padding: 0.55rem 0.5rem 0.55rem 0.85rem;
+	background: var(--sl-color-gray-6);
+}
+.q-install code {
+	flex: 1;
+	min-width: 0;
+	overflow-x: auto;
+	white-space: nowrap;
+	font-family: var(--__sl-font-mono);
+	font-size: 0.8125rem;
+	color: var(--sl-color-gray-1);
+	scrollbar-width: none;
+}
+.q-copy {
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--sl-color-white);
+	background: transparent;
+	border: 1px solid var(--q-rule);
+	border-radius: 0.2rem;
+	padding: 0.3rem 0.6rem;
+	cursor: pointer;
+	flex: none;
+}
+.q-copy:hover {
+	border-color: var(--sl-color-accent);
+	color: var(--sl-color-accent);
+}
 .q-facts {
-	margin-top: 2.5rem;
+	margin-top: 1.5rem;
 	margin-bottom: 1rem;
 	font-size: 0.9375rem;
 	color: var(--sl-color-gray-3);
@@ -208,7 +246,7 @@ h1 {
 
 /* Request form (hero) */
 .q-form {
-	--pen: var(--q-signature);
+	--pen: #1f4fbf;
 	background: var(--q-paper);
 	color: var(--q-ink);
 	border: 1px solid #c9ccc3;
@@ -242,6 +280,9 @@ h1 {
 	font-family: var(--__sl-font-mono);
 	font-size: 0.8125rem;
 	color: #5b6478;
+}
+.q-form-head .q-id span {
+	margin-left: 0.35rem;
 }
 .q-status {
 	font-weight: 600;
@@ -277,9 +318,15 @@ h1 {
 	border-top: 1px solid #d8dad3;
 	padding: 0.75rem 0;
 	display: grid;
-	grid-template-columns: 1fr auto;
+	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: center;
 	gap: 0.25rem 1rem;
+}
+@media (max-width: 30rem) {
+	.q-stage { grid-template-columns: minmax(0, 1fr); }
+	.q-stage .q-sigs { grid-column: 1; grid-row: auto; justify-content: flex-start; margin-top: 0.5rem; }
+	.q-form { padding-inline: 1.1rem; }
+	.q-stamp { right: 1rem; top: 5rem; font-size: 1.2rem; transform-origin: right top; }
 }
 .q-stage-name {
 	font-weight: 600;
@@ -357,7 +404,8 @@ h1 {
 	color: #5b6478;
 }
 
-/* One orchestrated sequence on load. */
+/* Signing. Replay mode runs one scripted sequence on load; live mode draws
+   a signature when the server accepts it and stamps when it decides. */
 @keyframes q-draw {
 	to {
 		stroke-dashoffset: 0;
@@ -387,25 +435,118 @@ h1 {
 		transform: rotate(-9deg) scale(1);
 	}
 }
-.q-form .q-sig:nth-of-type(1) path { animation: q-draw 0.9s ease-out 0.9s forwards; }
-.q-form .q-sig:nth-of-type(1) small { animation: q-show 0.3s 1.7s forwards; }
-.q-form .q-stage-2 .q-sig:nth-of-type(1) path { animation: q-draw 0.9s ease-out 2.3s forwards; }
-.q-form .q-stage-2 .q-sig:nth-of-type(1) small { animation: q-show 0.3s 3.1s forwards; }
-.q-form .q-stage-2 .q-sig:nth-of-type(2) path { animation: q-draw 0.9s ease-out 3.4s forwards; }
-.q-form .q-stage-2 .q-sig:nth-of-type(2) small { animation: q-show 0.3s 4.2s forwards; }
-.q-form .q-stamp { animation: q-stamp 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) 4.8s forwards; }
-.q-form .q-status-before { animation: q-hide 0.3s 4.9s forwards; }
-.q-form .q-status-after { animation: q-show 0.3s 4.9s forwards; }
+.q-form[data-mode='replay'] .q-stage-1 .q-sig path { animation: q-draw 0.9s ease-out 0.9s forwards; }
+.q-form[data-mode='replay'] .q-stage-1 .q-sig small { animation: q-show 0.3s 1.7s forwards; }
+.q-form[data-mode='replay'] .q-stage-2 .q-sig:nth-of-type(1) path { animation: q-draw 0.9s ease-out 2.3s forwards; }
+.q-form[data-mode='replay'] .q-stage-2 .q-sig:nth-of-type(1) small { animation: q-show 0.3s 3.1s forwards; }
+.q-form[data-mode='replay'] .q-stage-2 .q-sig:nth-of-type(2) path { animation: q-draw 0.9s ease-out 3.4s forwards; }
+.q-form[data-mode='replay'] .q-stage-2 .q-sig:nth-of-type(2) small { animation: q-show 0.3s 4.2s forwards; }
+.q-form[data-mode='replay'] .q-stamp { animation: q-stamp 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) 4.8s forwards; }
+.q-form[data-mode='replay'] .q-status-before { animation: q-hide 0.3s 4.9s forwards; }
+.q-form[data-mode='replay'] .q-status-after { animation: q-show 0.3s 4.9s forwards; }
+
+.q-form[data-mode='live'] .q-sig.is-signed path { animation: q-draw 0.9s ease-out forwards; }
+.q-form[data-mode='live'] .q-sig.is-signed small { animation: q-show 0.3s 0.8s forwards; }
+.q-form[data-mode='live'].is-decided .q-stamp { animation: q-stamp 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.9s forwards; }
+.q-form[data-mode='live'].is-decided .q-status-before { animation: q-hide 0.3s 1s forwards; }
+.q-form[data-mode='live'].is-decided .q-status-after { animation: q-show 0.3s 1s forwards; }
+
+.q-form:not([data-mode='live']) .q-sign,
+.q-form:not([data-mode='live']) [data-foot-live],
+.q-form[data-mode='live'] [data-foot-replay] {
+	display: none;
+}
+.q-stage {
+	transition: padding-left 0.25s, border-color 0.25s;
+}
+.q-stage.is-current {
+	box-shadow: inset 2px 0 0 var(--pen);
+	padding-left: 0.75rem;
+}
+.q-sign {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+	border-top: 1px solid #d8dad3;
+	padding: 0.85rem 0 0.25rem;
+}
+.q-sign-label {
+	font-size: 0.8125rem;
+	color: #5b6478;
+	margin-right: 0.25rem;
+}
+.q-person {
+	font: inherit;
+	font-size: 0.875rem;
+	font-weight: 600;
+	line-height: 1.1;
+	color: var(--q-ink);
+	background: transparent;
+	border: 1px solid var(--q-ink);
+	border-radius: 0.2rem;
+	padding: 0.35rem 0.6rem 0.3rem;
+	display: grid;
+	gap: 0.1rem;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.q-person small {
+	font-size: 0.6875rem;
+	font-weight: 400;
+	color: #5b6478;
+}
+.q-person:hover,
+.q-person:focus-visible {
+	background: var(--q-ink);
+	color: var(--q-paper);
+}
+.q-person:hover small,
+.q-person:focus-visible small {
+	color: #b9bcc6;
+}
+.q-person.is-acting {
+	cursor: progress;
+	opacity: 0.6;
+}
+.q-person:disabled {
+	opacity: 0.4;
+	cursor: default;
+	background: transparent;
+	color: var(--q-ink);
+}
+.q-form.is-refused .q-form-foot {
+	color: var(--q-stamp);
+}
+.q-again {
+	font: inherit;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	color: var(--pen);
+	background: none;
+	border: 0;
+	padding: 0.5rem 0 0;
+	cursor: pointer;
+	text-decoration: underline;
+	text-underline-offset: 0.15em;
+}
 
 @media (prefers-reduced-motion: reduce) {
 	.q-form * {
 		animation: none !important;
 	}
-	.q-form .q-sig path { stroke-dashoffset: 0; }
-	.q-form .q-sig small { opacity: 1; }
-	.q-form .q-stamp { opacity: 0.92; transform: rotate(-9deg); }
-	.q-form .q-status-before { opacity: 0; }
-	.q-form .q-status-after { opacity: 1; }
+	.q-form[data-mode='replay'] .q-sig path,
+	.q-form[data-mode='live'] .q-sig.is-signed path { stroke-dashoffset: 0; }
+	.q-form[data-mode='replay'] .q-sig small,
+	.q-form[data-mode='live'] .q-sig.is-signed small { opacity: 1; }
+	.q-form[data-mode='replay'] .q-stamp,
+	.q-form[data-mode='live'].is-decided .q-stamp { opacity: 0.92; transform: rotate(-9deg); }
+	.q-form[data-mode='replay'] .q-status-before,
+	.q-form[data-mode='live'].is-decided .q-status-before { opacity: 0; }
+	.q-form[data-mode='replay'] .q-status-after,
+	.q-form[data-mode='live'].is-decided .q-status-after { opacity: 1; }
+	.q-stage { transition: none; }
 }
 
 /* Ledger: the comparison */
