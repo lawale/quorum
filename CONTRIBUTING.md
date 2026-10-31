@@ -38,6 +38,7 @@ api/
 clients/
   go/                — Go client for the API (shares internal/model's types)
   typescript/        — TypeScript client (@oluwavader/quorum-client); types generated from api/openapi.yaml
+  dotnet/            — .NET client (Quorum.Client on NuGet); records mirroring api/openapi.yaml, strict in tests
 internal/
   apitest/           — In-process server over in-memory stores, validating traffic against api/openapi.yaml
     cmd/apiserver/   — The same server as a process, for client test suites in other languages
@@ -128,14 +129,15 @@ make test-all
 
 ### Changing the API
 
-`api/openapi.yaml` is the contract the TypeScript and .NET clients are generated from, so it has to match the server exactly. It is enforced rather than reviewed: the client test suites run against the real handlers through `internal/apitest` (in-process for Go, as the `apiserver` process for TypeScript), which validates every request and response against the document and fails if any documented operation goes unexercised.
+`api/openapi.yaml` is the contract the TypeScript and .NET clients are generated from, so it has to match the server exactly. It is enforced rather than reviewed: the client test suites run against the real handlers through `internal/apitest` (in-process for Go, as the `apiserver` process for TypeScript and .NET), which validates every request and response against the document and fails if any documented operation goes unexercised.
 
 When you add or change an endpoint or a field:
 
 1. Change the input or model type in `internal/model` (handlers decode straight into these; the Go client encodes them).
 2. Update `api/openapi.yaml`. Response schemas use `additionalProperties: false`, so a new field fails the suite until it is documented.
 3. Regenerate the TypeScript types: `cd clients/typescript && npm run generate`. CI fails if the committed `src/generated/schema.ts` is stale.
-4. Add or extend a test in each client so the operation is covered. The suites tell you which operations they never reached.
+4. Mirror the change in the .NET models (`clients/dotnet/src/Quorum.Client/Models.cs`). The .NET suite deserialises with unmapped members disallowed, so a new response field fails it until modelled.
+5. Add or extend a test in each client so the operation is covered. The suites tell you which operations they never reached.
 
 ## Linting
 

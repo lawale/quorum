@@ -50,6 +50,7 @@ export default defineConfig({
 						{ label: 'REST API', slug: 'docs/integrate/api' },
 						{ label: 'Go client', slug: 'docs/integrate/go-client' },
 						{ label: 'TypeScript client', slug: 'docs/integrate/typescript-client' },
+						{ label: '.NET client', slug: 'docs/integrate/dotnet-client' },
 						{ label: 'Embeddable widgets', slug: 'docs/integrate/widgets' },
 						{ label: 'Webhooks', slug: 'docs/integrate/webhooks' },
 					],

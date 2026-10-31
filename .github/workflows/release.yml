@@ -121,6 +121,28 @@ jobs:
 
       - run: npm publish --access public --provenance
 
+  nuget:
+    name: NuGet Package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment: nuget
+    defaults:
+      run:
+        working-directory: clients/dotnet
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: clients/dotnet/global.json
+
+      - name: Pack with the version from the tag
+        run: dotnet pack src/Quorum.Client -c Release -p:Version="${GITHUB_REF_NAME#v}" -o out
+
+      - name: Push to nuget.org
+        run: dotnet nuget push "out/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
   trivy:
     name: Scan Docker Images
     runs-on: ubuntu-latest
@@ -151,7 +173,7 @@ jobs:
   github-release:
     name: GitHub Release
     runs-on: ubuntu-latest
-    needs: [docker, npm]
+    needs: [docker, npm, nuget]
     permissions:
       contents: write
     steps:
@@ -164,6 +186,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           cat > notes.md <<EOF
           **npm:** \`npm install @oluwavader/quorum-client@${VERSION}\` (client) and \`@oluwavader/quorum-embed@${VERSION}\` (widgets)
+          **NuGet:** \`dotnet add package Quorum.Client --version ${VERSION}\`
           **Docker:** \`ghcr.io/lawale/quorum:${VERSION}\` (also \`-console\`, \`-all\`, \`-site\`, and the \`-demo-*\` sample apps)
 
           EOF
