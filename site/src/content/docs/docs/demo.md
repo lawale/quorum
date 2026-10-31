@@ -9,9 +9,9 @@ Three sample applications share one hosted Quorum instance. Each has a profile s
 
 | App | Tech | Scenario |
 |-----|------|----------|
-| [Banking](https://quorum-bank-demo.olawalelawal.dev) | Go + html/template | Multi-stage wire transfer approval with webhook callbacks |
-| [Expense tracker](https://quorum-expense-demo.olawalelawal.dev) | Node.js + Express | Single-stage expense approval with status polling |
-| [Access portal](https://quorum-access-portal-demo.olawalelawal.dev) | Python + Flask | Threshold-based security review (2-of-3 voting) |
+| [Banking](https://quorum.olawalelawal.dev/demo/banking) | Go + html/template | Multi-stage wire transfer approval with webhook callbacks |
+| [Expense tracker](https://quorum.olawalelawal.dev/demo/expenses) | Node.js + Express | Single-stage expense approval with status polling |
+| [Access portal](https://quorum.olawalelawal.dev/demo/access) | Python + Flask | Threshold-based security review (2-of-3 voting) |
 
 The demo is reset from time to time, and anything you create there is public.
 

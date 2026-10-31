@@ -28,6 +28,8 @@ SELF_URL = os.environ.get("SELF_URL", "http://localhost:3003")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "access-webhook-secret")
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgres://quorum:quorum@localhost:5432/quorum")
 PORT = int(os.environ.get("PORT", "3003"))
+# Path prefix the app is served under behind a proxy, e.g. /demo/access.
+BASE_PATH = os.environ.get("BASE_PATH", "").rstrip("/")
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -36,6 +38,11 @@ PORT = int(os.environ.get("PORT", "3003"))
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("access-portal")
+
+
+@app.context_processor
+def inject_base_path():
+    return {"base": BASE_PATH}
 
 # ---------------------------------------------------------------------------
 # PostgreSQL access request store
@@ -311,7 +318,7 @@ def create_request():
     else:
         db_update_status(access_req["id"], "error")
 
-    return redirect(url_for("request_detail", request_id=access_req["id"]))
+    return redirect(BASE_PATH + url_for("request_detail", request_id=access_req["id"]))
 
 
 @app.route("/api/requests", methods=["POST"])

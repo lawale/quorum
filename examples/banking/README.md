@@ -35,6 +35,7 @@ Visit [http://localhost:3001](http://localhost:3001) to use the app.
 | `SELF_URL` | `http://localhost:3001` | Publicly reachable URL of this app |
 | `WEBHOOK_SECRET` | `banking-webhook-secret` | Shared secret for webhook HMAC verification |
 | `PORT` | `3001` | HTTP listen port |
+| `BASE_PATH` | *(empty)* | Path prefix when served behind a proxy, e.g. `/demo/banking`. Links and redirects are prefixed; the proxy strips it before forwarding. |
 
 ## Flow
 

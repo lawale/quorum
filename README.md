@@ -12,7 +12,7 @@
 Wire transfers, production access, price changes, content going live: the [four-eyes principle](https://en.wikipedia.org/wiki/Two-man_rule) shows up everywhere, and every team rebuilds it from scratch. Quorum pulls that logic out of your applications into one self-hosted service. Your app creates a request; Quorum matches it to a policy, walks it through the stages you defined, enforces who may act at each one, records everything, and tells you when it is decided. Rules live in data and change without a deploy. The approval UI is included as Web Components you drop into any front end.
 
 **Website and documentation:** [quorum.olawalelawal.dev](https://quorum.olawalelawal.dev)
-**Live demo:** [banking](https://quorum-bank-demo.olawalelawal.dev) · [expenses](https://quorum-expense-demo.olawalelawal.dev) · [access portal](https://quorum-access-portal-demo.olawalelawal.dev)
+**Live demo:** [banking](https://quorum.olawalelawal.dev/demo/banking) · [expenses](https://quorum.olawalelawal.dev/demo/expenses) · [access portal](https://quorum.olawalelawal.dev/demo/access)
 
 ## What you get
 

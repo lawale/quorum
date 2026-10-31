@@ -6,7 +6,7 @@
         <h1 class="text-2xl font-bold text-gray-900">Wire Transfers</h1>
         <p class="mt-1 text-sm text-gray-500">Track and manage pending wire transfer approvals.</p>
     </div>
-    <a href="/transfer/new" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+    <a href="{{base}}/transfer/new" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
         <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
@@ -50,7 +50,7 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{.CreatedAt.Format "Jan 02, 15:04"}}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
-                    <a href="/transfer/{{.ID}}" class="text-blue-600 hover:text-blue-800 font-medium">View</a>
+                    <a href="{{base}}/transfer/{{.ID}}" class="text-blue-600 hover:text-blue-800 font-medium">View</a>
                 </td>
             </tr>
             {{end}}
@@ -65,7 +65,7 @@
     <h3 class="mt-4 text-sm font-semibold text-gray-900">No transfers yet</h3>
     <p class="mt-1 text-sm text-gray-500">Get started by creating a new wire transfer.</p>
     <div class="mt-6">
-        <a href="/transfer/new" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700">
+        <a href="{{base}}/transfer/new" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700">
             New Transfer
         </a>
     </div>
@@ -90,7 +90,7 @@
     var list = document.querySelector('quorum-request-list');
     list?.addEventListener('quorum:select', function(e) {
         var localId = quorumToLocal[e.detail.requestId];
-        if (localId) window.location.href = '/transfer/' + localId;
+        if (localId) window.location.href = '{{base}}/transfer/' + localId;
     });
 </script>
 {{end}}

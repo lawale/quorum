@@ -12,6 +12,9 @@ const SELF_URL = process.env.SELF_URL || "http://localhost:3002";
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "expenses-webhook-secret";
 const DATABASE_URL = process.env.DATABASE_URL || "postgres://quorum:quorum@localhost:5432/quorum";
 const PORT = parseInt(process.env.PORT, 10) || 3002;
+// Path prefix the app is served under behind a proxy, e.g. /demo/expenses.
+let BASE_PATH = process.env.BASE_PATH || "";
+while (BASE_PATH.endsWith("/")) BASE_PATH = BASE_PATH.slice(0, -1);
 
 // ---------------------------------------------------------------------------
 // PostgreSQL expense store
@@ -215,6 +218,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
+app.locals.base = BASE_PATH;
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -265,7 +269,7 @@ app.post("/expense/new", async (req, res) => {
     await updateExpense(expense.id, { status: "error" });
   }
 
-  res.redirect(`/expense/${expense.id}`);
+  res.redirect(`${BASE_PATH}/expense/${expense.id}`);
 });
 
 // Create expense via JSON API (used by seed script)
