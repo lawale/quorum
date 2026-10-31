@@ -84,4 +84,4 @@ If `alice` tried to approve her own request, or `bob` tried to vote again on the
 
 Your application, listening via [webhook](/docs/integrate/webhooks/), receives an `approved` event and executes the transfer, safe in the knowledge that all checks have passed. The webhook is guaranteed to be delivered because it was written to a durable outbox in the same database transaction as the status change, so nothing can be lost.
 
-The same flow in Go, using the [Go client](/docs/integrate/go-client/), is what the [banking sample app](/docs/demo/) runs. The [TypeScript client](/docs/integrate/typescript-client/) offers the same calls for Node and the browser.
+The same flow in Go, using the [Go client](/docs/integrate/go-client/), is what the [banking sample app](/docs/demo/) runs. The [TypeScript](/docs/integrate/typescript-client/) and [.NET](/docs/integrate/dotnet-client/) clients offer the same calls for their platforms.

@@ -9,7 +9,7 @@ sidebar:
 
 The `/health` endpoint returns component-level health status, HTTP 200 when healthy and 503 when unhealthy, and does not require authentication. Use it for load balancer health checks and container orchestration readiness probes.
 
-The response also carries `version`: the release tag the binary was built from (`"dev"` for local builds), so you can confirm which Quorum a deployment is running. The [Go](/docs/integrate/go-client/) and [TypeScript](/docs/integrate/typescript-client/) clients expose the same value, and each reports its own version in its User-Agent.
+The response also carries `version`: the release tag the binary was built from (`"dev"` for local builds), so you can confirm which Quorum a deployment is running. The [Go](/docs/integrate/go-client/), [TypeScript](/docs/integrate/typescript-client/) and [.NET](/docs/integrate/dotnet-client/) clients expose the same value, and each reports its own version in its User-Agent.
 
 The binary doubles as a probe, which is how the Docker images define their healthcheck without a shell:
 

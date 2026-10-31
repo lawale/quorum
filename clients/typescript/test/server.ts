@@ -27,7 +27,7 @@ export async function setup(project: TestProject): Promise<void> {
   const bin = join(buildDir, "apiserver");
   execFileSync("go", ["build", "-o", bin, "./internal/apitest/cmd/apiserver"], { cwd: repoRoot, stdio: "inherit" });
 
-  server = spawn(bin, [], { cwd: repoRoot, stdio: ["ignore", "pipe", "pipe"] });
+  server = spawn(bin, [], { cwd: repoRoot, stdio: ["pipe", "pipe", "pipe"] });
   server.stderr!.setEncoding("utf8");
   server.stderr!.on("data", (chunk: string) => {
     stderr += chunk;
@@ -50,7 +50,7 @@ export async function setup(project: TestProject): Promise<void> {
 export async function teardown(): Promise<void> {
   if (!server) return;
   const exit = new Promise<number | null>((resolveCode) => server!.once("exit", (code) => resolveCode(code)));
-  server.kill("SIGTERM");
+  server.stdin!.end();
   const code = await exit;
   if (buildDir) rmSync(buildDir, { recursive: true, force: true });
   if (code !== 0) {

@@ -103,7 +103,7 @@ docker compose up
   <div><dt>Webhooks that cannot be lost</dt><dd>Deliveries are written to an outbox in the same transaction as the state change, signed with HMAC-SHA256 and retried with backoff. A review_requested event tells your application exactly who is allowed to act next, so you can notify them.</dd></div>
   <div><dt>Approval screens for any front end</dt><dd>Three Lit Web Components: an approval panel, a request list and a stage progress bar. Shadow DOM isolation, theming through CSS custom properties, live updates over Server-Sent Events. Load them from a script tag or npm.</dd></div>
   <div><dt>Your identity provider stays in charge</dt><dd>Validate JWTs against any OIDC provider's JWKS endpoint with claim mapping and automatic key rotation, or trust headers from your gateway. Quorum never becomes a user directory.</dd></div>
-  <div><dt>Built to be operated</dt><dd>PostgreSQL or SQL Server, with everything in its own schema so Quorum can share your database. Prometheus metrics, a health endpoint that reports its version, multi-arch Docker images, an OpenAPI contract validated against the real server in tests, and official Go and TypeScript clients built on it.</dd></div>
+  <div><dt>Built to be operated</dt><dd>PostgreSQL or SQL Server, with everything in its own schema so Quorum can share your database. Prometheus metrics, a health endpoint that reports its version, multi-arch Docker images, an OpenAPI contract validated against the real server in tests, and official Go, TypeScript and .NET clients built on it.</dd></div>
 </dl>
 </section>
 
@@ -145,6 +145,7 @@ docker compose up
       <li><a href="/docs/getting-started/walkthrough/">Walkthrough</a> <span>a two-stage wire transfer from policy to webhook</span></li>
       <li><a href="/docs/integrate/go-client/">Go client</a> <span>typed, with webhook verification and wait-for-decision</span></li>
       <li><a href="/docs/integrate/typescript-client/">TypeScript client</a> <span>the same surface for Node and the browser, generated from the OpenAPI contract</span></li>
+      <li><a href="/docs/integrate/dotnet-client/">.NET client</a> <span>records, <code>As(identity)</code> per call, and <code>AddQuorumClient</code> for ASP.NET Core</span></li>
       <li><a href="https://github.com/lawale/quorum">Source on GitHub</a> <span>MIT licensed</span></li>
       <li><a href="https://olawalelawal.dev/building-quorum-multi-tenant-approval-engine/">Why Quorum exists</a> <span>the design story, on the author's blog</span></li>
     </ul>

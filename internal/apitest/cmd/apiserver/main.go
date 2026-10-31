@@ -3,7 +3,8 @@
 // server under the same OpenAPI validation the Go suite gets.
 //
 // It prints the server URL as the first line of stdout, serves until it
-// receives SIGINT or SIGTERM, and then exits non-zero if any traffic
+// receives SIGINT or SIGTERM or its stdin is closed (whichever the test
+// runner finds easier to do), and then exits non-zero if any traffic
 // disagreed with the OpenAPI document or any documented operation was never
 // called.
 package main
@@ -47,7 +48,15 @@ func main() {
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	stdinClosed := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		close(stdinClosed)
+	}()
+	select {
+	case <-stop:
+	case <-stdinClosed:
+	}
 	srv.Close()
 
 	failed := false
