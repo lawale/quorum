@@ -91,6 +91,7 @@ jobs:
       id-token: write
     environment: npm
     strategy:
+      fail-fast: false
       matrix:
         package:
           - widgets/frontend
@@ -119,7 +120,16 @@ jobs:
 
       - run: npm run build
 
-      - run: npm publish --access public --provenance
+      - name: Check whether this version is already on npm
+        id: registry
+        run: |
+          NAME="$(node -p 'require("./package.json").name')"
+          if npm view "${NAME}@${GITHUB_REF_NAME#v}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.registry.outputs.published != 'true'
+        run: npm publish --access public --provenance
 
   nuget:
     name: NuGet Packages
