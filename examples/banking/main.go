@@ -35,6 +35,7 @@ type config struct {
 	WebhookSecret   string
 	Port            string
 	DatabaseURL     string
+	BasePath        string // path prefix the app is served under behind a proxy, e.g. /demo/banking
 }
 
 func loadConfig() config {
@@ -45,6 +46,7 @@ func loadConfig() config {
 		SelfURL:         envOr("SELF_URL", "http://localhost:3001"),
 		WebhookSecret:   envOr("WEBHOOK_SECRET", "banking-webhook-secret"),
 		Port:            envOr("PORT", "3001"),
+		BasePath:        strings.TrimSuffix(os.Getenv("BASE_PATH"), "/"),
 		DatabaseURL:     envOr("DATABASE_URL", "postgres://quorum:quorum@localhost:5432/quorum?sslmode=disable"),
 	}
 }
@@ -207,11 +209,12 @@ type app struct {
 	quorum *client.Client
 }
 
-func parseTemplates() map[string]*template.Template {
+func parseTemplates(basePath string) map[string]*template.Template {
 	pages := map[string]*template.Template{}
 	pageFiles := []string{"dashboard.html", "new_transfer.html", "detail.html"}
+	funcs := template.FuncMap{"base": func() string { return basePath }}
 	for _, page := range pageFiles {
-		t := template.Must(template.ParseFiles(
+		t := template.Must(template.New(page).Funcs(funcs).ParseFiles(
 			"templates/layout.html",
 			"templates/"+page,
 		))
@@ -241,7 +244,7 @@ func main() {
 	a := &app{
 		cfg:    cfg,
 		store:  newTransferStore(pool),
-		pages:  parseTemplates(),
+		pages:  parseTemplates(cfg.BasePath),
 		quorum: quorum,
 	}
 
@@ -312,7 +315,7 @@ func (a *app) handleCreateTransfer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.submitToQuorum(r.Context(), transfer)
-	http.Redirect(w, r, "/transfer/"+transfer.ID, http.StatusSeeOther)
+	http.Redirect(w, r, a.cfg.BasePath+"/transfer/"+transfer.ID, http.StatusSeeOther)
 }
 
 // handleCreateTransferAPI is a JSON endpoint used by the seed script.

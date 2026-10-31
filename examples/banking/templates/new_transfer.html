@@ -3,12 +3,12 @@
 {{define "content"}}
 <div class="max-w-2xl mx-auto">
     <div class="mb-8">
-        <a href="/" class="text-sm text-blue-600 hover:text-blue-700 font-medium">&larr; Back to Dashboard</a>
+        <a href="{{base}}/" class="text-sm text-blue-600 hover:text-blue-700 font-medium">&larr; Back to Dashboard</a>
         <h1 class="mt-3 text-2xl font-bold text-gray-900">New Wire Transfer</h1>
         <p class="mt-1 text-sm text-gray-500">Submit a wire transfer for approval. Requires manager review and compliance check.</p>
     </div>
 
-    <form method="POST" action="/transfer/new" class="bg-white rounded-lg border border-gray-200 shadow-sm p-6 space-y-6">
+    <form method="POST" action="{{base}}/transfer/new" class="bg-white rounded-lg border border-gray-200 shadow-sm p-6 space-y-6">
         <div>
             <label for="from_user" class="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
             <input type="text" id="from_user" name="from_user" required

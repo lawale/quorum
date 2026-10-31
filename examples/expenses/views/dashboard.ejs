@@ -13,7 +13,7 @@ ${expenses.length === 0 ? `
   </svg>
   <h3 class="mt-4 text-lg font-medium text-gray-900">No expenses yet</h3>
   <p class="mt-2 text-sm text-gray-500">Get started by submitting your first expense report.</p>
-  <a href="/expense/new"
+  <a href="${base}/expense/new"
     class="mt-6 inline-flex items-center bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors">
     + New Expense
   </a>
@@ -21,7 +21,7 @@ ${expenses.length === 0 ? `
 ` : `
 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
   ${expenses.map(expense => `
-  <a href="/expense/${expense.id}" class="block bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-5">
+  <a href="${base}/expense/${expense.id}" class="block bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-5">
     <div class="flex items-start justify-between">
       <div class="flex-1 min-w-0">
         <p class="text-sm font-medium text-gray-500 truncate">${expense.category}</p>
@@ -74,7 +74,7 @@ ${expenses.length === 0 ? `
     var list = document.querySelector('quorum-request-list');
     list?.addEventListener('quorum:select', function(e) {
       var localId = quorumToLocal[e.detail.requestId];
-      if (localId) window.location.href = '/expense/' + localId;
+      if (localId) window.location.href = '${base}/expense/' + localId;
     });
     var s = document.createElement('script');
     s.src = '${quorumUrl}/assets/embed.js';

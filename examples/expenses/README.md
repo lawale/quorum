@@ -31,6 +31,7 @@ Visit [http://localhost:3002](http://localhost:3002) to use the app.
 | `SELF_URL` | `http://localhost:3002` | Publicly reachable URL of this app |
 | `WEBHOOK_SECRET` | `expenses-webhook-secret` | Shared secret for webhook HMAC verification |
 | `PORT` | `3002` | HTTP listen port |
+| `BASE_PATH` | *(empty)* | Path prefix when served behind a proxy, e.g. `/demo/expenses`. Links and redirects are prefixed; the proxy strips it before forwarding. |
 
 ## Flow
 
