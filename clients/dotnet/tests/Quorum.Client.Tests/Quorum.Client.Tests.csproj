@@ -5,7 +5,6 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <OutputType>Exe</OutputType>
-    <!-- xUnit1051 wants TestContext tokens on every call; the per-test timeout covers us. -->
     <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>
 

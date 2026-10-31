@@ -126,7 +126,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    environment: nuget
+      id-token: write
     defaults:
       run:
         working-directory: clients/dotnet
@@ -140,8 +140,14 @@ jobs:
       - name: Pack with the version from the tag
         run: dotnet pack src/Quorum.Client -c Release -p:Version="${GITHUB_REF_NAME#v}" -o out
 
+      - name: Log in to nuget.org
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: OluwaVader
+
       - name: Push to nuget.org
-        run: dotnet nuget push "out/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push "out/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
   trivy:
     name: Scan Docker Images

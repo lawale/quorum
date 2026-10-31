@@ -15,8 +15,6 @@ using Quorum.Client;
 
 var quorum = new QuorumClient(new Uri("https://quorum.example.com"), o => o.Tenant = "banking");
 
-// The transfer's creator is the maker. A repeated idempotency key returns
-// the same request instead of opening a second approval.
 var req = await quorum.As(new Identity { UserId = "alice" }).CreateRequestAsync(new CreateRequest
 {
     Type = "wire_transfer",
@@ -24,7 +22,6 @@ var req = await quorum.As(new Identity { UserId = "alice" }).CreateRequestAsync(
     IdempotencyKey = $"transfer-{transfer.Id}",
 });
 
-// A checker decides.
 try
 {
     await quorum.As(new Identity { UserId = "bob", Roles = ["manager"] }).ApproveAsync(req.Id, "looks right");
@@ -34,12 +31,10 @@ catch (QuorumException e) when (e.IsForbidden)
     // bob may not act on this request
 }
 
-// Wait until the request is decided: follows the event stream, polls if
-// streaming is unavailable, gives up when the token does.
 using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
 var final = await quorum.As(new Identity { UserId = "alice" }).WaitForDecisionAsync(req.Id, cancellationToken: cts.Token);
 
-// Verify and decode a webhook delivery in your handler. Pass the raw body.
+// Pass the raw body: re-serialised JSON will not verify.
 try
 {
     var payload = await Webhooks.ParseAsync(httpRequest.Body, httpRequest.Headers[Webhooks.SignatureHeader], webhookSecret);

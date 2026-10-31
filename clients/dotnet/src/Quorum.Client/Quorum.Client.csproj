@@ -9,7 +9,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>quorum;approval;maker-checker;four-eyes;workflow</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <!-- Self-describing members need no XML comment; the summaries that matter are there. -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <RootNamespace>Quorum.Client</RootNamespace>
   </PropertyGroup>

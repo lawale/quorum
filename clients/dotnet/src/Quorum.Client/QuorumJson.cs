@@ -23,7 +23,6 @@ public static class QuorumJson
         o.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower));
         if (strict)
         {
-            // Used by the test suite: a field the server sends that no model declares is a failure.
             o.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
         }
         return o;

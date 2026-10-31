@@ -2,9 +2,6 @@ using System.Text.Json;
 
 namespace Quorum.Client.Tests;
 
-// Functional tests against the real Quorum server (see ApiServerFixture). Every request and
-// response is validated against api/openapi.yaml on the way through, the models reject any
-// field they do not declare, and the run fails if any documented operation is never called.
 [Collection(nameof(ApiServerCollection))]
 public sealed class ClientTests(ApiServerFixture server)
 {
@@ -67,7 +64,6 @@ public sealed class ClientTests(ApiServerFixture server)
         var replay = await c.As(Alice).CreateRequestAsync(new CreateRequest { Type = "wire_transfer", Payload = new Transfer("T-1", 5000), IdempotencyKey = "T-1" });
         Assert.Equal(created.Id, replay.Id);
 
-        // Same identity fields, no idempotency key: a duplicate pending request.
         Assert.True((await Rejects(() => c.As(Alice).CreateRequestAsync(new CreateRequest { Type = "wire_transfer", Payload = new Transfer("T-1", 1) }))).IsConflict);
 
         var asBob = await c.As(Bob).GetRequestAsync(created.Id);
@@ -157,22 +153,18 @@ public sealed class ClientTests(ApiServerFixture server)
 
         using var waitCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var waiting = c.As(Alice).WaitForDecisionAsync(req.Id, TimeSpan.FromMilliseconds(50), waitCts.Token);
-        // Let the waiter subscribe, then decide.
         await Task.Delay(100);
         await c.As(Bob).ApproveAsync(req.Id);
         var decided = await waiting;
         Assert.Equal(RequestStatus.Approved, decided.Status);
 
-        // Already decided: returns at once without opening a stream.
         var again = await c.As(Alice).WaitForDecisionAsync(req.Id);
         Assert.Equal(RequestStatus.Approved, again.Status);
 
-        // Still pending and nobody decides: the caller's deadline wins.
         var pending = await c.As(Alice).CreateRequestAsync(new CreateRequest { Type = "stream_transfer", Payload = new Transfer("S-2", 10) });
         using var shortCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => c.As(Alice).WaitForDecisionAsync(pending.Id, cancellationToken: shortCts.Token));
 
-        // The raw stream closes itself for a terminal request after one status event.
         var events = new List<StreamEvent>();
         await foreach (var ev in c.As(Alice).EventsAsync(req.Id)) events.Add(ev);
         var only = Assert.Single(events);
@@ -215,7 +207,6 @@ public sealed class ClientTests(ApiServerFixture server)
         Assert.True(bad.IsBadRequest);
         Assert.Contains("max_checkers", bad.Detail);
 
-        // Bypass rule in effect: small expense skips review.
         var small = await c.As(Alice).CreateRequestAsync(new CreateRequest { Type = "expense", Payload = new { amount = 20 } });
         Assert.Equal(RequestStatus.Approved, small.Status);
 
@@ -232,7 +223,6 @@ public sealed class ClientTests(ApiServerFixture server)
         Assert.Empty(updated.BypassRules ?? []);
         Assert.Single(updated.Stages);
 
-        // Bypass cleared: the same expense now waits for review.
         var again = await c.As(Alice).CreateRequestAsync(new CreateRequest { Type = "expense", Payload = new { amount = 20 } });
         Assert.Equal(RequestStatus.Pending, again.Status);
 
@@ -307,7 +297,6 @@ public sealed class ClientTests(ApiServerFixture server)
         Assert.Equal(ReviewReason.Created, got.Review!.Reason);
         Assert.Equal("LAG-01", got.Review.Scope[0].Values[0]);
 
-        // A stream verifies the same as a string, as an ASP.NET handler reading the raw body would.
         using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(body));
         Assert.Equal(payload.Request.Id, (await Webhooks.ParseAsync(stream, Webhooks.Sign(body, secret), secret)).Request.Id);
 

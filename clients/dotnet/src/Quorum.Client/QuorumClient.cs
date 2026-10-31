@@ -124,8 +124,6 @@ public sealed class QuorumClient
         return new QuorumClient(_http, o);
     }
 
-    // --- system ---------------------------------------------------------------
-
     /// <summary>Reports the server's health and version. Needs no identity.</summary>
     public async Task<Health> HealthAsync(CancellationToken cancellationToken = default)
     {
@@ -134,8 +132,6 @@ public sealed class QuorumClient
             return await ReadAsync<Health>(response, cancellationToken).ConfigureAwait(false);
         throw await ErrorAsync(response, HttpMethod.Get, "health", cancellationToken).ConfigureAwait(false);
     }
-
-    // --- requests -------------------------------------------------------------
 
     /// <summary>Submits a request on behalf of the client's identity, who becomes its maker.</summary>
     public async Task<Request> CreateRequestAsync(CreateRequest input, CancellationToken cancellationToken = default)
@@ -296,12 +292,9 @@ public sealed class QuorumClient
             }
             catch (Exception) when (!cancellationToken.IsCancellationRequested)
             {
-                // transient; keep polling
             }
         }
     }
-
-    // --- policies -------------------------------------------------------------
 
     public Task<Policy> CreatePolicyAsync(PolicyInput input, CancellationToken cancellationToken = default) =>
         CallAsync<Policy>(HttpMethod.Post, "api/v1/policies", input, null, cancellationToken);
@@ -319,8 +312,6 @@ public sealed class QuorumClient
     public Task DeletePolicyAsync(Guid id, CancellationToken cancellationToken = default) =>
         CallAsync<object?>(HttpMethod.Delete, $"api/v1/policies/{id}", null, null, cancellationToken);
 
-    // --- webhooks -------------------------------------------------------------
-
     public Task<Webhook> CreateWebhookAsync(WebhookInput input, CancellationToken cancellationToken = default) =>
         CallAsync<Webhook>(HttpMethod.Post, "api/v1/webhooks", input, null, cancellationToken);
 
@@ -329,8 +320,6 @@ public sealed class QuorumClient
 
     public Task DeleteWebhookAsync(Guid id, CancellationToken cancellationToken = default) =>
         CallAsync<object?>(HttpMethod.Delete, $"api/v1/webhooks/{id}", null, null, cancellationToken);
-
-    // --- internals ------------------------------------------------------------
 
     private async Task<T> CallAsync<T>(HttpMethod method, string path, object? body, Action<HttpRequestMessage>? extra, CancellationToken cancellationToken)
     {

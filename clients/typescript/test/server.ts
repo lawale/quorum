@@ -27,7 +27,6 @@ export async function setup(project: TestProject): Promise<void> {
   const bin = join(buildDir, "apiserver");
   execFileSync("go", ["build", "-o", bin, "./internal/apitest/cmd/apiserver"], { cwd: repoRoot, stdio: "inherit" });
 
-  // stdin stays open for the server's lifetime: closing it is how we stop it.
   server = spawn(bin, [], { cwd: repoRoot, stdio: ["pipe", "pipe", "pipe"] });
   server.stderr!.setEncoding("utf8");
   server.stderr!.on("data", (chunk: string) => {

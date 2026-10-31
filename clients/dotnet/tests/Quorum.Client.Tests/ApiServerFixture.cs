@@ -53,7 +53,6 @@ public sealed class ApiServerFixture : IDisposable
 
     public void Dispose()
     {
-        // Closing stdin asks the server to stop and print its report.
         _server.StandardInput.Close();
         if (!_server.WaitForExit(30_000))
         {
