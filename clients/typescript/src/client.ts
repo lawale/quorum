@@ -103,7 +103,7 @@ export class QuorumClient {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       throw new Error(`quorum: base URL must be http(s), got ${baseUrl}`);
     }
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.baseUrl = trimTrailingSlashes(baseUrl);
     this.tenant = options.tenant;
     this.credentials = options.credentials;
     this.headerNames = mergeHeaderNames({ ...DEFAULT_HEADER_NAMES }, options.trustHeaders);
@@ -404,6 +404,12 @@ export class QuorumClient {
         : response.statusText || "request failed";
     return new QuorumError(response.status, message, { method, path });
   }
+}
+
+function trimTrailingSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47 /* "/" */) end--;
+  return s.slice(0, end);
 }
 
 function pagingQuery(p: Paging): { page?: number; per_page?: number } {
