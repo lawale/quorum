@@ -7,6 +7,14 @@ hero:
 head:
   - tag: title
     content: Quorum · Open-source approval engine for maker-checker and multi-stage workflows
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: >-
+      {"@context":"https://schema.org","@graph":[
+      {"@type":"SoftwareApplication","name":"Quorum","applicationCategory":"DeveloperApplication","operatingSystem":"Linux, macOS, Windows, Docker","url":"https://quorum.olawalelawal.dev/","description":"Open-source, self-hosted approval engine. Maker-checker, four-eyes and multi-stage approvals as one service, with policies as data, layered permission guards, an audit trail, guaranteed webhooks and embeddable widgets.","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/lawale/quorum","programmingLanguage":"Go","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Olawale Lawal","url":"https://olawalelawal.dev/"}},
+      {"@type":"WebSite","name":"Quorum","url":"https://quorum.olawalelawal.dev/"}
+      ]}
 ---
 
 import { Code } from '@astrojs/starlight/components';
