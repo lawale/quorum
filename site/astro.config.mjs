@@ -13,13 +13,14 @@ export default defineConfig({
 			title: 'Quorum',
 			description:
 				'Quorum is an open-source, self-hosted approval engine. Maker-checker, four-eyes and multi-stage approvals as one service for every application, with policies as data, layered guards, a full audit trail, webhooks and embeddable widgets.',
-			logo: { src: './src/assets/logo.svg', alt: 'Quorum' },
+			logo: { light: './src/assets/logo-light.svg', dark: './src/assets/logo-dark.svg', alt: 'Quorum' },
 			favicon: '/favicon.svg',
 			social: [{ icon: 'github', label: 'GitHub', href: repo }],
 			editLink: { baseUrl: `${repo}/edit/master/site/` },
 			customCss: ['./src/styles/custom.css'],
 			components: { Hero: './src/components/Hero.astro' },
 			head: [
+				{ tag: 'link', attrs: { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' } },
 				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://quorum.olawalelawal.dev/og.png' } },
 				{ tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
 			],
