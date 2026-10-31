@@ -249,42 +249,39 @@ curl -sf -X POST "${API}/policies" \
 # ---- Webhooks ----
 section "Creating Webhooks"
 
+# The server accepts any number of subscriptions for the same URL, so a re-run
+# of this script would make every delivery arrive once per run.
+register_webhook() {
+  tenant="$1"; url="$2"; secret="$3"
+  if curl -sf "${API}/webhooks?per_page=100" \
+      -H "X-User-ID: seed-admin" \
+      -H "X-Tenant-ID: ${tenant}" | grep -q "\"url\":\"${url}\""; then
+    log "  (already registered)"
+    return 0
+  fi
+  curl -sf -X POST "${API}/webhooks" \
+    -H "Content-Type: application/json" \
+    -H "X-User-ID: seed-admin" \
+    -H "X-Tenant-ID: ${tenant}" \
+    -d "{
+      \"url\": \"${url}\",
+      \"events\": [\"approved\", \"rejected\"],
+      \"secret\": \"${secret}\"
+    }" > /dev/null 2>&1 || log "  (error registering webhook)"
+}
+
 log "Registering webhook for banking tenant"
-curl -sf -X POST "${API}/webhooks" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: seed-admin" \
-  -H "X-Tenant-ID: banking" \
-  -d '{
-    "url": "http://banking:3001/webhooks/quorum",
-    "events": ["approved", "rejected"],
-    "secret": "banking-webhook-secret"
-  }' > /dev/null 2>&1 || log "  (already exists or error)"
+register_webhook banking http://banking:3001/webhooks/quorum banking-webhook-secret
 
 log "Registering webhook for expenses tenant"
-curl -sf -X POST "${API}/webhooks" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: seed-admin" \
-  -H "X-Tenant-ID: expenses" \
-  -d '{
-    "url": "http://expenses:3002/webhooks/quorum",
-    "events": ["approved", "rejected"],
-    "secret": "expenses-webhook-secret"
-  }' > /dev/null 2>&1 || log "  (already exists or error)"
+register_webhook expenses http://expenses:3002/webhooks/quorum expenses-webhook-secret
 
 log "Registering webhook for access-portal tenant"
-curl -sf -X POST "${API}/webhooks" \
-  -H "Content-Type: application/json" \
-  -H "X-User-ID: seed-admin" \
-  -H "X-Tenant-ID: access-portal" \
-  -d '{
-    "url": "http://access-portal:3003/webhooks/quorum",
-    "events": ["approved", "rejected"],
-    "secret": "access-webhook-secret"
-  }' > /dev/null 2>&1 || log "  (already exists or error)"
+register_webhook access-portal http://access-portal:3003/webhooks/quorum access-webhook-secret
 
 # ---- Summary ----
 section "Setup Complete"
-log "Tenants:   3 created (banking, expenses, access-portal)"
-log "Policies:  4 created across tenants"
+log "Tenants:   4 created (banking, expenses, access-portal, landing)"
+log "Policies:  5 created across tenants"
 log "Webhooks:  3 registered (banking, expenses, access-portal)"
 log "Console:   ${API_URL}/console/  (admin / admin123)"
