@@ -90,6 +90,18 @@ jobs:
       - run: cd console/frontend && npm ci && npm run build
       - run: go build -tags console ./cmd/server
 
+  build-site:
+    name: Build (Site)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: cd site && npm ci && npm run build
+
   build-embed:
     name: Build (Embed Widgets)
     runs-on: ubuntu-latest
