@@ -155,6 +155,6 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: clients/dotnet/global.json
-      - run: dotnet build -warnaserror
-      - run: dotnet test --no-build
-      - run: dotnet pack src/Quorum.Client --no-build -o out
+      - run: dotnet build -c Release -warnaserror
+      - run: dotnet test -c Release --no-build
+      - run: dotnet pack src/Quorum.Client -c Release --no-build -o out
